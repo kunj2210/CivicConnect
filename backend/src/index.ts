@@ -5,6 +5,9 @@ import { connectMongo, connectPostgres } from './config/db.js';
 import './config/firebase.js'; // Initialize firebase admin
 
 import reportRoutes from './routes/reportRoutes.js';
+import departmentRoutes from './routes/departmentRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 dotenv.config();
 
@@ -15,6 +18,9 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/api/reports', reportRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/auth', authRoutes);
 
 app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });

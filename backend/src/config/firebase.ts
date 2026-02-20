@@ -11,11 +11,12 @@ const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 if (serviceAccountPath) {
     try {
         const serviceAccount = require(serviceAccountPath);
+        const bucketName = process.env.FIREBASE_STORAGE_BUCKET || '';
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
+            storageBucket: bucketName,
         });
-        console.log('Firebase Admin initialized');
+        console.log(`Firebase Admin initialized with bucket: ${bucketName}`);
     } catch (error) {
         console.error('Error initializing Firebase Admin:', error);
     }

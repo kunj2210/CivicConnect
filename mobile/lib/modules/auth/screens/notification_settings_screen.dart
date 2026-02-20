@@ -1,0 +1,70 @@
+import 'package:flutter/material.dart';
+
+class NotificationSettingsScreen extends StatefulWidget {
+  const NotificationSettingsScreen({super.key});
+
+  @override
+  State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
+}
+
+class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
+  bool _pushNotifications = true;
+  bool _emailNotifications = true;
+  bool _reportUpdates = true;
+  bool _communityAlerts = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
+        elevation: 0,
+      ),
+      body: ListView(
+        children: [
+          _buildSwitchTile(
+            title: 'Push Notifications',
+            subtitle: 'Receive alerts on your device',
+            value: _pushNotifications,
+            onChanged: (val) => setState(() => _pushNotifications = val),
+          ),
+          _buildSwitchTile(
+            title: 'Email Notifications',
+            subtitle: 'Receive updates via email',
+            value: _emailNotifications,
+            onChanged: (val) => setState(() => _emailNotifications = val),
+          ),
+          const Divider(),
+          _buildSwitchTile(
+            title: 'Report Updates',
+            subtitle: 'Get notified when your report status changes',
+            value: _reportUpdates,
+            onChanged: (val) => setState(() => _reportUpdates = val),
+          ),
+          _buildSwitchTile(
+            title: 'Community Alerts',
+            subtitle: 'Stay informed about issues in your area',
+            value: _communityAlerts,
+            onChanged: (val) => setState(() => _communityAlerts = val),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required Function(bool) onChanged,
+  }) {
+    return SwitchListTile(
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      value: value,
+      onChanged: onChanged,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      activeThumbColor: Theme.of(context).colorScheme.primary,
+    );
+  }
+}

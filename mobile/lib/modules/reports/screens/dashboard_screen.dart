@@ -7,10 +7,10 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic> _stats = {
     'summary': [
       {'title': 'Total Issues', 'value': 0},
@@ -24,6 +24,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _fetchStats();
   }
+
+  void refreshStats() => _fetchStats();
 
   Future<void> _fetchStats() async {
     try {
@@ -42,8 +44,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final totalIssues = _stats['summary'].firstWhere((s) => s['title'] == 'Total Issues')['value'].toString();
-    final resolvedIssues = _stats['summary'].firstWhere((s) => s['title'] == 'Resolved')['value'].toString();
+    final theme = Theme.of(context);
+    final totalIssues = _stats['summary'].firstWhere((s) => s['title'] == 'Total Issues', orElse: () => {'value': 0})['value'].toString();
+    final resolvedIssues = _stats['summary'].firstWhere((s) => s['title'] == 'Resolved', orElse: () => {'value': 0})['value'].toString();
 
     return Scaffold(
       body: RefreshIndicator(
@@ -55,11 +58,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               floating: false,
               pinned: true,
               flexibleSpace: FlexibleSpaceBar(
-                title: const Text('CivicConnect', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                title: Text('CivicConnect', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 background: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF0052CC), Color(0xFF00B8D9)],
+                      colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -73,14 +76,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Welcome back, Citizen!',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Help us keep the city clean and safe.',
-                      style: TextStyle(color: Colors.grey),
+                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
                     ),
                     const SizedBox(height: 24),
                     _isLoading
@@ -91,7 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 child: _StatsCard(
                                   title: 'Reports',
                                   value: totalIssues,
-                                  color: const Color(0xFF0052CC),
+                                  color: theme.colorScheme.primary,
                                   icon: Icons.assignment_outlined,
                                 ),
                               ),
@@ -107,9 +110,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           ),
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       'Quick Actions',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
                     _ActionCard(
@@ -123,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       title: 'View Nearby Issues',
                       subtitle: 'See what\'s happening in your area',
                       icon: Icons.map_outlined,
-                      onTap: () {},
+                      onTap: () => Navigator.pushNamed(context, '/nearby-issues'),
                     ),
                   ],
                 ),
@@ -154,9 +157,9 @@ class _StatsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +172,7 @@ class _StatsCard extends StatelessWidget {
           ),
           Text(
             title,
-            style: TextStyle(color: color.withOpacity(0.8), fontWeight: FontWeight.w500),
+            style: TextStyle(color: color.withValues(alpha: 0.8), fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -192,31 +195,34 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
+          boxShadow: theme.brightness == Brightness.dark ? [] : [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
           ],
+          border: theme.brightness == Brightness.dark ? Border.all(color: theme.dividerColor) : null,
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF4F5F7),
+                color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: const Color(0xFF0052CC)),
+              child: Icon(icon, color: theme.colorScheme.primary),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -229,12 +235,12 @@ class _ActionCard extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    style: TextStyle(color: theme.hintColor, fontSize: 13),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.grey),
+            Icon(Icons.chevron_right, color: theme.hintColor),
           ],
         ),
       ),

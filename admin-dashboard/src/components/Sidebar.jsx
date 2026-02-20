@@ -1,17 +1,22 @@
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, FileText, Map, Users, Settings, LogOut, Hexagon } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Sidebar = ({ darkMode }) => {
     const location = useLocation();
+    const { user, logout } = useAuth();
 
     const isActive = (path) => location.pathname === path;
 
+    const isAdmin = user?.role === 'Admin';
+    const prefix = isAdmin ? '/admin' : '/authority';
+
     const navItems = [
-        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { path: '/dashboard/issues', label: 'Issues', icon: FileText },
-        { path: '/dashboard/map', label: 'Live Map', icon: Map },
-        { path: '/dashboard/departments', label: 'Departments', icon: Users },
-        { path: '/dashboard/settings', label: 'Settings', icon: Settings },
+        { path: `${prefix}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+        { path: `${prefix}/issues`, label: 'Issues', icon: FileText },
+        { path: `${prefix}/map`, label: 'Live Map', icon: Map },
+        ...(isAdmin ? [{ path: '/admin/departments', label: 'Departments', icon: Users }] : []),
+        { path: `${prefix}/settings`, label: 'Settings', icon: Settings },
     ];
 
     return (
@@ -55,7 +60,10 @@ const Sidebar = ({ darkMode }) => {
                         <p className="text-xs text-gray-500 mb-3">Check our docs for support.</p>
                         <button className="text-xs font-semibold text-blue-600 hover:text-blue-700">Documentation &rarr;</button>
                     </div>
-                    <button className="flex items-center w-full px-4 py-3 text-red-500 transition-colors rounded-xl hover:bg-red-50/10 hover:text-red-600 font-medium">
+                    <button
+                        onClick={logout}
+                        className="flex items-center w-full px-4 py-3 text-red-500 transition-colors rounded-xl hover:bg-red-50/10 hover:text-red-600 font-medium"
+                    >
                         <LogOut className="w-5 h-5 mr-3" />
                         <span>Sign Out</span>
                     </button>

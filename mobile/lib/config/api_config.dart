@@ -5,5 +5,6 @@ class ApiConfig {
   static const String baseUrl = 'http://192.168.1.3:5000/api';
   
   static String get reportsUrl => '$baseUrl/reports';
+  static String get nearbyReportsUrl => '$baseUrl/reports/nearby';
   static String get statsUrl => '$baseUrl/reports/stats';
 }

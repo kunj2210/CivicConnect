@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
+import { Op } from 'sequelize';
+import { sequelize } from '../config/db.js';
 import { Report } from '../models/Report.js';
 import ReportMetadata from '../models/ReportMetadata.js';
+import { UserDevice } from '../models/UserDevice.js';
+import { sendNotificationToUser } from '../services/notificationService.js';
 import { bucket } from '../config/firebase.js';
 import { v4 as uuidv4 } from 'uuid';
 import { RoutingService } from '../services/routingService.js';
@@ -39,13 +43,15 @@ export const createReport = async (req: Request, res: Response) => {
                     blobStream.end(file.buffer);
                 });
 
-                imageUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+                imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
                 console.log('Step 3: Firebase Upload Success:', imageUrl);
             } catch (fbError: any) {
                 console.error('Step 3: Firebase Upload Failed (using fallback):', fbError.message);
+                imageUrl = `https://placehold.co/800x600/e2e8f0/475569?text=Upload+Failed+Check+Logs`;
             }
         } else {
             console.log('Step 3: Skipping Firebase Upload (No bucket or file)');
+            imageUrl = `https://placehold.co/800x600/f1f5f9/94a3b8?text=No+Image+Provided`;
         }
 
         // Save to PostgreSQL (Structured/Spatial)
@@ -96,15 +102,31 @@ export const getReports = async (req: Request, res: Response) => {
     }
 };
 
-export const getReportStats = async (_req: Request, res: Response) => {
+export const getReportStats = async (req: Request, res: Response) => {
     try {
-        const total = await Report.count();
-        const pending = await Report.count({ where: { status: 'Pending' } });
-        const inProgress = await Report.count({ where: { status: 'In Progress' } });
-        const resolved = await Report.count({ where: { status: 'Resolved' } });
+        const { citizen_phone } = req.query;
+        let where: any = {};
+        if (citizen_phone) {
+            // Find in MongoDB metadata first to get IDs
+            const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone as string });
+            const reportIds = metadata.map(m => m.report_id);
+            where = { report_id: reportIds };
+        }
 
-        // Get category breakdown (Aggregated from reports)
-        const reports = await Report.findAll();
+        const total = await Report.count({ where });
+        const pending = await Report.count({ where: { ...where, status: 'Pending' } });
+        const inProgress = await Report.count({ where: { ...where, status: 'In Progress' } });
+        const resolved = await Report.count({ where: { ...where, status: 'Resolved' } });
+
+        // Rank calculation logic
+        let rank = 'Newbie';
+        if (resolved >= 11) rank = 'Community Hero';
+        else if (resolved >= 6) rank = 'Civic Guardian';
+        else if (resolved >= 3) rank = 'Active Citizen';
+        else if (resolved > 0) rank = 'Beginner';
+
+        // Get category breakdown
+        const reports = await Report.findAll({ where });
         const categoryStats: Record<string, number> = {};
         reports.forEach(r => {
             categoryStats[r.category] = (categoryStats[r.category] || 0) + 1;
@@ -117,6 +139,9 @@ export const getReportStats = async (_req: Request, res: Response) => {
                 { title: 'In Progress', value: inProgress, color: 'yellow', trend: '+0' },
                 { title: 'Pending', value: pending, color: 'red', trend: '+0' },
             ],
+            rank,
+            total,
+            resolved,
             categoryData: Object.entries(categoryStats).map(([name, value]) => ({ name, value }))
         });
     } catch (error: any) {
@@ -149,14 +174,17 @@ export const getReportById = async (req: Request, res: Response) => {
 export const updateReport = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { status, category, description, jurisdiction } = req.body;
+        const { status, category, description, jurisdiction, remarks } = req.body;
 
         const report = await Report.findOne({ where: { report_id: id } });
         if (!report) return res.status(404).json({ error: 'Report not found' });
 
+        const oldStatus = report.status;
+
         // Update PostgreSQL
         if (status) report.status = status;
         if (category) report.category = category;
+        if (remarks) report.remarks = remarks; // Added remarks update
         await report.save();
 
         // Update MongoDB Metadata if exists
@@ -167,7 +195,19 @@ export const updateReport = async (req: Request, res: Response) => {
             await metadata.save();
         }
 
-        res.json({ success: true, message: 'Report updated successfully' });
+        if (status && status !== oldStatus) {
+            const metadata = await ReportMetadata.findOne({ report_id: id as any });
+            if (metadata && metadata.citizen_phone) {
+                await sendNotificationToUser(
+                    metadata.citizen_phone,
+                    'Report Updated',
+                    `Your report (#${id}) status has been changed to ${status}.`,
+                    { report_id: id, status: status }
+                );
+            }
+        }
+
+        res.json({ success: true, message: 'Report updated successfully', report });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -188,6 +228,57 @@ export const deleteReport = async (req: Request, res: Response) => {
         }
 
         res.json({ success: true, message: 'Report deleted from both databases' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+export const getNearbyReports = async (req: Request, res: Response) => {
+    try {
+        const { latitude, longitude, radius = 10000 } = req.query; // Default 10km
+        if (!latitude || !longitude) {
+            return res.status(400).json({ error: 'Latitude and longitude are required' });
+        }
+
+        const lat = parseFloat(latitude as string);
+        const lon = parseFloat(longitude as string);
+        const rad = parseFloat(radius as string);
+
+        // ST_DistanceSphere returns distance in meters
+        const reports = await Report.findAll({
+            where: sequelize.where(
+                sequelize.fn(
+                    'ST_DistanceSphere',
+                    sequelize.col('location'),
+                    sequelize.fn('ST_MakePoint', lon, lat)
+                ),
+                { [Op.lte]: rad }
+            ),
+            order: [
+                [
+                    sequelize.fn(
+                        'ST_DistanceSphere',
+                        sequelize.col('location'),
+                        sequelize.fn('ST_MakePoint', lon, lat)
+                    ),
+                    'ASC'
+                ]
+            ]
+        });
+
+        res.json(reports);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const registerFcmToken = async (req: Request, res: Response) => {
+    try {
+        const { user_id, fcm_token } = req.body;
+        if (!user_id || !fcm_token) return res.status(400).json({ error: 'user_id and fcm_token are required' });
+
+        console.log(`[FCM] Registering token for user ${user_id}: ${fcm_token}`);
+        await UserDevice.upsert({ user_id, fcm_token });
+        res.json({ message: 'FCM token registered' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
