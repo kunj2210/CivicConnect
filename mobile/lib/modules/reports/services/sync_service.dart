@@ -55,7 +55,6 @@ class SyncService {
   static void initialize() {
     _workmanager.initialize(
       callbackDispatcher,
-      isInDebugMode: false,
     );
   }
 

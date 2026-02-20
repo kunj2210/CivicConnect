@@ -47,13 +47,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F5F7),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('My Reports', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        foregroundColor: theme.appBarTheme.foregroundColor,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchReports),
         ],
@@ -88,17 +90,21 @@ class _ReportListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: isDark ? [] : [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -114,7 +120,7 @@ class _ReportListItem extends StatelessWidget {
                 ),
                 _StatusBadge(
                   status: report['status'] ?? 'Submitted',
-                  color: (report['status'] == 'Resolved') ? Colors.green : (report['status'] == 'In Progress' ? Colors.orange : const Color(0xFF0052CC)),
+                  color: (report['status'] == 'Resolved') ? Colors.green : (report['status'] == 'In Progress' ? Colors.orange : theme.colorScheme.primary),
                 ),
               ],
             ),
@@ -123,22 +129,22 @@ class _ReportListItem extends StatelessWidget {
               report['description'] ?? 'No description provided.',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              style: TextStyle(color: theme.hintColor, fontSize: 14),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.calendar_today, size: 14, color: Colors.grey[400]),
+                Icon(Icons.calendar_today, size: 14, color: theme.hintColor.withValues(alpha: 0.6)),
                 const SizedBox(width: 4),
                 Text(
                   report['timestamp'] != null ? report['timestamp'].toString().substring(0, 10) : 'Just now',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  style: TextStyle(color: theme.hintColor.withValues(alpha: 0.6), fontSize: 12),
                 ),
                 const Spacer(),
-                const Text(
+                Text(
                   'View Details',
                   style: TextStyle(
-                    color: Color(0xFF0052CC),
+                    color: theme.colorScheme.primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -163,7 +169,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

@@ -6,6 +6,7 @@ export class Report extends Model {
     declare report_id: string;
     declare category: string;
     declare status: string;
+    declare remarks: string;
     declare location: any; // Geometry point
     declare timestamp: Date;
 }
@@ -29,6 +30,10 @@ Report.init(
         status: {
             type: DataTypes.ENUM('Pending', 'In Progress', 'Resolved'),
             defaultValue: 'Pending',
+        },
+        remarks: {
+            type: DataTypes.TEXT,
+            allowNull: true,
         },
         location: {
             type: DataTypes.GEOMETRY('POINT', 4326),

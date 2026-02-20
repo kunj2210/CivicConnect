@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'shared/providers/navigation_provider.dart';
 import 'modules/reports/screens/dashboard_screen.dart';
 import 'modules/reports/screens/history_screen.dart';
 import 'modules/auth/screens/profile_screen.dart';
@@ -11,26 +13,42 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _currentIndex = 0;
+  final GlobalKey<DashboardScreenState> _dashboardKey = GlobalKey<DashboardScreenState>();
+  late final List<Widget> _screens;
 
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const HistoryScreen(),
-    const ProfileScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      DashboardScreen(key: _dashboardKey),
+      const HistoryScreen(),
+      const ProfileScreen(),
+    ];
+  }
+
+  void _onTabTapped(BuildContext context, int index) {
+    final navProvider = Provider.of<NavigationProvider>(context, listen: false);
+    if (index == 0 && navProvider.currentIndex != 0) {
+      _dashboardKey.currentState?.refreshStats();
+    }
+    navProvider.setIndex(index);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final navProvider = Provider.of<NavigationProvider>(context);
+    final theme = Theme.of(context);
+
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
+        index: navProvider.currentIndex,
         children: _screens,
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: const Color(0xFF0052CC),
-        unselectedItemColor: Colors.grey,
+        currentIndex: navProvider.currentIndex,
+        onTap: (index) => _onTabTapped(context, index),
+        selectedItemColor: theme.colorScheme.primary,
+        unselectedItemColor: theme.hintColor,
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
@@ -40,7 +58,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.pushNamed(context, '/report'),
-        backgroundColor: const Color(0xFF00B8D9),
+        backgroundColor: theme.colorScheme.secondary,
         child: const Icon(Icons.add, color: Colors.white, size: 30),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

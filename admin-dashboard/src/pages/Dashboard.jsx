@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
-// import { mockStats, categoryData } from '../data/mockData';
+
 import { TrendingUp, CheckCircle, Clock, AlertCircle, MoreHorizontal } from 'lucide-react';
 
 const Dashboard = () => {
@@ -49,6 +49,41 @@ const Dashboard = () => {
         </div>
     );
 
+    const handleDownloadReport = () => {
+        if (!issues || issues.length === 0) {
+            alert("No issues to download.");
+            return;
+        }
+
+        // CSV Header
+        const headers = ["Report ID", "Category", "Subcategory", "Status", "Priority", "Timestamp", "Location"];
+
+        // CSV Rows
+        const rows = issues.map(issue => [
+            issue.report_id,
+            issue.category,
+            issue.subcategory || 'N/A',
+            issue.status,
+            issue.priority || 'Medium',
+            new Date(issue.timestamp).toLocaleString(),
+            `"${issue.location?.latitude}, ${issue.location?.longitude}"`
+        ]);
+
+        // Combine into CSV string
+        const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+
+        // Create download link
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `civic_connect_report_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div className="space-y-8 animate-fade-in-up">
             <div className="flex justify-between items-end">
@@ -56,7 +91,9 @@ const Dashboard = () => {
                     <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Dashboard Overview</h1>
                     <p className={`mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Welcome back, Admin. Here's what's happening in your city.</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-lg shadow-blue-500/30 transition-all">
+                <button
+                    onClick={handleDownloadReport}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-lg shadow-blue-500/30 transition-all">
                     Download Report
                 </button>
             </div>
@@ -154,7 +191,7 @@ const Dashboard = () => {
                 <div className="flex justify-between items-center mb-6">
                     <h2 className={`text-lg font-bold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Recent Activity</h2>
                     <button
-                        onClick={() => navigate('/dashboard/issues')}
+                        onClick={() => navigate('/admin/issues')}
                         className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                     >
                         View All
@@ -164,7 +201,7 @@ const Dashboard = () => {
                     {issues.slice(0, 5).map((issue) => (
                         <div
                             key={issue.report_id}
-                            onClick={() => navigate(`/dashboard/issues/${issue.report_id}`)}
+                            onClick={() => navigate(`/admin/issues/${issue.report_id}`)}
                             className={`flex items-center justify-between p-4 rounded-xl transition-colors border cursor-pointer ${darkMode ? 'bg-gray-700/50 hover:bg-blue-900/20 border-transparent hover:border-blue-800' : 'bg-gray-50/50 hover:bg-blue-50/50 border-transparent hover:border-blue-100'}`}
                         >
                             <div className="flex items-center">

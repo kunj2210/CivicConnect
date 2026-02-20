@@ -18,11 +18,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'placeholder',
-    appId: 'placeholder',
-    messagingSenderId: 'placeholder',
-    projectId: 'placeholder',
-    storageBucket: 'placeholder',
+    apiKey: 'AIzaSyAyQrTQsh4Tu7Ayv4jrTHQVkAPxCjFQtjM',
+    appId: '1:186214489620:android:82339eaa3018e5a5a81101',
+    messagingSenderId: '186214489620',
+    projectId: 'civicconnect-7c316',
+    storageBucket: 'civicconnect-7c316.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
