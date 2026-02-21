@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import '../../../config/api_config.dart';
 
@@ -29,7 +30,14 @@ class DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _fetchStats() async {
     try {
-      final response = await http.get(Uri.parse(ApiConfig.statsUrl));
+      final user = FirebaseAuth.instance.currentUser;
+      String queryParams = '';
+      if (user != null) {
+        final identifier = user.phoneNumber ?? user.email ?? user.uid;
+        queryParams = '?citizen_phone=$identifier';
+      }
+
+      final response = await http.get(Uri.parse('${ApiConfig.statsUrl}$queryParams'));
       if (response.statusCode == 200) {
         setState(() {
           _stats = json.decode(response.body);

@@ -7,7 +7,7 @@ import { TrendingUp, CheckCircle, Clock, AlertCircle, MoreHorizontal } from 'luc
 const Dashboard = () => {
     const { darkMode } = useOutletContext();
     const navigate = useNavigate();
-    const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+    const COLORS = ['#10B981', '#06B6D4', '#F59E0B', '#EF4444', '#8B5CF6']; // Emerald, Cyan, Amber, Rose, Violet
     const [stats, setStats] = useState({ summary: [], categoryData: [] });
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
