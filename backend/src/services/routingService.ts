@@ -8,21 +8,18 @@ export class RoutingService {
      */
     static async identifyJurisdiction(latitude: number, longitude: number): Promise<string> {
         try {
-            // PROD logic using PostGIS
-            const [result]: any = await sequelize.query(
-                'SELECT name FROM ulb_boundaries WHERE ST_Contains(geom, ST_SetSRID(ST_Point(:lon, :lat), 4326)) LIMIT 1',
-                { replacements: { lat: latitude, lon: longitude }, type: QueryTypes.SELECT }
-            );
+            // PROD logic: 
+            // const result = await sequelize.query(
+            //   'SELECT name FROM ulb_boundaries WHERE ST_Contains(geom, ST_SetSRID(ST_Point(:lon, :lat), 4326)) LIMIT 1',
+            //   { replacements: { lat, lon }, type: QueryTypes.SELECT }
+            // );
 
-            if (result && result.name) {
-                return result.name;
-            }
-
-            // Fallback for demo if no boundary is matched
+            // MOCK logic for foundation phase:
+            // In a real scenario, we'd have a table of ULBs with boundary polygons.
             return "Municipal Corporation of Delhi (MCD)";
         } catch (error) {
-            console.error('Jurisdiction identification error (ensure ulb_boundaries table exists):', error);
-            return "Municipal Corporation of Delhi (MCD)";
+            console.error('Jurisdiction identification error:', error);
+            return "Unknown Jurisdiction";
         }
     }
 }

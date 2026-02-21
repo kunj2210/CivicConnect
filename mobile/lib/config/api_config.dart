@@ -1,8 +1,8 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 class ApiConfig {
-  // baseUrl is read from .env file
-  static final String baseUrl = dotenv.get('API_BASE_URL', fallback: 'http://10.0.2.2:5000/api');
+  // Use 10.0.2.2 for Android Emulator
+  // Use localhost for iOS Simulator
+  // Use your machine's local IP (e.g., 192.168.1.3) for physical devices
+  static const String baseUrl = 'http://192.168.1.3:5000/api';
   
   static String get reportsUrl => '$baseUrl/reports';
   static String get nearbyReportsUrl => '$baseUrl/reports/nearby';
