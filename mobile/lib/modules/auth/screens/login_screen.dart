@@ -77,6 +77,14 @@ class _LoginScreenState extends State<LoginScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(height: 40),
+            Center(
+              child: Image.asset(
+                'assets/images/logo.png',
+                height: 120,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 40),
             if (!_isEmailMode) ...[
               TextField(
                 controller: _phoneController,
