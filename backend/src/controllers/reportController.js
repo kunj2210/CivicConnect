@@ -1,4 +1,3 @@
-import type { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import { sequelize } from '../config/db.js';
 import { Report } from '../models/Report.js';
@@ -11,28 +10,22 @@ import { RoutingService } from '../services/routingService.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-export const createReport = async (req: Request, res: Response) => {
+export const createReport = async (req, res) => {
     console.log('--- Incoming Report Request ---');
     console.log('Body:', req.body);
     console.log('File:', req.file ? 'Received' : 'Not Received');
     try {
         const { category, description, latitude, longitude, citizen_phone, exif_data } = req.body;
         const file = req.file;
-
         console.log('Step 1: Data extraction success', { category, lat: latitude, long: longitude, citizen_phone });
-
         const reportId = uuidv4();
         let imageUrl = 'https://via.placeholder.com/400x300.png?text=Report+Image'; // Fallback
-
         // Identify Jurisdiction
         console.log('Step 2: Identifying jurisdiction...');
         const jurisdiction = await RoutingService.identifyJurisdiction(parseFloat(latitude), parseFloat(longitude));
         console.log('Step 2: Jurisdiction identified:', jurisdiction);
-
         // Step 3: Handle Multimedia Upload
         if (bucket && file) {
             try {
@@ -42,27 +35,27 @@ export const createReport = async (req: Request, res: Response) => {
                 const blobStream = blob.createWriteStream({
                     metadata: { contentType: file.mimetype },
                 });
-
                 await new Promise((resolve, reject) => {
                     blobStream.on('error', reject);
                     blobStream.on('finish', resolve);
                     blobStream.end(file.buffer);
                 });
-
                 imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
                 console.log('Step 3: Firebase Upload Success:', imageUrl);
-            } catch (fbError: any) {
+            }
+            catch (fbError) {
                 console.error('Step 3: Firebase Upload Failed, falling back to local storage:', fbError.message);
                 imageUrl = await handleLocalStorage(req, file, reportId);
             }
-        } else if (file) {
+        }
+        else if (file) {
             console.log('Step 3: Firebase Storage unconfigured, using local storage fallback');
             imageUrl = await handleLocalStorage(req, file, reportId);
-        } else {
+        }
+        else {
             console.log('Step 3: Skipping Upload (No file provided)');
             imageUrl = `https://placehold.co/800x600/f1f5f9/94a3b8?text=No+Image+Provided`;
         }
-
         // Save to PostgreSQL (Structured/Spatial)
         console.log('Step 4: Saving to PostgreSQL...');
         await Report.create({
@@ -72,7 +65,6 @@ export const createReport = async (req: Request, res: Response) => {
             status: 'Pending',
         });
         console.log('Step 4: PostgreSQL Save Success');
-
         // Save to MongoDB (Flexible Metadata)
         console.log('Step 5: Saving to MongoDB...');
         await ReportMetadata.create({
@@ -84,28 +76,25 @@ export const createReport = async (req: Request, res: Response) => {
             jurisdiction,
         });
         console.log('Step 5: MongoDB Save Success');
-
         console.log('--- Report Successfully Created ---', reportId);
         res.status(201).json({ success: true, report_id: reportId, jurisdiction });
-    } catch (error: any) {
+    }
+    catch (error) {
         console.error('CRITICAL ERROR in createReport:', error);
         res.status(500).json({ error: error.message || 'Internal Server Error', stack: error.stack });
     }
 };
-
-export const getReports = async (req: Request, res: Response): Promise<any> => {
+export const getReports = async (req, res) => {
     try {
         const { citizen_phone } = req.query;
         let reports;
         if (citizen_phone) {
             // Find in MongoDB metadata first to get IDs
-            const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone as string });
+            const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone });
             const reportIds = metadata.map(m => m.report_id);
             reports = await Report.findAll({ where: { report_id: reportIds } });
-
             const metadataMap = new Map();
             metadata.forEach(m => metadataMap.set(m.report_id, m));
-
             const fullReports = reports.map(r => {
                 const rJson = r.toJSON();
                 const m = metadataMap.get(rJson.report_id);
@@ -116,14 +105,13 @@ export const getReports = async (req: Request, res: Response): Promise<any> => {
                 };
             });
             return res.json(fullReports);
-        } else {
+        }
+        else {
             reports = await Report.findAll();
-
-            const reportIds = reports.map(r => (r as any).report_id);
+            const reportIds = reports.map(r => r.report_id);
             const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });
             const metadataMap = new Map();
             metadata.forEach(m => metadataMap.set(m.report_id, m));
-
             const fullReports = reports.map(r => {
                 const rJson = r.toJSON();
                 const m = metadataMap.get(rJson.report_id);
@@ -135,41 +123,41 @@ export const getReports = async (req: Request, res: Response): Promise<any> => {
             });
             return res.json(fullReports);
         }
-    } catch (error: any) {
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-
-export const getReportStats = async (req: Request, res: Response) => {
+export const getReportStats = async (req, res) => {
     try {
         const { citizen_phone } = req.query;
-        let where: any = {};
+        let where = {};
         if (citizen_phone) {
             // Find in MongoDB metadata first to get IDs
-            const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone as string });
+            const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone });
             const reportIds = metadata.map(m => m.report_id);
             where = { report_id: reportIds };
         }
-
         const total = await Report.count({ where });
         const pending = await Report.count({ where: { ...where, status: 'Pending' } });
         const inProgress = await Report.count({ where: { ...where, status: 'In Progress' } });
         const resolved = await Report.count({ where: { ...where, status: 'Resolved' } });
-
         // Rank calculation logic
         let rank = 'Newbie';
-        if (resolved >= 11) rank = 'Community Hero';
-        else if (resolved >= 6) rank = 'Civic Guardian';
-        else if (resolved >= 3) rank = 'Active Citizen';
-        else if (resolved > 0) rank = 'Beginner';
-
+        if (resolved >= 11)
+            rank = 'Community Hero';
+        else if (resolved >= 6)
+            rank = 'Civic Guardian';
+        else if (resolved >= 3)
+            rank = 'Active Citizen';
+        else if (resolved > 0)
+            rank = 'Beginner';
         // Get category breakdown
         const reports = await Report.findAll({ where });
-        const categoryStats: Record<string, number> = {};
+        const categoryStats = {};
         reports.forEach(r => {
             categoryStats[r.category] = (categoryStats[r.category] || 0) + 1;
         });
-
         res.json({
             summary: [
                 { title: 'Total Issues', value: total, color: 'blue', trend: '+0' },
@@ -182,116 +170,95 @@ export const getReportStats = async (req: Request, res: Response) => {
             resolved,
             categoryData: Object.entries(categoryStats).map(([name, value]) => ({ name, value }))
         });
-    } catch (error: any) {
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-
-export const getReportById = async (req: Request, res: Response) => {
+export const getReportById = async (req, res) => {
     try {
         const { id } = req.params;
         const report = await Report.findOne({ where: { report_id: id } });
         if (!report) {
             return res.status(404).json({ error: 'Report not found in PostgreSQL' });
         }
-
-        const metadata = await ReportMetadata.findOne({ report_id: id as any });
-
+        const metadata = await ReportMetadata.findOne({ report_id: id });
         // Merge data
         const fullReport = {
             ...report.toJSON(),
             metadata: metadata || {}
         };
-
         res.json(fullReport);
-    } catch (error: any) {
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-
-export const updateReport = async (req: Request, res: Response) => {
+export const updateReport = async (req, res) => {
     try {
         const { id } = req.params;
         const { status, category, description, jurisdiction, remarks } = req.body;
-
         const report = await Report.findOne({ where: { report_id: id } });
-        if (!report) return res.status(404).json({ error: 'Report not found' });
-
+        if (!report)
+            return res.status(404).json({ error: 'Report not found' });
         const oldStatus = report.status;
-
         // Update PostgreSQL
-        if (status) report.status = status;
-        if (category) report.category = category;
-        if (remarks) report.remarks = remarks; // Added remarks update
+        if (status)
+            report.status = status;
+        if (category)
+            report.category = category;
+        if (remarks)
+            report.remarks = remarks; // Added remarks update
         await report.save();
-
         // Update MongoDB Metadata if exists
-        const metadata = await ReportMetadata.findOne({ report_id: id as any });
+        const metadata = await ReportMetadata.findOne({ report_id: id });
         if (metadata) {
-            if (description !== undefined) metadata.description = description;
-            if (jurisdiction !== undefined) metadata.jurisdiction = jurisdiction;
+            if (description !== undefined)
+                metadata.description = description;
+            if (jurisdiction !== undefined)
+                metadata.jurisdiction = jurisdiction;
             await metadata.save();
         }
-
         if (status && status !== oldStatus) {
-            const metadata = await ReportMetadata.findOne({ report_id: id as any });
+            const metadata = await ReportMetadata.findOne({ report_id: id });
             if (metadata && metadata.citizen_phone) {
-                await sendNotificationToUser(
-                    metadata.citizen_phone,
-                    'Report Updated',
-                    `Your report (#${id}) status has been changed to ${status}.`,
-                    { report_id: id, status: status }
-                );
+                await sendNotificationToUser(metadata.citizen_phone, 'Report Updated', `Your report (#${id}) status has been changed to ${status}.`, { report_id: id, status: status });
             }
         }
-
         res.json({ success: true, message: 'Report updated successfully', report });
-    } catch (error: any) {
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-
-export const deleteReport = async (req: Request, res: Response) => {
+export const deleteReport = async (req, res) => {
     try {
         const { id } = req.params;
-
         // Delete from PostgreSQL
         const pgDeleted = await Report.destroy({ where: { report_id: id } });
-
         // Delete from MongoDB
-        const mongoDeleted = await ReportMetadata.deleteOne({ report_id: id as any });
-
+        const mongoDeleted = await ReportMetadata.deleteOne({ report_id: id });
         if (pgDeleted === 0 && mongoDeleted.deletedCount === 0) {
             return res.status(404).json({ error: 'Report not found' });
         }
-
         res.json({ success: true, message: 'Report deleted from both databases' });
-    } catch (error: any) {
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-export const getNearbyReports = async (req: Request, res: Response) => {
+export const getNearbyReports = async (req, res) => {
     try {
         const { latitude, longitude, radius = 10000, exclude_phone } = req.query; // Default 10km
         if (!latitude || !longitude) {
             return res.status(400).json({ error: 'Latitude and longitude are required' });
         }
-
-        const lat = parseFloat(latitude as string);
-        const lon = parseFloat(longitude as string);
-        const rad = parseFloat(radius as string);
-
-        let whereClause: any = sequelize.where(
-            sequelize.fn(
-                'ST_DistanceSphere',
-                sequelize.col('location'),
-                sequelize.fn('ST_MakePoint', lon, lat)
-            ),
-            { [Op.lte]: rad }
-        );
-
+        const lat = parseFloat(latitude);
+        const lon = parseFloat(longitude);
+        const rad = parseFloat(radius);
+        let whereClause = sequelize.where(sequelize.fn('ST_DistanceSphere', sequelize.col('location'), sequelize.fn('ST_MakePoint', lon, lat)), { [Op.lte]: rad });
         if (exclude_phone) {
-            const excludedMetadata = await ReportMetadata.find({ citizen_phone: exclude_phone as string });
+            const excludedMetadata = await ReportMetadata.find({ citizen_phone: exclude_phone });
             const excludedIds = excludedMetadata.map(m => m.report_id);
             if (excludedIds.length > 0) {
                 whereClause = {
@@ -302,27 +269,20 @@ export const getNearbyReports = async (req: Request, res: Response) => {
                 };
             }
         }
-
         // ST_DistanceSphere returns distance in meters
         const reports = await Report.findAll({
             where: whereClause,
             order: [
                 [
-                    sequelize.fn(
-                        'ST_DistanceSphere',
-                        sequelize.col('location'),
-                        sequelize.fn('ST_MakePoint', lon, lat)
-                    ),
+                    sequelize.fn('ST_DistanceSphere', sequelize.col('location'), sequelize.fn('ST_MakePoint', lon, lat)),
                     'ASC'
                 ]
             ]
         });
-
-        const reportIds = reports.map(r => (r as any).report_id);
+        const reportIds = reports.map(r => r.report_id);
         const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });
         const metadataMap = new Map();
         metadata.forEach(m => metadataMap.set(m.report_id, m));
-
         const fullReports = reports.map(r => {
             const rJson = r.toJSON();
             const m = metadataMap.get(rJson.report_id);
@@ -333,47 +293,43 @@ export const getNearbyReports = async (req: Request, res: Response) => {
                 image_url: m?.image_url
             };
         });
-
         res.json(fullReports);
-    } catch (error: any) {
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-
-export const registerFcmToken = async (req: Request, res: Response) => {
+export const registerFcmToken = async (req, res) => {
     try {
         const { user_id, fcm_token } = req.body;
-        if (!user_id || !fcm_token) return res.status(400).json({ error: 'user_id and fcm_token are required' });
-
+        if (!user_id || !fcm_token)
+            return res.status(400).json({ error: 'user_id and fcm_token are required' });
         console.log(`[FCM] Registering token for user ${user_id}: ${fcm_token}`);
         await UserDevice.upsert({ user_id, fcm_token });
         res.json({ message: 'FCM token registered' });
-    } catch (error: any) {
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-
 // --- Helper Functions ---
-
-async function handleLocalStorage(req: Request, file: any, reportId: string): Promise<string> {
+async function handleLocalStorage(req, file, reportId) {
     try {
         const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-
         const uploadsDir = path.join(__dirname, '../../uploads');
         if (!fs.existsSync(uploadsDir)) {
             fs.mkdirSync(uploadsDir, { recursive: true });
         }
-
         const fileName = `${reportId}-${file.originalname}`;
         const filePath = path.join(uploadsDir, fileName);
-
         fs.writeFileSync(filePath, file.buffer);
         console.log('Local storage save success:', fileName);
-
         // Return full URL
         return `${baseUrl}/uploads/${fileName}`;
-    } catch (err: any) {
+    }
+    catch (err) {
         console.error('Local storage fallback failed:', err.message);
         return `https://placehold.co/800x600/e2e8f0/475569?text=Storage+Error`;
     }
 }
+//# sourceMappingURL=reportController.js.map

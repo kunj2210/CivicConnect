@@ -1,0 +1,11 @@
+import { Model } from 'sequelize';
+export declare class Report extends Model {
+    id: number;
+    report_id: string;
+    category: string;
+    status: string;
+    remarks: string;
+    location: any;
+    timestamp: Date;
+}
+//# sourceMappingURL=Report.d.ts.map

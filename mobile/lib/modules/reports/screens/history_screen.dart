@@ -26,9 +26,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final phone = user.phoneNumber;
     // Consistently use phone, email, or UID as identifier
-    final identifier = phone ?? user.email ?? user.uid;
+    final identifier = (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
+        ? user.phoneNumber!
+        : (user.email != null && user.email!.isNotEmpty)
+            ? user.email!
+            : user.uid;
 
     try {
       final response = await http.get(Uri.parse('${ApiConfig.reportsUrl}?citizen_phone=$identifier'));
