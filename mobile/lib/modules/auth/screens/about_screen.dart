@@ -15,10 +15,10 @@ class AboutScreen extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 20),
-            const CircleAvatar(
-              radius: 50,
-              backgroundColor: Color(0xFF0052CC),
-              child: Icon(Icons.location_city, size: 50, color: Colors.white),
+            Image.asset(
+              'assets/images/logo.png',
+              height: 100,
+              fit: BoxFit.contain,
             ),
             const SizedBox(height: 24),
             const Text(
