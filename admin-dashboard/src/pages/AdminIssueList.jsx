@@ -10,7 +10,7 @@ const StatusDropdown = ({ currentStatus, onUpdate, darkMode, getStatusColor }) =
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-full border transition-all ${getStatusColor(currentStatus)}`}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-full border transition-all whitespace-nowrap ${getStatusColor(currentStatus)}`}
             >
                 {currentStatus}
                 <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -155,19 +155,19 @@ const AdminIssueList = () => {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleExport}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-lg shadow-green-500/20 transition-all font-medium text-sm"
+                        className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-all font-bold text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700' : 'bg-white border-gray-200 text-gray-900 hover:bg-gray-50'}`}
                     >
                         <Download size={16} />
                         Export Data
                     </button>
 
-                    <div className={`flex gap-4 w-full md:w-auto p-2 rounded-xl shadow-sm border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                    <div className={`flex gap-4 w-full md:w-auto p-1.5 rounded-lg border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
                         <div className="relative flex-1 md:w-64">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                             <input
                                 type="text"
                                 placeholder="Search all issues..."
-                                className={`w-full pl-10 pr-4 py-2 border-none rounded-lg focus:ring-2 focus:ring-blue-500/50 transition-all outline-none ${darkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-gray-50 text-gray-800'}`}
+                                className={`w-full pl-10 pr-4 py-2 text-sm border-none rounded-md focus:ring-1 focus:ring-gray-400 transition-all outline-none ${darkMode ? 'bg-gray-900 text-white placeholder-gray-500' : 'bg-white text-gray-900'}`}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
@@ -175,7 +175,7 @@ const AdminIssueList = () => {
 
                         <div className="relative">
                             <select
-                                className={`pl-4 pr-10 py-2 border-none rounded-lg appearance-none focus:ring-2 focus:ring-blue-500/50 outline-none cursor-pointer font-medium ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-50 text-gray-600'}`}
+                                className={`pl-4 pr-10 py-2 text-sm border-none rounded-md appearance-none focus:ring-1 focus:ring-gray-400 outline-none cursor-pointer font-bold ${darkMode ? 'bg-gray-900 text-gray-200' : 'bg-white text-gray-800'}`}
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
                             >
@@ -190,10 +190,10 @@ const AdminIssueList = () => {
                 </div>
             </div>
 
-            <div className={`backdrop-blur-xl rounded-2xl shadow-lg border ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-white/20'}`}>
+            <div className={`rounded-xl border overflow-hidden ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                 <div className="overflow-x-visible">
                     <table className="w-full text-left">
-                        <thead className={`border-b ${darkMode ? 'bg-gray-700/50 border-gray-700' : 'bg-gray-50/50 border-gray-100'}`}>
+                        <thead className={`border-b ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
                             <tr>
                                 <th className={`px-6 py-5 font-bold uppercase text-xs tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>ID</th>
                                 <th className={`px-6 py-5 font-bold uppercase text-xs tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Issue Details</th>
@@ -203,16 +203,16 @@ const AdminIssueList = () => {
                                 <th className={`px-6 py-5 font-bold uppercase text-xs tracking-wider text-right ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Actions</th>
                             </tr>
                         </thead>
-                        <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
+                        <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-100'}`}>
                             {filteredIssues.map((issue) => (
-                                <tr key={issue.id} className={`transition-colors group ${darkMode ? 'hover:bg-blue-900/20' : 'hover:bg-blue-50/50'}`}>
+                                <tr key={issue.id} className={`transition-colors group ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}>
                                     <td className={`px-6 py-4 text-sm font-medium transition-colors ${darkMode ? 'text-gray-300 group-hover:text-blue-400' : 'text-gray-900 group-hover:text-blue-600'}`}>{issue.id}</td>
                                     <td className="px-6 py-4">
                                         <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{issue.title}</p>
                                         <p className={`text-xs truncate max-w-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{issue.description}</p>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`text-sm font-medium px-3 py-1 rounded-full border ${darkMode ? 'bg-gray-700 text-gray-300 border-gray-600' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                                        <span className={`inline-block whitespace-nowrap text-sm font-medium px-3 py-1 rounded-full border ${darkMode ? 'bg-gray-700 text-gray-300 border-gray-600' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
                                             {issue.category}
                                         </span>
                                     </td>
@@ -229,26 +229,26 @@ const AdminIssueList = () => {
                                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button
                                                 onClick={() => navigate(`/admin/issues/${issue.id}`)}
-                                                className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors dark:text-blue-400 dark:hover:bg-blue-900/30"
+                                                className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-100 rounded-md transition-colors dark:text-gray-400 dark:hover:text-blue-400 dark:hover:bg-gray-800"
                                                 title="View Details"
                                             >
-                                                <Eye size={18} />
+                                                <Eye size={16} />
                                             </button>
                                             {issue.status !== 'Resolved' && (
                                                 <button
                                                     onClick={() => handleUpdateStatus(issue.id, 'Resolved')}
-                                                    className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors dark:text-green-400 dark:hover:bg-green-900/30"
+                                                    className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-gray-100 rounded-md transition-colors dark:text-gray-400 dark:hover:text-green-400 dark:hover:bg-gray-800"
                                                     title="Mark Resolved"
                                                 >
-                                                    <CheckCircle size={18} />
+                                                    <CheckCircle size={16} />
                                                 </button>
                                             )}
                                             <button
                                                 onClick={() => handleDelete(issue.id)}
-                                                className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors dark:text-red-400 dark:hover:bg-red-900/30"
+                                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-gray-100 rounded-md transition-colors dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-gray-800"
                                                 title="Delete"
                                             >
-                                                <Trash2 size={18} />
+                                                <Trash2 size={16} />
                                             </button>
                                         </div>
                                     </td>

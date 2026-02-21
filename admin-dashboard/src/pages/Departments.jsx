@@ -8,7 +8,16 @@ const Departments = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showModal, setShowModal] = useState(false);
-    const [newDept, setNewDept] = useState({ name: '', head: '', staff_count: 0, status: 'Active' });
+    const [newDept, setNewDept] = useState({ name: '', head: '', staff_count: 0, status: 'Active', handled_categories: [] });
+
+    // Based on mobile app hardcoded categories
+    const AVAILABLE_CATEGORIES = [
+        'Waste Management',
+        'Road/Potholes',
+        'Street Light',
+        'Water Leakage',
+        'Other'
+    ];
 
     useEffect(() => {
         fetchDepartments();
@@ -38,7 +47,7 @@ const Departments = () => {
             });
             if (response.ok) {
                 setShowModal(false);
-                setNewDept({ name: '', head: '', staff_count: 0, status: 'Active' });
+                setNewDept({ name: '', head: '', staff_count: 0, status: 'Active', handled_categories: [] });
                 fetchDepartments();
             }
         } catch (err) {
@@ -115,6 +124,30 @@ const Departments = () => {
                                     onChange={(e) => setNewDept({ ...newDept, staff_count: parseInt(e.target.value) || 0 })}
                                 />
                             </div>
+
+                            <div>
+                                <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Handled Issue Categories</label>
+                                <div className={`p-4 rounded-2xl ring-2 ring-gray-100 dark:ring-white/5 space-y-3 ${darkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                                    {AVAILABLE_CATEGORIES.map(cat => (
+                                        <label key={cat} className="flex items-center gap-3 cursor-pointer group">
+                                            <input
+                                                type="checkbox"
+                                                className="w-5 h-5 rounded hover:ring-2 hover:ring-blue-500/50 transition-all cursor-pointer accent-blue-600"
+                                                checked={newDept.handled_categories.includes(cat)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setNewDept({ ...newDept, handled_categories: [...newDept.handled_categories, cat] });
+                                                    } else {
+                                                        setNewDept({ ...newDept, handled_categories: newDept.handled_categories.filter(c => c !== cat) });
+                                                    }
+                                                }}
+                                            />
+                                            <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{cat}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
                             <div className="flex gap-4 pt-4">
                                 <button
                                     type="button"
@@ -168,6 +201,7 @@ const Departments = () => {
                             <th className="px-8 py-6 text-xs font-black uppercase tracking-[0.2em]">Department Name</th>
                             <th className="px-8 py-6 text-xs font-black uppercase tracking-[0.2em]">Dept Head</th>
                             <th className="px-8 py-6 text-xs font-black uppercase tracking-[0.2em]">Staff Count</th>
+                            <th className="px-8 py-6 text-xs font-black uppercase tracking-[0.2em]">Handled Categories</th>
                             <th className="px-8 py-6 text-xs font-black uppercase tracking-[0.2em]">Status</th>
                             <th className="px-8 py-6 text-xs font-black uppercase tracking-[0.2em] text-right">Actions</th>
                         </tr>
@@ -183,6 +217,15 @@ const Departments = () => {
                                 </td>
                                 <td className={`px-8 py-6 text-base font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{dept.head}</td>
                                 <td className={`px-8 py-6 text-base font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{dept.staff_count}</td>
+                                <td className="px-8 py-6">
+                                    <div className="flex flex-wrap gap-2">
+                                        {(dept.handled_categories && dept.handled_categories.length > 0) ? dept.handled_categories.map(cat => (
+                                            <span key={cat} className={`whitespace-nowrap px-3 py-1 text-xs font-bold rounded-full ${darkMode ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                                                {cat}
+                                            </span>
+                                        )) : <span className="text-gray-400 text-sm italic">None</span>}
+                                    </div>
+                                </td>
                                 <td className="px-8 py-6">
                                     <span className={`px-4 py-1.5 text-xs font-black rounded-xl uppercase tracking-wider ${dept.status === 'Active' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'
                                         }`}>

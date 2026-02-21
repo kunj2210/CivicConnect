@@ -7,6 +7,7 @@ export class Department extends Model {
     public head!: string;
     public staff_count!: number;
     public status!: string;
+    public handled_categories!: string[];
 }
 
 Department.init({
@@ -31,6 +32,10 @@ Department.init({
     status: {
         type: DataTypes.ENUM('Active', 'Maintenance', 'Inactive'),
         defaultValue: 'Active',
+    },
+    handled_categories: {
+        type: DataTypes.JSONB,
+        defaultValue: [],
     },
 }, {
     sequelize,

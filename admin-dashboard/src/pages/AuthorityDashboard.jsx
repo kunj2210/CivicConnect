@@ -1,15 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { TrendingUp, CheckCircle, Clock, AlertCircle, MapPin, User, Calendar } from 'lucide-react';
+import { TrendingUp, CheckCircle, Clock, AlertCircle, MapPin, Calendar } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const AuthorityDashboard = () => {
     const { darkMode } = useOutletContext();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch('http://localhost:5000/api/reports')
+        const url = user?.departmentId
+            ? `http://localhost:5000/api/reports?departmentId=${user.departmentId}`
+            : 'http://localhost:5000/api/reports';
+
+        fetch(url)
             .then(res => res.json())
             .then(data => {
                 // For demo, we just show all issues or maybe filter by a mock department
@@ -40,21 +46,23 @@ const AuthorityDashboard = () => {
             {/* Stats Grid */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 {stats.map((stat, i) => (
-                    <div key={i} className={`p-6 rounded-2xl shadow-lg border backdrop-blur-xl ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-white/20'}`}>
-                        <div className="flex justify-between items-start mb-2">
-                            <p className={`text-sm font-semibold uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{stat.title}</p>
-                            <div className={`p-2 rounded-lg ${darkMode ? `bg-${stat.color}-900/30 text-${stat.color}-400` : `bg-${stat.color}-100 text-${stat.color}-600`}`}>
-                                <stat.icon size={20} />
+                    <div key={i} className={`p-6 rounded-2xl border transition-all duration-200 ${darkMode ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-200 hover:border-gray-300'}`}>
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <p className={`text-xs font-bold uppercase tracking-widest gap-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{stat.title}</p>
+                                <h3 className={`text-4xl font-extrabold mt-2 tracking-tighter ${darkMode ? 'text-white' : 'text-gray-900'}`}>{stat.value}</h3>
+                            </div>
+                            <div className={`p-3 rounded-xl ${darkMode ? `bg-gray-800 text-${stat.color}-400` : `bg-gray-100 text-${stat.color}-600`}`}>
+                                <stat.icon className="w-6 h-6" />
                             </div>
                         </div>
-                        <h3 className={`text-3xl font-extrabold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{stat.value}</h3>
                     </div>
                 ))}
             </div>
 
             {/* Issues Table */}
-            <div className={`backdrop-blur-xl rounded-2xl shadow-lg border overflow-hidden ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-white/20'}`}>
-                <div className="p-6 border-b flex justify-between items-center">
+            <div className={`rounded-2xl border overflow-hidden ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                <div className={`p-6 border-b flex justify-between items-center ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
                     <h2 className={`text-lg font-bold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Assigned Issues</h2>
                     <button
                         onClick={() => navigate('/authority/issues')}
@@ -73,9 +81,9 @@ const AuthorityDashboard = () => {
                                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-right text-gray-500">Action</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {issues.slice(0, 5).map((issue) => (
-                                <tr key={issue.report_id} className={`transition-colors ${darkMode ? 'hover:bg-gray-700/30' : 'hover:bg-gray-50'}`}>
+                                <tr key={issue.report_id} className={`transition-all duration-200 group ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}>
                                     <td className="px-6 py-4">
                                         <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{issue.category}</p>
                                         <p className="text-xs text-gray-500 truncate max-w-xs">{issue.report_id}</p>
@@ -94,7 +102,7 @@ const AuthorityDashboard = () => {
                                     <td className="px-6 py-4 text-right">
                                         <button
                                             onClick={() => navigate(`/authority/issues/${issue.report_id}`)}
-                                            className="text-blue-600 hover:text-blue-700 text-sm font-bold"
+                                            className="text-gray-900 bg-gray-100 hover:bg-gray-200 dark:text-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-xs font-bold transition-all opacity-0 group-hover:opacity-100"
                                         >
                                             Take Action
                                         </button>

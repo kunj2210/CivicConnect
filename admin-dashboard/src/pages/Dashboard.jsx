@@ -29,20 +29,19 @@ const Dashboard = () => {
     }, []);
 
     const StatCard = ({ title, value, color, icon: Icon, trend }) => (
-        <div className={`relative overflow-hidden p-6 rounded-2xl shadow-lg border transition-transform hover:-translate-y-1 hover:shadow-xl group backdrop-blur-xl ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-white/20'}`}>
-            <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity bg-${color}-500 rounded-bl-full w-24 h-24 -mr-4 -mt-4`} />
-            <div className="flex justify-between items-start mb-4">
+        <div className={`p-6 rounded-2xl border transition-all duration-200 ${darkMode ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-200 hover:border-gray-300'}`}>
+            <div className="flex justify-between items-start mb-6">
                 <div>
-                    <p className={`text-sm font-semibold uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{title}</p>
-                    <h3 className={`text-3xl font-extrabold mt-1 ${darkMode ? 'text-white' : 'text-gray-800'}`}>{value}</h3>
+                    <p className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{title}</p>
+                    <h3 className={`text-4xl font-extrabold mt-2 tracking-tighter ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</h3>
                 </div>
-                <div className={`p-3 rounded-xl shadow-inner ${darkMode ? `bg-${color}-900/30 text-${color}-400` : `bg-${color}-100 text-${color}-600`}`}>
+                <div className={`p-3 rounded-xl ${darkMode ? `bg-gray-800 text-${color}-400` : `bg-gray-100 text-${color}-600`}`}>
                     <Icon className="w-6 h-6" />
                 </div>
             </div>
-            <div className="flex items-center text-xs font-medium text-gray-400">
-                <span className={`flex items-center px-2 py-0.5 rounded-full mr-2 ${darkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-50 text-green-500'}`}>
-                    <TrendingUp className="w-3 h-3 mr-1" /> {trend}%
+            <div className="flex items-center text-xs font-semibold text-gray-500">
+                <span className={`flex items-center px-2 py-1 rounded-md mr-2 ${darkMode ? 'bg-emerald-900/30 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <TrendingUp className="w-3.5 h-3.5 mr-1" /> {trend}%
                 </span>
                 <span>vs last month</span>
             </div>
@@ -93,7 +92,7 @@ const Dashboard = () => {
                 </div>
                 <button
                     onClick={handleDownloadReport}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-lg shadow-blue-500/30 transition-all">
+                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all border ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700' : 'bg-white hover:bg-gray-50 text-gray-900 border-gray-200 shadow-sm'}`}>
                     Download Report
                 </button>
             </div>
@@ -120,7 +119,7 @@ const Dashboard = () => {
             {/* Charts Section */}
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
                 {/* Bar Chart */}
-                <div className={`lg:col-span-2 p-6 backdrop-blur-xl rounded-2xl shadow-lg border ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-white/20'}`}>
+                <div className={`lg:col-span-2 p-8 rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                     <div className="flex justify-between items-center mb-6">
                         <h2 className={`text-lg font-bold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Issues by Category</h2>
                         <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal /></button>
@@ -132,13 +131,15 @@ const Dashboard = () => {
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
                                 <Tooltip
-                                    cursor={{ fill: darkMode ? '#374151' : '#F3F4F6' }}
+                                    cursor={{ fill: darkMode ? '#1F2937' : '#F9FAFB' }}
                                     contentStyle={{
-                                        borderRadius: '12px',
-                                        border: 'none',
-                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                                        backgroundColor: darkMode ? '#1F2937' : '#FFFFFF',
-                                        color: darkMode ? '#FFFFFF' : '#000000'
+                                        borderRadius: '8px',
+                                        border: darkMode ? '1px solid #374151' : '1px solid #E5E7EB',
+                                        boxShadow: 'none',
+                                        backgroundColor: darkMode ? '#111827' : '#FFFFFF',
+                                        color: darkMode ? '#FFFFFF' : '#111827',
+                                        fontSize: '12px',
+                                        fontWeight: '600'
                                     }}
                                 />
                                 <Bar dataKey="value" fill="#3B82F6" radius={[6, 6, 0, 0]}>
@@ -152,7 +153,7 @@ const Dashboard = () => {
                 </div>
 
                 {/* Pie Chart */}
-                <div className={`p-6 backdrop-blur-xl rounded-2xl shadow-lg border ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-white/20'}`}>
+                <div className={`p-8 rounded-2xl border flex flex-col justify-between ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                     <h2 className={`mb-6 text-lg font-bold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Resolution Status</h2>
                     <div className="h-64 flex justify-center relative">
                         <ResponsiveContainer width="100%" height="100%">
@@ -170,9 +171,12 @@ const Dashboard = () => {
                                 </Pie>
                                 <Tooltip
                                     contentStyle={{
-                                        borderRadius: '12px',
-                                        backgroundColor: darkMode ? '#1F2937' : '#FFFFFF',
-                                        border: 'none'
+                                        borderRadius: '8px',
+                                        backgroundColor: darkMode ? '#111827' : '#FFFFFF',
+                                        border: darkMode ? '1px solid #374151' : '1px solid #E5E7EB',
+                                        boxShadow: 'none',
+                                        fontSize: '12px',
+                                        fontWeight: '600'
                                     }}
                                 />
                                 <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ color: '#9CA3AF' }} />
@@ -187,7 +191,7 @@ const Dashboard = () => {
             </div>
 
             {/* Recent Activity */}
-            <div className={`p-6 backdrop-blur-xl rounded-2xl shadow-lg border ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-white/20'}`}>
+            <div className={`p-8 rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                 <div className="flex justify-between items-center mb-6">
                     <h2 className={`text-lg font-bold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Recent Activity</h2>
                     <button
@@ -202,11 +206,11 @@ const Dashboard = () => {
                         <div
                             key={issue.report_id}
                             onClick={() => navigate(`/admin/issues/${issue.report_id}`)}
-                            className={`flex items-center justify-between p-4 rounded-xl transition-colors border cursor-pointer ${darkMode ? 'bg-gray-700/50 hover:bg-blue-900/20 border-transparent hover:border-blue-800' : 'bg-gray-50/50 hover:bg-blue-50/50 border-transparent hover:border-blue-100'}`}
+                            className={`flex items-center justify-between p-4 rounded-xl transition-all duration-200 border cursor-pointer ${darkMode ? 'bg-gray-800/30 hover:bg-gray-800 border-transparent hover:border-gray-700' : 'bg-gray-50/50 hover:bg-gray-50 border-transparent hover:border-gray-200'}`}
                         >
                             <div className="flex items-center">
-                                <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white mr-4 shadow-md shadow-blue-300/50">
-                                    <Clock size={18} />
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center mr-4 ${darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-200 text-gray-600'}`}>
+                                    <Clock size={16} strokeWidth={2.5} />
                                 </div>
                                 <div>
                                     <p className={`font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>New Report: {issue.category}</p>

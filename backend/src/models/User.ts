@@ -5,6 +5,7 @@ export interface IUser extends Document {
     email: string;
     password: string;
     role: 'Admin' | 'Authority';
+    departmentId?: number; // Maps to PostgreSQL Department ID
     createdAt: Date;
 }
 
@@ -13,6 +14,7 @@ const UserSchema: Schema = new Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: String, enum: ['Admin', 'Authority'], required: true },
+    departmentId: { type: Number, required: false },
     createdAt: { type: Date, default: Date.now }
 });
 
