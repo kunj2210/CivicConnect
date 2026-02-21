@@ -56,20 +56,18 @@ const DashboardLayout = () => {
     };
 
     return (
-        <div className={`flex min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
+        <div className={`flex min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'dark bg-gray-950 text-gray-100' : 'bg-white text-gray-900'}`}>
             <Sidebar darkMode={darkMode} />
             <div className="flex-1 flex flex-col overflow-hidden relative">
-                {/* Background Blobs for specific pages if needed */}
-                <div className={`absolute top-0 left-0 w-full h-64 bg-gradient-to-b ${darkMode ? 'from-blue-900/20' : 'from-blue-50/50'} to-transparent -z-10`} />
 
-                <header className={`flex justify-between items-center py-4 px-8 backdrop-blur-md border-b z-10 sticky top-0 transition-colors duration-300 ${darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-gray-100'}`}>
+                <header className={`flex justify-between items-center py-4 px-8 border-b z-10 sticky top-0 transition-colors duration-300 ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-white border-gray-200'}`}>
                     <div className="flex items-center w-96">
                         <div className="relative w-full hidden md:block">
-                            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-400'}`} />
+                            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
                             <input
                                 type="text"
-                                placeholder="Global Search..."
-                                className={`w-full pl-10 pr-4 py-2 border-none rounded-full text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all ${darkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-gray-50 text-gray-800'}`}
+                                placeholder="Search system..."
+                                className={`w-full pl-10 pr-4 py-2 border rounded-none text-sm focus:ring-1 focus:ring-gray-400 outline-none transition-all ${darkMode ? 'bg-gray-900 border-gray-800 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
                             />
                         </div>
                         <button className="text-gray-500 focus:outline-none md:hidden p-2">
@@ -79,10 +77,10 @@ const DashboardLayout = () => {
                         </button>
                     </div>
 
-                    <div className={`flex items-center gap-4 pl-6 border-l ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}>
+                    <div className={`flex items-center gap-4 pl-6 border-l ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
                         <button
                             onClick={() => setDarkMode(!darkMode)}
-                            className={`p-2 rounded-full transition-colors ${darkMode ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            className={`p-2 transition-colors ${darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
                             title="Toggle Theme"
                         >
                             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -100,12 +98,12 @@ const DashboardLayout = () => {
                             </button>
 
                             {showNotifications && (
-                                <div className={`absolute right-0 mt-4 w-80 rounded-2xl shadow-2xl border overflow-hidden ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
-                                    <div className="p-4 border-b flex justify-between items-center bg-gray-50 dark:bg-gray-700/50">
-                                        <h3 className="font-bold">Notifications</h3>
+                                <div className={`absolute right-0 mt-4 w-80 border overflow-hidden shadow-2xl ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                                    <div className={`p-4 border-b flex justify-between items-center ${darkMode ? 'border-gray-800 bg-gray-950' : 'border-gray-200 bg-gray-50'}`}>
+                                        <h3 className="font-bold text-sm">Notifications</h3>
                                         <button
                                             onClick={markAllAsRead}
-                                            className="text-xs text-blue-600 hover:underline">Mark all as read</button>
+                                            className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">Mark all as read</button>
                                     </div>
                                     <div className="max-h-96 overflow-y-auto">
                                         {notifications.length > 0 ? (
@@ -120,13 +118,13 @@ const DashboardLayout = () => {
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="p-8 text-center text-gray-400 text-sm">
+                                            <div className="p-8 text-center text-gray-500 text-sm font-medium">
                                                 No notifications found
                                             </div>
                                         )}
                                     </div>
-                                    <div className="p-3 text-center border-t bg-gray-50 dark:bg-gray-700/50">
-                                        <button className="text-xs font-bold text-gray-500 hover:text-blue-600">View All Notifications</button>
+                                    <div className={`p-3 text-center border-t ${darkMode ? 'border-gray-800 bg-gray-950' : 'border-gray-200 bg-gray-50'}`}>
+                                        <button className="text-xs font-bold text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">View All Notifications</button>
                                     </div>
                                 </div>
                             )}
@@ -134,19 +132,15 @@ const DashboardLayout = () => {
 
                         <div className="flex items-center gap-3">
                             <div className="text-right hidden sm:block">
-                                <p className={`text-sm font-bold leading-none ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{user?.name || 'Guest User'}</p>
-                                <div className="flex justify-end mt-1">
-                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${user?.role === 'Admin'
-                                            ? 'bg-blue-500/10 text-blue-500 ring-1 ring-blue-500/30'
-                                            : 'bg-indigo-500/10 text-indigo-500 ring-1 ring-indigo-500/30'
+                                <p className={`text-sm font-bold leading-none ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user?.name || 'Guest User'}</p>
+                                <div className="flex justify-end mt-1.5">
+                                    <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 border ${darkMode ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-600 border-gray-200'
                                         }`}>
                                         {user?.role || 'Observer'}
                                     </span>
                                 </div>
                             </div>
-                            <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg cursor-pointer hover:scale-105 transition-all ${user?.role === 'Admin'
-                                    ? 'bg-gradient-to-tr from-blue-600 to-blue-400 shadow-blue-500/20'
-                                    : 'bg-gradient-to-tr from-indigo-600 to-indigo-400 shadow-indigo-500/20'
+                            <div className={`h-10 w-10 flex items-center justify-center text-sm font-bold border transition-colors cursor-pointer ${darkMode ? 'bg-gray-900 text-white border-gray-700 hover:border-gray-600' : 'bg-gray-50 text-gray-900 border-gray-300 hover:border-gray-400'
                                 }`}>
                                 {getInitials(user?.name)}
                             </div>
@@ -154,7 +148,7 @@ const DashboardLayout = () => {
                     </div>
                 </header>
 
-                <main className={`flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-8 scroll-smooth relative transition-colors duration-300 ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                <main className={`flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-8 scroll-smooth relative transition-colors duration-300 ${darkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
                     <Outlet context={{ darkMode }} />
                 </main>
             </div>

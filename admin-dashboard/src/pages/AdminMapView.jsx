@@ -62,7 +62,7 @@ const AdminMapView = () => {
                 </div>
             </div>
 
-            <div className="flex-1 bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+            <div className={`flex-1 overflow-hidden border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
                 <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     {issues.map((issue) => {
@@ -82,8 +82,8 @@ const AdminMapView = () => {
                                                 <p className="text-[10px] text-gray-500 mt-0.5">#{issue.report_id.slice(0, 8)}</p>
                                             </div>
                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${issue.status === 'Resolved' ? 'bg-emerald-100 text-emerald-700' :
-                                                    issue.status === 'In Progress' ? 'bg-amber-100 text-amber-700' :
-                                                        'bg-rose-100 text-rose-700'
+                                                issue.status === 'In Progress' ? 'bg-amber-100 text-amber-700' :
+                                                    'bg-rose-100 text-rose-700'
                                                 }`}>
                                                 {issue.status}
                                             </span>

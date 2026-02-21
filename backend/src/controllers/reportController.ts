@@ -4,6 +4,7 @@ import { sequelize } from '../config/db.js';
 import { Report } from '../models/Report.js';
 import ReportMetadata from '../models/ReportMetadata.js';
 import { UserDevice } from '../models/UserDevice.js';
+import { Department } from '../models/Department.js';
 import { sendNotificationToUser } from '../services/notificationService.js';
 import { bucket } from '../config/firebase.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -95,7 +96,7 @@ export const createReport = async (req: Request, res: Response) => {
 
 export const getReports = async (req: Request, res: Response): Promise<any> => {
     try {
-        const { citizen_phone } = req.query;
+        const { citizen_phone, departmentId } = req.query;
         let reports;
         if (citizen_phone) {
             // Find in MongoDB metadata first to get IDs
@@ -117,7 +118,18 @@ export const getReports = async (req: Request, res: Response): Promise<any> => {
             });
             return res.json(fullReports);
         } else {
-            reports = await Report.findAll();
+            let whereClause: any = {};
+            if (departmentId) {
+                const department = await Department.findByPk(departmentId as string);
+                if (department && department.handled_categories && department.handled_categories.length > 0) {
+                    whereClause.category = { [Op.in]: department.handled_categories };
+                } else if (department && department.handled_categories && department.handled_categories.length === 0) {
+                    // Department handles no categories, return empty array immediately
+                    return res.json([]);
+                }
+            }
+
+            reports = await Report.findAll({ where: whereClause });
 
             const reportIds = reports.map(r => (r as any).report_id);
             const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });

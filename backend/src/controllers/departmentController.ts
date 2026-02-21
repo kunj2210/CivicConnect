@@ -12,8 +12,14 @@ export const getDepartments = async (_req: Request, res: Response) => {
 
 export const createDepartment = async (req: Request, res: Response) => {
     try {
-        const { name, head, staff_count, status } = req.body;
-        const dept = await Department.create({ name, head, staff_count, status });
+        const { name, head, staff_count, status, handled_categories } = req.body;
+        const dept = await Department.create({
+            name,
+            head,
+            staff_count,
+            status,
+            handled_categories: handled_categories || []
+        });
         res.status(201).json(dept);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -23,7 +29,7 @@ export const createDepartment = async (req: Request, res: Response) => {
 export const updateDepartment = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, head, staff_count, status } = req.body;
+        const { name, head, staff_count, status, handled_categories } = req.body;
         const dept = await Department.findByPk(id as any);
         if (!dept) return res.status(404).json({ error: 'Department not found' });
 
@@ -31,6 +37,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
         if (head) dept.head = head;
         if (staff_count !== undefined) dept.staff_count = staff_count;
         if (status) dept.status = status;
+        if (handled_categories) dept.handled_categories = handled_categories;
 
         await dept.save();
         res.json(dept);
