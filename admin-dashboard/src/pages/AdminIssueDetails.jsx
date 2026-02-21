@@ -100,7 +100,9 @@ const AdminIssueDetails = () => {
                         </div>
                         <div className={`p-1 min-h-[300px] flex items-center justify-center rounded-xl ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
                             <img
-                                src={report.metadata?.image_url || 'https://via.placeholder.com/800x600'}
+                                src={report.metadata?.image_url?.startsWith('/uploads')
+                                    ? `http://localhost:5000${report.metadata.image_url}`
+                                    : report.metadata?.image_url || 'https://via.placeholder.com/800x600'}
                                 alt="Report Evidence"
                                 className="w-full aspect-video object-cover rounded-xl shadow-inner"
                             />
@@ -144,7 +146,7 @@ const AdminIssueDetails = () => {
                             </button>
                             <button
                                 onClick={() => handleUpdateStatus('Resolved')}
-                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${report.status === 'Resolved' ? 'bg-green-500/10 border-green-500/30 text-green-500' : darkMode ? 'hover:bg-white/5 border-white/5 text-gray-400' : 'hover:bg-gray-50 border-gray-100'}`}
+                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${report.status === 'Resolved' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : darkMode ? 'hover:bg-white/5 border-white/5 text-gray-400' : 'hover:bg-gray-50 border-gray-100'}`}
                             >
                                 <div className="flex items-center">
                                     <CheckCircle className="w-5 h-5 mr-3" />
@@ -177,6 +179,13 @@ const AdminIssueDetails = () => {
                                 <div>
                                     <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Lodged At</p>
                                     <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{new Date(report.timestamp).toLocaleString()}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start space-x-3">
+                                <AlertCircle className="w-5 h-5 text-emerald-500 shrink-0" />
+                                <div>
+                                    <p className="text-xs text-emerald-600 uppercase font-bold tracking-wider">Assigned Jurisdiction</p>
+                                    <p className={`text-sm font-bold ${darkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>{report.metadata?.jurisdiction || 'Calculating...'}</p>
                                 </div>
                             </div>
                         </div>

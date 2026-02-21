@@ -4,8 +4,13 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive/hive.dart';
 import '../../../config/api_config.dart';
 import '../services/location_service.dart';
+import '../services/sync_service.dart';
+import '../models/report_draft.dart';
+import './location_picker_screen.dart';
+import 'package:latlong2/latlong.dart' as ll;
 
 class ReportFormScreen extends StatefulWidget {
   const ReportFormScreen({super.key});
@@ -139,7 +144,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
         ),
       );
 
-      var response = await request.send();
+      var response = await request.send().timeout(const Duration(seconds: 30));
       final responseBody = await response.stream.bytesToString();
 
       if (response.statusCode == 201) {
@@ -153,24 +158,50 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
           ),
         );
       } else {
-        Map<String, dynamic> errorData = {};
-        try {
-          errorData = json.decode(responseBody);
-        } catch (_) {}
-        throw Exception(
-          errorData['error'] ??
-              'Failed to submit report (${response.statusCode})',
-        );
+        throw Exception('Server returned ${response.statusCode}');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // Offline / Error handling
+      debugPrint("Submission error: $e");
+      
+      try {
+        final box = Hive.box<ReportDraft>('report_drafts');
+        final user = FirebaseAuth.instance.currentUser;
+        final identifier = user?.phoneNumber ?? user?.email ?? user?.uid ?? 'anonymous';
+        
+        final draft = ReportDraft(
+          category: _category!,
+          description: _descriptionController.text,
+          imagePath: _image!.path,
+          latitude: _location!['latitude']!,
+          longitude: _location!['longitude']!,
+          timestamp: DateTime.now(),
+          citizenPhone: identifier,
+        );
+        
+        await box.add(draft);
+        SyncService.scheduleSync();
+        
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved as draft. Will sync when online.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } catch (hiveError) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -317,6 +348,31 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
                 ),
               ],
             ),
+          ),
+          TextButton.icon(
+            onPressed: () async {
+              final ll.LatLng? result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => LocationPickerScreen(
+                    initialLocation: _location != null
+                        ? ll.LatLng(_location!['latitude']!,
+                            _location!['longitude']!)
+                        : null,
+                  ),
+                ),
+              );
+              if (result != null) {
+                setState(() {
+                  _location = {
+                    'latitude': result.latitude,
+                    'longitude': result.longitude,
+                  };
+                });
+              }
+            },
+            icon: const Icon(Icons.map),
+            label: const Text('Map'),
           ),
         ],
       ),
