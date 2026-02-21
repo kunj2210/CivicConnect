@@ -24,8 +24,48 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
   bool _isLocating = false;
   bool _isSubmitting = false;
 
-  Future<void> _captureImage() async {
-    final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
+  Future<void> _showImageSourceDialog() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Select Image Source',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final XFile? photo = await _picker.pickImage(source: source);
     if (photo != null) {
       File imageFile = File(photo.path);
       setState(() {
@@ -70,8 +110,11 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      String identifier = user?.phoneNumber ?? user?.email ?? 'anonymous';
-      if (identifier.trim().isEmpty) identifier = 'anonymous';
+      String identifier = (user?.phoneNumber != null && user!.phoneNumber!.isNotEmpty)
+          ? user.phoneNumber!
+          : (user?.email != null && user!.email!.isNotEmpty)
+              ? user.email!
+              : (user?.uid ?? 'anonymous');
 
       var request = http.MultipartRequest(
         'POST',
@@ -157,7 +200,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
             ),
             const SizedBox(height: 12),
             GestureDetector(
-              onTap: _captureImage,
+              onTap: _showImageSourceDialog,
               child: Container(
                 height: 220,
                 width: double.infinity,
@@ -183,7 +226,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Tap to open camera',
+                            'Tap to add photo',
                             style: TextStyle(color: theme.hintColor),
                           ),
                         ],
