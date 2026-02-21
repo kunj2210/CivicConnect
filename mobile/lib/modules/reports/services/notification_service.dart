@@ -52,7 +52,13 @@ class NotificationService {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    final identifier = user.phoneNumber ?? user.email ?? 'anonymous';
+    // Use a robust identifier. 
+    // If phone and email are both empty, use the Firebase UID as a fallback.
+    String identifier = (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
+        ? user.phoneNumber!
+        : (user.email != null && user.email!.isNotEmpty)
+            ? user.email!
+            : user.uid;
     
     try {
       final response = await http.post(

@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:location/location.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../config/api_config.dart';
 import '../services/location_service.dart';
 import './report_detail_screen.dart';
@@ -18,6 +20,8 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
   final LocationService _locationService = LocationService();
   List<dynamic> _nearbyReports = [];
   bool _isLoading = true;
+  bool _isMapView = false;
+  final MapController _mapController = MapController();
   LocationData? _currentLocation;
   String? _error;
 
@@ -53,8 +57,10 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
           '&radius=10000'); // 10km radius
 
       final response = await http.get(url);
+      debugPrint('Nearby API Status: ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> reports = json.decode(response.body);
+        debugPrint('Fetched ${reports.length} reports from backend');
         
         // 3. Process reports and calculate distances
         final List<Map<String, dynamic>> processedReports = [];
@@ -82,6 +88,7 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
         setState(() {
           _nearbyReports = processedReports;
           _isLoading = false;
+          _updateMarkers();
         });
       } else {
         setState(() {
@@ -96,6 +103,12 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _updateMarkers() {
+    debugPrint('Updating markers for ${_nearbyReports.length} reports');
+    // Markers are now built directly in the widget tree for better flexibility
+    setState(() {});
   }
 
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -118,6 +131,11 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
         backgroundColor: theme.appBarTheme.backgroundColor,
         foregroundColor: theme.appBarTheme.foregroundColor,
         actions: [
+          IconButton(
+            icon: Icon(_isMapView ? Icons.list : Icons.map_outlined),
+            onPressed: () => setState(() => _isMapView = !_isMapView),
+            tooltip: _isMapView ? 'Switch to List View' : 'Switch up Map View',
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchNearbyReports),
         ],
       ),
@@ -150,15 +168,129 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
                         ],
                       ),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _nearbyReports.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final report = _nearbyReports[index];
-                        return _NearbyReportListItem(report: report);
-                      },
-                    ),
+                  : _isMapView 
+                      ? _buildMapView()
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _nearbyReports.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final report = _nearbyReports[index];
+                            return _NearbyReportListItem(report: report);
+                          },
+                        ),
+    );
+  }
+
+  Widget _buildMapView() {
+    if (_currentLocation == null) return const Center(child: Text("Location not available"));
+    
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: LatLng(_currentLocation!.latitude!, _currentLocation!.longitude!),
+        initialZoom: 13,
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.civicconnect.civic_connect_mobile',
+        ),
+        MarkerLayer(
+          markers: _nearbyReports.map((report) {
+            final coords = report['location']['coordinates'];
+            final double lat = (coords[1] as num).toDouble();
+            final double lon = (coords[0] as num).toDouble();
+            
+            return Marker(
+              point: LatLng(lat, lon),
+              width: 40,
+              height: 40,
+              alignment: Alignment.topCenter,
+              child: GestureDetector(
+                onTap: () => _showIssuePopup(report),
+                child: const Icon(
+                  Icons.location_on,
+                  color: Colors.red,
+                  size: 40,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  void _showIssuePopup(Map<String, dynamic> report) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    report['category'] ?? 'Issue',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  _StatusBadge(
+                    status: report['status'] ?? 'Pending',
+                    color: (report['status'] == 'Resolved') 
+                        ? Colors.green 
+                        : (report['status'] == 'In Progress' ? Colors.orange : Colors.blue),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                report['description'] ?? 'No description provided.',
+                style: TextStyle(color: theme.hintColor),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReportDetailScreen(reportId: report['report_id']),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.remove_red_eye_outlined),
+                  label: const Text('Inspect Issue'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
