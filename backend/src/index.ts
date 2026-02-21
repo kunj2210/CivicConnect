@@ -1,10 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { connectMongo, connectPostgres } from './config/db.js';
-import { seedUlbBoundaries } from './seed/ulbBoundaries.js';
 import './config/firebase.js'; // Initialize firebase admin
 
 import reportRoutes from './routes/reportRoutes.js';
@@ -20,11 +17,6 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Serve local uploads
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
 app.use('/api/reports', reportRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/notifications', notificationRoutes);
@@ -36,11 +28,10 @@ app.get('/health', (req: Request, res: Response) => {
 
 const startServer = async () => {
     await connectPostgres();
-    await seedUlbBoundaries();
     await connectMongo();
 
-    app.listen(Number(PORT), '0.0.0.0', () => {
-        console.log(`Server is running on http://0.0.0.0:${PORT}`);
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
     });
 };
 

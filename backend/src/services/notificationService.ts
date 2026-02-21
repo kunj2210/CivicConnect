@@ -6,11 +6,8 @@ export const sendNotificationToUser = async (userId: string, title: string, body
         const devices = await UserDevice.findAll({ where: { user_id: userId } });
         const tokens = devices.map(d => d.fcm_token);
 
-        console.log(`[FCM] Attempting to send notification to user: ${userId}`);
-        console.log(`[FCM] Found ${tokens.length} tokens for this user.`);
-
         if (tokens.length === 0) {
-            console.log(`[FCM] SKIP: No FCM tokens found for user: ${userId}`);
+            console.log(`No FCM tokens found for user: ${userId}`);
             return;
         }
 
@@ -21,17 +18,21 @@ export const sendNotificationToUser = async (userId: string, title: string, body
         };
 
         const response = await admin.messaging().sendEachForMulticast(message);
-        console.log(`[FCM] Multicast response: ${response.successCount} success, ${response.failureCount} failure`);
+        console.log(`${response.successCount} messages were sent successfully`);
 
         if (response.failureCount > 0) {
+            const failedTokens: string[] = [];
             response.responses.forEach((resp, idx) => {
                 if (!resp.success) {
-                    console.error(`[FCM] Token ${idx} failed:`, resp.error);
+                    const failedToken = tokens[idx];
+                    if (failedToken) failedTokens.push(failedToken);
                 }
             });
+            console.log('Failure tokens:', failedTokens);
+            // Optionally remove invalid tokens from DB
         }
     } catch (error) {
-        console.error('[FCM] CRITICAL: Error sending notification:', error);
+        console.error('Error sending notification:', error);
     }
 };
 

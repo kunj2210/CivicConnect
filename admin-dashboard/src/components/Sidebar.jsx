@@ -22,8 +22,8 @@ const Sidebar = ({ darkMode }) => {
     return (
         <aside className={`hidden md:flex flex-col w-72 h-screen px-5 py-8 backdrop-blur-xl border-r shadow-xl z-20 transition-all duration-300 ${darkMode ? 'bg-gray-800/90 border-gray-700' : 'bg-white/90 border-gray-100'}`}>
             <div className="flex items-center gap-3 px-2 mb-10">
-                <div className="p-1 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <img src="/src/assets/logo.png" className="w-8 h-8 object-contain" alt="Logo" />
+                <div className="p-2 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl shadow-lg shadow-blue-500/30">
+                    <Hexagon className="w-6 h-6 text-white transform rotate-90" />
                 </div>
                 <div>
                     <h1 className={`text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r ${darkMode ? 'from-white to-gray-400' : 'from-gray-800 to-gray-600'}`}>

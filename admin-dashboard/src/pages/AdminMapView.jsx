@@ -5,28 +5,18 @@ import L from 'leaflet';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { AlertCircle, Eye, Calendar } from 'lucide-react';
 
-// Status-based icons
-const getIcon = (status, darkMode) => {
-    let color = '#3B82F6'; // Default Blue
-    if (status === 'Resolved') color = '#10B981'; // Green
-    if (status === 'In Progress') color = '#F59E0B'; // Amber
-    if (status === 'Pending') color = '#EF4444'; // Red
+// Fix for default marker icon
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-    const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="32" height="32">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zM7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 2.88-2.88 7.19-5 9.88C9.92 16.21 7 11.85 7 9z"/>
-            <circle cx="12" cy="9" r="2.5" fill="white"/>
-        </svg>
-    `;
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
 
-    return L.divIcon({
-        html: svg,
-        className: 'custom-marker',
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
-    });
-};
+L.Marker.prototype.options.icon = DefaultIcon;
 
 const AdminMapView = () => {
     const { darkMode } = useOutletContext();
@@ -69,34 +59,18 @@ const AdminMapView = () => {
                         if (!issue.location) return null;
                         const pos = [issue.location.coordinates[1], issue.location.coordinates[0]];
                         return (
-                            <Marker
-                                key={issue.report_id}
-                                position={pos}
-                                icon={getIcon(issue.status, darkMode)}
-                            >
+                            <Marker key={issue.report_id} position={pos}>
                                 <Popup className="custom-popup">
-                                    <div className="p-1 min-w-[220px] space-y-3">
+                                    <div className="p-2 min-w-[200px] space-y-3">
                                         <div className="flex justify-between items-start">
-                                            <div>
-                                                <h3 className="font-bold text-gray-900 text-sm leading-tight">{issue.category}</h3>
-                                                <p className="text-[10px] text-gray-500 mt-0.5">#{issue.report_id.slice(0, 8)}</p>
-                                            </div>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${issue.status === 'Resolved' ? 'bg-emerald-100 text-emerald-700' :
-                                                    issue.status === 'In Progress' ? 'bg-amber-100 text-amber-700' :
-                                                        'bg-rose-100 text-rose-700'
-                                                }`}>
+                                            <h3 className="font-bold text-gray-900">{issue.category}</h3>
+                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700">
                                                 {issue.status}
                                             </span>
                                         </div>
-
-                                        <div className="flex items-center gap-2 text-[11px] text-gray-600 bg-gray-50 p-2 rounded-lg">
-                                            <Calendar size={12} className="text-gray-400" />
-                                            {new Date(issue.timestamp).toLocaleDateString()}
-                                        </div>
-
                                         <button
                                             onClick={() => navigate(`/admin/issues/${issue.report_id}`)}
-                                            className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
+                                            className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/20"
                                         >
                                             <Eye size={14} />
                                             Admin Inspect

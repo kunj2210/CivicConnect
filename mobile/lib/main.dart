@@ -14,12 +14,10 @@ import 'package:provider/provider.dart';
 import 'shared/providers/theme_provider.dart';
 import 'shared/providers/navigation_provider.dart';
 import 'modules/reports/services/notification_service.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
   await Hive.initFlutter();
   Hive.registerAdapter(ReportDraftAdapter());
   await Hive.openBox<ReportDraft>('report_drafts');

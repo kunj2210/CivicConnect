@@ -23,8 +23,8 @@ class UserService {
     if (user == null) return {'total': 0, 'resolved': 0, 'rank': 'Newbie'};
 
     try {
-      // Consistently use phone, email, or UID as identifier
-      final identifier = user.phoneNumber ?? user.email ?? user.uid;
+      // Assuming stats endpoint takes citizen_phone or email
+      final identifier = user.phoneNumber ?? user.email ?? '';
       final response = await http.get(Uri.parse('${ApiConfig.statsUrl}?citizen_phone=$identifier'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
