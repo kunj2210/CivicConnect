@@ -8,6 +8,12 @@ import { sendNotificationToUser } from '../services/notificationService.js';
 import { bucket } from '../config/firebase.js';
 import { v4 as uuidv4 } from 'uuid';
 import { RoutingService } from '../services/routingService.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const createReport = async (req: Request, res: Response) => {
     console.log('--- Incoming Report Request ---');
@@ -27,7 +33,7 @@ export const createReport = async (req: Request, res: Response) => {
         const jurisdiction = await RoutingService.identifyJurisdiction(parseFloat(latitude), parseFloat(longitude));
         console.log('Step 2: Jurisdiction identified:', jurisdiction);
 
-        // Upload to Firebase Storage if available (using google-cloud storage logic)
+        // Step 3: Handle Multimedia Upload
         if (bucket && file) {
             try {
                 console.log('Step 3: Starting Firebase Upload...');
@@ -46,11 +52,14 @@ export const createReport = async (req: Request, res: Response) => {
                 imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
                 console.log('Step 3: Firebase Upload Success:', imageUrl);
             } catch (fbError: any) {
-                console.error('Step 3: Firebase Upload Failed (using fallback):', fbError.message);
-                imageUrl = `https://placehold.co/800x600/e2e8f0/475569?text=Upload+Failed+Check+Logs`;
+                console.error('Step 3: Firebase Upload Failed, falling back to local storage:', fbError.message);
+                imageUrl = await handleLocalStorage(req, file, reportId);
             }
+        } else if (file) {
+            console.log('Step 3: Firebase Storage unconfigured, using local storage fallback');
+            imageUrl = await handleLocalStorage(req, file, reportId);
         } else {
-            console.log('Step 3: Skipping Firebase Upload (No bucket or file)');
+            console.log('Step 3: Skipping Upload (No file provided)');
             imageUrl = `https://placehold.co/800x600/f1f5f9/94a3b8?text=No+Image+Provided`;
         }
 
@@ -234,7 +243,7 @@ export const deleteReport = async (req: Request, res: Response) => {
 };
 export const getNearbyReports = async (req: Request, res: Response) => {
     try {
-        const { latitude, longitude, radius = 10000 } = req.query; // Default 10km
+        const { latitude, longitude, radius = 10000, exclude_phone } = req.query; // Default 10km
         if (!latitude || !longitude) {
             return res.status(400).json({ error: 'Latitude and longitude are required' });
         }
@@ -243,16 +252,31 @@ export const getNearbyReports = async (req: Request, res: Response) => {
         const lon = parseFloat(longitude as string);
         const rad = parseFloat(radius as string);
 
+        let whereClause: any = sequelize.where(
+            sequelize.fn(
+                'ST_DistanceSphere',
+                sequelize.col('location'),
+                sequelize.fn('ST_MakePoint', lon, lat)
+            ),
+            { [Op.lte]: rad }
+        );
+
+        if (exclude_phone) {
+            const excludedMetadata = await ReportMetadata.find({ citizen_phone: exclude_phone as string });
+            const excludedIds = excludedMetadata.map(m => m.report_id);
+            if (excludedIds.length > 0) {
+                whereClause = {
+                    [Op.and]: [
+                        whereClause,
+                        { report_id: { [Op.notIn]: excludedIds } }
+                    ]
+                };
+            }
+        }
+
         // ST_DistanceSphere returns distance in meters
         const reports = await Report.findAll({
-            where: sequelize.where(
-                sequelize.fn(
-                    'ST_DistanceSphere',
-                    sequelize.col('location'),
-                    sequelize.fn('ST_MakePoint', lon, lat)
-                ),
-                { [Op.lte]: rad }
-            ),
+            where: whereClause,
             order: [
                 [
                     sequelize.fn(
@@ -283,3 +307,28 @@ export const registerFcmToken = async (req: Request, res: Response) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+// --- Helper Functions ---
+
+async function handleLocalStorage(req: Request, file: any, reportId: string): Promise<string> {
+    try {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+
+        const uploadsDir = path.join(__dirname, '../../uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const fileName = `${reportId}-${file.originalname}`;
+        const filePath = path.join(uploadsDir, fileName);
+
+        fs.writeFileSync(filePath, file.buffer);
+        console.log('Local storage save success:', fileName);
+
+        // Return full URL
+        return `${baseUrl}/uploads/${fileName}`;
+    } catch (err: any) {
+        console.error('Local storage fallback failed:', err.message);
+        return `https://placehold.co/800x600/e2e8f0/475569?text=Storage+Error`;
+    }
+}

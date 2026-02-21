@@ -57,8 +57,10 @@ const Login = () => {
 
                 <div className="relative z-20 text-white max-w-lg px-8">
                     <div className="mb-6 flex items-center gap-2">
-                        <Hexagon className="w-10 h-10 text-blue-400" />
-                        <h1 className="text-4xl font-extrabold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
+                        <div className="p-2 bg-white rounded-2xl shadow-xl">
+                            <img src="/src/assets/logo.png" className="w-12 h-12 object-contain" alt="Logo" />
+                        </div>
+                        <h1 className="text-4xl font-extrabold mb-2 text-white">
                             Civic Connect
                         </h1>
                     </div>

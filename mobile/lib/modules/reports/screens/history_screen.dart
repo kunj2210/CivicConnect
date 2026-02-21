@@ -27,9 +27,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (user == null) return;
 
     final phone = user.phoneNumber;
-    // For email/password users, phone might be null. 
-    // The backend uses citizen_phone, so we'll use email as a fallback or handle null.
-    final identifier = phone ?? user.email ?? 'unknown';
+    // Consistently use phone, email, or UID as identifier
+    final identifier = phone ?? user.email ?? user.uid;
 
     try {
       final response = await http.get(Uri.parse('${ApiConfig.reportsUrl}?citizen_phone=$identifier'));
