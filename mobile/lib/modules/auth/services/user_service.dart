@@ -24,7 +24,11 @@ class UserService {
 
     try {
       // Consistently use phone, email, or UID as identifier
-      final identifier = user.phoneNumber ?? user.email ?? user.uid;
+      final identifier = (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
+          ? user.phoneNumber!
+          : (user.email != null && user.email!.isNotEmpty)
+              ? user.email!
+              : user.uid;
       final response = await http.get(Uri.parse('${ApiConfig.statsUrl}?citizen_phone=$identifier'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

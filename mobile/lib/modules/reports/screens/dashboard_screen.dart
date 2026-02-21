@@ -33,7 +33,11 @@ class DashboardScreenState extends State<DashboardScreen> {
       final user = FirebaseAuth.instance.currentUser;
       String queryParams = '';
       if (user != null) {
-        final identifier = user.phoneNumber ?? user.email ?? user.uid;
+        final identifier = (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
+            ? user.phoneNumber!
+            : (user.email != null && user.email!.isNotEmpty)
+                ? user.email!
+                : user.uid;
         queryParams = '?citizen_phone=$identifier';
       }
 
