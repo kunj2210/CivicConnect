@@ -27,6 +27,7 @@ civicconnect-7c316-firebase-adminsdk-fbsvc-32969f9a65.json
 # Backend
 backend/.env
 backend/node_modules/
+backend/uploads/
 
 # Admin Dashboard
 admin-dashboard/node_modules/

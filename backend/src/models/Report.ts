@@ -9,6 +9,9 @@ export class Report extends Model {
     declare remarks: string;
     declare location: any; // Geometry point
     declare timestamp: Date;
+    declare assigned_department_id: number | null;
+    declare priority_score: number;
+    declare sla_deadline: Date | null;
 }
 
 Report.init(
@@ -28,7 +31,7 @@ Report.init(
             allowNull: false,
         },
         status: {
-            type: DataTypes.ENUM('Pending', 'In Progress', 'Resolved'),
+            type: DataTypes.ENUM('Pending', 'In Progress', 'Pending Confirmation', 'Resolved'),
             defaultValue: 'Pending',
         },
         remarks: {
@@ -42,6 +45,22 @@ Report.init(
         timestamp: {
             type: DataTypes.DATE,
             defaultValue: DataTypes.NOW,
+        },
+        priority_score: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
+        },
+        sla_deadline: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
+        assigned_department_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            references: {
+                model: 'Departments', // This relies on Sequelize's pluralization or the explicit table name
+                key: 'id',
+            },
         },
     },
     {

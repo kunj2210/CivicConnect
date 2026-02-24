@@ -34,6 +34,11 @@ const AdminMapView = () => {
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
     const [center, setCenter] = useState([22.5540, 72.9299]);
+    const [statusFilter, setStatusFilter] = useState('All');
+    const [jurisdictionFilter, setJurisdictionFilter] = useState('All');
+
+    // Extract unique jurisdictions
+    const jurisdictions = ['All', ...new Set(issues.filter(i => i.metadata?.jurisdiction).map(i => i.metadata.jurisdiction))];
 
     useEffect(() => {
         fetch('http://localhost:5000/api/reports')
@@ -60,6 +65,25 @@ const AdminMapView = () => {
                     <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Admin Strategic Map</h1>
                     <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Global view of all municipal infrastructure reports.</p>
                 </div>
+                <div className="flex space-x-2">
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className={`p-2 rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border`}
+                    >
+                        <option value="All">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                    </select>
+                    <select
+                        value={jurisdictionFilter}
+                        onChange={(e) => setJurisdictionFilter(e.target.value)}
+                        className={`p-2 rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border`}
+                    >
+                        {jurisdictions.map(j => <option key={j} value={j}>{j === 'All' ? 'All Jurisdictions' : j}</option>)}
+                    </select>
+                </div>
             </div>
 
             <div className={`flex-1 overflow-hidden border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
@@ -67,6 +91,8 @@ const AdminMapView = () => {
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     {issues.map((issue) => {
                         if (!issue.location) return null;
+                        if (statusFilter !== 'All' && issue.status !== statusFilter) return null;
+                        if (jurisdictionFilter !== 'All' && issue.metadata?.jurisdiction !== jurisdictionFilter) return null;
                         const pos = [issue.location.coordinates[1], issue.location.coordinates[0]];
                         return (
                             <Marker
