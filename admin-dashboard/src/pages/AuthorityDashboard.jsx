@@ -8,6 +8,7 @@ const AuthorityDashboard = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [issues, setIssues] = useState([]);
+    const [kpis, setKpis] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -15,23 +16,33 @@ const AuthorityDashboard = () => {
             ? `http://localhost:5000/api/reports?departmentId=${user.departmentId}`
             : 'http://localhost:5000/api/reports';
 
-        fetch(url)
-            .then(res => res.json())
-            .then(data => {
-                // For demo, we just show all issues or maybe filter by a mock department
-                setIssues(data);
+        const kpiUrl = user?.departmentId
+            ? `http://localhost:5000/api/reports/kpi?departmentId=${user.departmentId}`
+            : 'http://localhost:5000/api/reports/kpi';
+
+        Promise.all([
+            fetch(url).then(res => res.json()),
+            fetch(kpiUrl).then(res => res.json())
+        ])
+            .then(([issuesData, kpiData]) => {
+                setIssues(issuesData);
+                setKpis(kpiData);
                 setLoading(false);
             })
             .catch(err => {
                 console.error('Error fetching authority data:', err);
                 setLoading(false);
             });
-    }, []);
+    }, [user?.departmentId]);
 
-    const stats = [
-        { title: 'My Tasks', value: issues.length, color: 'blue', icon: Clock },
-        { title: 'In Progress', value: issues.filter(i => i.status === 'In Progress').length, color: 'yellow', icon: TrendingUp },
-        { title: 'Resolved', value: issues.filter(i => i.status === 'Resolved').length, color: 'green', icon: CheckCircle },
+    const stats = kpis ? [
+        { title: 'SLA Compliance', value: `${kpis.slaCompliance}%`, color: 'green', icon: CheckCircle },
+        { title: 'Avg Satisfaction', value: `${kpis.satisfactionScore}/5`, color: 'blue', icon: TrendingUp },
+        { title: 'Total Tasks', value: kpis.totalIssues, color: 'yellow', icon: Clock },
+    ] : [
+        { title: 'SLA Compliance', value: '...', color: 'green', icon: CheckCircle },
+        { title: 'Avg Satisfaction', value: '...', color: 'blue', icon: TrendingUp },
+        { title: 'Total Tasks', value: '...', color: 'yellow', icon: Clock },
     ];
 
     return (

@@ -11,6 +11,9 @@ import '../services/sync_service.dart';
 import '../models/report_draft.dart';
 import './location_picker_screen.dart';
 import 'package:latlong2/latlong.dart' as ll;
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:http_parser/http_parser.dart' as http_parser;
 
 class ReportFormScreen extends StatefulWidget {
   const ReportFormScreen({super.key});
@@ -113,6 +116,24 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
 
     setState(() => _isSubmitting = true);
 
+    File fileToUpload = _image!;
+    try {
+      final dir = await getTemporaryDirectory();
+      final targetPath = '${dir.absolute.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final result = await FlutterImageCompress.compressAndGetFile(
+        _image!.absolute.path,
+        targetPath,
+        quality: 60,
+        format: CompressFormat.jpeg,
+      );
+      if (result != null) {
+        fileToUpload = File(result.path);
+        debugPrint("Compressed image from ${_image!.lengthSync()} to ${fileToUpload.lengthSync()} bytes.");
+      }
+    } catch (e) {
+      debugPrint("Compression failed: $e");
+    }
+
     try {
       final user = FirebaseAuth.instance.currentUser;
       String identifier = (user?.phoneNumber != null && user!.phoneNumber!.isNotEmpty)
@@ -131,7 +152,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
       request.fields['longitude'] = _location!['longitude'].toString();
       request.fields['citizen_phone'] = identifier;
 
-      final extension = _image!.path.split('.').last.toLowerCase();
+      final extension = fileToUpload.path.split('.').last.toLowerCase();
       final subType = (extension == 'jpg' || extension == 'jpeg')
           ? 'jpeg'
           : extension;
@@ -139,8 +160,8 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
       request.files.add(
         await http.MultipartFile.fromPath(
           'image',
-          _image!.path,
-          contentType: http.MediaType('image', subType),
+          fileToUpload.path,
+          contentType: http_parser.MediaType('image', subType),
         ),
       );
 
@@ -172,7 +193,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
         final draft = ReportDraft(
           category: _category!,
           description: _descriptionController.text,
-          imagePath: _image!.path,
+          imagePath: fileToUpload.path,
           latitude: _location!['latitude']!,
           longitude: _location!['longitude']!,
           timestamp: DateTime.now(),

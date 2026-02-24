@@ -11,7 +11,8 @@ export const login = async (req, res) => {
             id: user._id,
             name: user.name,
             email: user.email,
-            role: user.role
+            role: user.role,
+            departmentId: user.departmentId
         });
     }
     catch (error) {
@@ -20,18 +21,19 @@ export const login = async (req, res) => {
 };
 export const register = async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, password, role, departmentId } = req.body;
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ message: 'User already exists' });
         }
-        const newUser = new User({ name, email, password, role });
+        const newUser = new User({ name, email, password, role, departmentId });
         await newUser.save();
         res.status(201).json({
             id: newUser._id,
             name: newUser.name,
             email: newUser.email,
-            role: newUser.role
+            role: newUser.role,
+            departmentId: newUser.departmentId
         });
     }
     catch (error) {

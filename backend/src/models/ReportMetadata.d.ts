@@ -7,6 +7,12 @@ export interface IReportMetadata extends Document {
     device_info: any;
     citizen_phone: string;
     jurisdiction?: string;
+    assigned_department_id?: number | null;
+    resolution_image_url?: string;
+    citizen_feedback_rating?: number;
+    resolution_time?: Date;
+    upvote_count?: number;
+    is_archived?: boolean;
 }
 declare const _default: mongoose.Model<IReportMetadata, {}, {}, {}, mongoose.Document<unknown, {}, IReportMetadata, {}, mongoose.DefaultSchemaOptions> & IReportMetadata & Required<{
     _id: mongoose.Types.ObjectId;

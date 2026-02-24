@@ -5,5 +5,6 @@ export declare class Department extends Model {
     head: string;
     staff_count: number;
     status: string;
+    handled_categories: string[];
 }
 //# sourceMappingURL=Department.d.ts.map

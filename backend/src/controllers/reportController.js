@@ -2,7 +2,9 @@ import { Op } from 'sequelize';
 import { sequelize } from '../config/db.js';
 import { Report } from '../models/Report.js';
 import ReportMetadata from '../models/ReportMetadata.js';
+import CitizenProfile from '../models/CitizenProfile.js';
 import { UserDevice } from '../models/UserDevice.js';
+import { Department } from '../models/Department.js';
 import { sendNotificationToUser } from '../services/notificationService.js';
 import { bucket } from '../config/firebase.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -56,17 +58,51 @@ export const createReport = async (req, res) => {
             console.log('Step 3: Skipping Upload (No file provided)');
             imageUrl = `https://placehold.co/800x600/f1f5f9/94a3b8?text=No+Image+Provided`;
         }
+        // Step 4: Deterministic Department Auto-Assignment
+        console.log('Step 4: Assigning Department...');
+        const departments = await Department.findAll();
+        let assignedDepartmentId = null;
+        for (const dept of departments) {
+            if (dept.handled_categories && dept.handled_categories.includes(category)) {
+                assignedDepartmentId = dept.id;
+                break;
+            }
+        }
+        console.log(`Step 4: Assigned Department ID: ${assignedDepartmentId}`);
+        // Step 4.5: Calculate Priority Score and SLA Deadline
+        let priorityScore = 30; // Default low
+        let slaDays = 7;
+        const highPriority = ['Potholes', 'Road Surface Degradation', 'Water Leakage', 'Missing Manhole Covers', 'Fallen Lines'];
+        const medPriority = ['Uncleared Garbage', 'Dead Animals', 'Malfunctioning Streetlights', 'Illegal Construction', 'Encroachment'];
+        if (highPriority.some(cat => category.includes(cat))) {
+            priorityScore = 80;
+            slaDays = 1; // 24 hours SLA
+        }
+        else if (medPriority.some(cat => category.includes(cat))) {
+            priorityScore = 50;
+            slaDays = 3;
+        }
+        // Mock User Credibility Adjustment
+        if (citizen_phone && citizen_phone !== 'anonymous') {
+            priorityScore += 10;
+        }
+        const slaDeadline = new Date();
+        slaDeadline.setDate(slaDeadline.getDate() + slaDays);
+        console.log(`Step 4.5: Priority Score: ${priorityScore}, SLA Deadline: ${slaDeadline}`);
         // Save to PostgreSQL (Structured/Spatial)
-        console.log('Step 4: Saving to PostgreSQL...');
+        console.log('Step 5: Saving to PostgreSQL...');
         await Report.create({
             report_id: reportId,
             category,
             location: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
             status: 'Pending',
+            assigned_department_id: assignedDepartmentId,
+            priority_score: priorityScore,
+            sla_deadline: slaDeadline,
         });
-        console.log('Step 4: PostgreSQL Save Success');
+        console.log('Step 5: PostgreSQL Save Success');
         // Save to MongoDB (Flexible Metadata)
-        console.log('Step 5: Saving to MongoDB...');
+        console.log('Step 6: Saving to MongoDB...');
         await ReportMetadata.create({
             report_id: reportId,
             image_url: imageUrl,
@@ -74,8 +110,9 @@ export const createReport = async (req, res) => {
             exif_data: exif_data ? (typeof exif_data === 'string' ? JSON.parse(exif_data) : exif_data) : {},
             citizen_phone,
             jurisdiction,
+            assigned_department_id: assignedDepartmentId,
         });
-        console.log('Step 5: MongoDB Save Success');
+        console.log('Step 6: MongoDB Save Success');
         console.log('--- Report Successfully Created ---', reportId);
         res.status(201).json({ success: true, report_id: reportId, jurisdiction });
     }
@@ -86,7 +123,7 @@ export const createReport = async (req, res) => {
 };
 export const getReports = async (req, res) => {
     try {
-        const { citizen_phone } = req.query;
+        const { citizen_phone, departmentId } = req.query;
         let reports;
         if (citizen_phone) {
             // Find in MongoDB metadata first to get IDs
@@ -101,13 +138,25 @@ export const getReports = async (req, res) => {
                 return {
                     ...rJson,
                     description: m?.description,
-                    timestamp: m?.createdAt || rJson.createdAt
+                    timestamp: m?.createdAt || rJson.createdAt,
+                    metadata: m || {}
                 };
             });
             return res.json(fullReports);
         }
         else {
-            reports = await Report.findAll();
+            let whereClause = {};
+            if (departmentId) {
+                const department = await Department.findByPk(departmentId);
+                if (department && department.handled_categories && department.handled_categories.length > 0) {
+                    whereClause.category = { [Op.in]: department.handled_categories };
+                }
+                else if (department && department.handled_categories && department.handled_categories.length === 0) {
+                    // Department handles no categories, return empty array immediately
+                    return res.json([]);
+                }
+            }
+            reports = await Report.findAll({ where: whereClause });
             const reportIds = reports.map(r => r.report_id);
             const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });
             const metadataMap = new Map();
@@ -290,10 +339,225 @@ export const getNearbyReports = async (req, res) => {
                 ...rJson,
                 description: m?.description,
                 timestamp: m?.createdAt || rJson.createdAt,
-                image_url: m?.image_url
+                image_url: m?.image_url,
+                metadata: m || {}
             };
         });
         res.json(fullReports);
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+export const proposeResolution = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const file = req.file;
+        if (!file)
+            return res.status(400).json({ error: 'Resolution image is required' });
+        const report = await Report.findOne({ where: { report_id: id } });
+        if (!report)
+            return res.status(404).json({ error: 'Report not found' });
+        if (report.status !== 'In Progress' && report.status !== 'Pending') {
+            return res.status(400).json({ error: 'Report is not in a resolvable state' });
+        }
+        const reportId = id;
+        let imageUrl = '';
+        // Handle image upload similar to createReport
+        if (bucket && file) {
+            try {
+                const fileName = `resolutions/${reportId}-${file.originalname}`;
+                const blob = bucket.file(fileName);
+                const blobStream = blob.createWriteStream({ metadata: { contentType: file.mimetype } });
+                await new Promise((resolve, reject) => {
+                    blobStream.on('error', reject);
+                    blobStream.on('finish', resolve);
+                    blobStream.end(file.buffer);
+                });
+                imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
+            }
+            catch (error) {
+                imageUrl = await handleLocalStorage(req, file, `res-${reportId}`);
+            }
+        }
+        else {
+            imageUrl = await handleLocalStorage(req, file, `res-${reportId}`);
+        }
+        // Update Postgres
+        report.status = 'Pending Confirmation';
+        await report.save();
+        // Update Mongo
+        const metadata = await ReportMetadata.findOne({ report_id: id });
+        if (metadata) {
+            metadata.resolution_image_url = imageUrl;
+            metadata.resolution_time = new Date();
+            await metadata.save();
+            // Send Notification
+            if (metadata.citizen_phone) {
+                await sendNotificationToUser(metadata.citizen_phone, 'Review Required', `Your report (#${id}) has been marked as resolved by the worker. Please confirm to close the issue.`, { report_id: id, status: 'Pending Confirmation' });
+            }
+        }
+        res.json({ success: true, message: 'Resolution proposed successfully', imageUrl });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+export const confirmResolution = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { feedback_rating } = req.body;
+        const report = await Report.findOne({ where: { report_id: id } });
+        if (!report)
+            return res.status(404).json({ error: 'Report not found' });
+        if (report.status !== 'Pending Confirmation') {
+            return res.status(400).json({ error: 'Report is not awaiting confirmation' });
+        }
+        report.status = 'Resolved';
+        await report.save();
+        const metadata = await ReportMetadata.findOne({ report_id: id });
+        if (metadata) {
+            if (feedback_rating !== undefined)
+                metadata.citizen_feedback_rating = Number(feedback_rating);
+            await metadata.save();
+            // Phase 3 Gamification: Award Green Credits explicitly based on resolved priority
+            if (metadata.citizen_phone && metadata.citizen_phone !== 'anonymous') {
+                const creditsEarned = report.priority_score * 10;
+                await CitizenProfile.findOneAndUpdate({ identifier: metadata.citizen_phone }, { $inc: { green_credits: creditsEarned } }, { upsert: true, new: true });
+                console.log(`[Gamification] Awarded ${creditsEarned} Green Credits to ${metadata.citizen_phone} for resolving report ${id}`);
+            }
+        }
+        res.json({ success: true, message: 'Resolution confirmed by citizen. Issue closed and Green Credits awarded.' });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+export const upvoteReport = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const identifier = req.body.identifier;
+        if (!identifier)
+            return res.status(400).json({ error: 'Citizen identifier required for upvoting' });
+        const report = await Report.findOne({ where: { report_id: id } });
+        if (!report)
+            return res.status(404).json({ error: 'Report not found' });
+        // Phase 3 Upvoting Logic: Prevent duplicate votes
+        const citizen = await CitizenProfile.findOne({ identifier });
+        if (citizen && citizen.upvoted_reports.includes(id)) {
+            return res.status(400).json({ error: 'You have already upvoted this report' });
+        }
+        // 1. Tag user profile
+        await CitizenProfile.findOneAndUpdate({ identifier: identifier }, { $addToSet: { upvoted_reports: id } }, { upsert: true });
+        // 2. Update Mongo Metadata total count
+        const metadata = await ReportMetadata.findOne({ report_id: id });
+        if (metadata) {
+            metadata.upvote_count = (metadata.upvote_count || 0) + 1;
+            await metadata.save();
+        }
+        // 3. Dynamic Escalation: mathematically bump postgres priority and contract SLA
+        report.priority_score += 5; // +5 priority per upvote
+        if (report.sla_deadline) {
+            // Subtract 2 hours per upvote from deadline
+            const newDeadline = new Date(report.sla_deadline);
+            newDeadline.setHours(newDeadline.getHours() - 2);
+            report.sla_deadline = newDeadline;
+        }
+        await report.save();
+        res.json({ success: true, message: 'Report upvoted successfully', priority_score: report.priority_score });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+export const getGeoJSONReports = async (req, res) => {
+    try {
+        const { departmentId, status } = req.query;
+        let whereClause = '';
+        const replacements = {};
+        if (departmentId) {
+            whereClause += ' AND assigned_department_id = :did';
+            replacements.did = Number(departmentId);
+        }
+        if (status) {
+            whereClause += ' AND status = :st';
+            replacements.st = status;
+        }
+        const query = `
+            SELECT jsonb_build_object(
+                'type', 'FeatureCollection',
+                'features', COALESCE(jsonb_agg(feature), '[]'::jsonb)
+            ) as geojson
+            FROM (
+                SELECT jsonb_build_object(
+                    'type', 'Feature',
+                    'geometry', ST_AsGeoJSON(location)::jsonb,
+                    'properties', to_jsonb(r.*) - 'location'
+                ) AS feature
+                FROM reports r
+                WHERE 1=1 ${whereClause}
+            ) features;
+        `;
+        const [result] = await sequelize.query(query, { replacements });
+        const geojson = result[0]?.geojson || { type: 'FeatureCollection', features: [] };
+        res.json(geojson);
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+export const getAuthorityKPIs = async (req, res) => {
+    try {
+        const { departmentId } = req.query;
+        let pWhere = {};
+        if (departmentId)
+            pWhere.assigned_department_id = departmentId;
+        // Fetch all relevant reports
+        const reports = (await Report.findAll({ where: pWhere })).map(r => r.toJSON());
+        const total = reports.length;
+        if (total === 0) {
+            return res.json({ firstResponseTime: 0, slaCompliance: 0, firstTimeFix: 100, satisfactionScore: 0 });
+        }
+        // SLA Compliance Calculation
+        const resolvedReports = reports.filter(r => r.status === 'Resolved');
+        let slaCompliance = 100;
+        if (resolvedReports.length > 0) {
+            let compliant = 0;
+            const reportIds = resolvedReports.map(r => r.report_id);
+            const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });
+            const mMap = new Map();
+            metadata.forEach(m => mMap.set(m.report_id, m));
+            resolvedReports.forEach(r => {
+                const m = mMap.get(r.report_id);
+                if (r.sla_deadline && m?.resolution_time) {
+                    if (new Date(m.resolution_time) <= new Date(r.sla_deadline)) {
+                        compliant++;
+                    }
+                }
+                else {
+                    compliant++;
+                }
+            });
+            slaCompliance = Math.round((compliant / resolvedReports.length) * 100);
+        }
+        // Citizen Satisfaction Score Calculation
+        let satisfactionScore = 0;
+        let mQuery = { citizen_feedback_rating: { $exists: true } };
+        if (departmentId)
+            mQuery.assigned_department_id = Number(departmentId);
+        const metadataForRating = await ReportMetadata.find(mQuery);
+        if (metadataForRating.length > 0) {
+            const sum = metadataForRating.reduce((a, b) => a + (b.citizen_feedback_rating || 0), 0);
+            satisfactionScore = parseFloat((sum / metadataForRating.length).toFixed(1));
+        }
+        res.json({
+            slaCompliance,
+            satisfactionScore,
+            firstTimeFix: 92, // Historical average placeholder for MVP
+            firstResponseTime: 2.4, // Hours - Placeholder for MVP
+            totalIssues: total,
+            resolvedCount: resolvedReports.length
+        });
     }
     catch (error) {
         res.status(500).json({ error: error.message });
