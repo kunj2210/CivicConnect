@@ -2,12 +2,12 @@ import { DataTypes, Model } from 'sequelize';
 import { sequelize } from '../config/db.js';
 
 export class Department extends Model {
-    public id!: number;
-    public name!: string;
-    public head!: string;
-    public staff_count!: number;
-    public status!: string;
-    public handled_categories!: string[];
+    declare id: number;
+    declare name: string;
+    declare head: string;
+    declare staff_count: number;
+    declare status: string;
+    declare handled_categories: string[];
 }
 
 Department.init({

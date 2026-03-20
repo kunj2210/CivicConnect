@@ -9,6 +9,7 @@ import 'modules/reports/services/sync_service.dart';
 import 'main_navigation.dart';
 import 'modules/reports/screens/report_form_screen.dart';
 import 'modules/reports/screens/nearby_issues_screen.dart';
+import 'modules/reports/screens/notification_list_screen.dart';
 
 import 'package:provider/provider.dart';
 import 'shared/providers/theme_provider.dart';
@@ -138,6 +139,7 @@ class _MyAppState extends State<MyApp> {
         '/home': (context) => const MainNavigationScreen(),
         '/report': (context) => const ReportFormScreen(),
         '/nearby-issues': (context) => const NearbyIssuesScreen(),
+        '/notifications': (context) => const NotificationListScreen(),
       },
     );
   }

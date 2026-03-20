@@ -14,6 +14,15 @@ export interface IReportMetadata extends Document {
     resolution_time?: Date;
     upvote_count?: number;
     is_archived?: boolean;
+    audio_url?: string;
+    transcription?: string;
+    translation?: string;
+    ai_insights?: {
+        urgency_score: number;
+        urgency_label: string;
+        suggested_category: string;
+        summary: string;
+    };
 }
 
 const ReportMetadataSchema: Schema = new Schema({
@@ -30,6 +39,15 @@ const ReportMetadataSchema: Schema = new Schema({
     resolution_time: { type: Date },
     upvote_count: { type: Number, default: 0 },
     is_archived: { type: Boolean, default: false },
+    audio_url: { type: String },
+    transcription: { type: String },
+    translation: { type: String },
+    ai_insights: {
+        urgency_score: { type: Number },
+        urgency_label: { type: String },
+        suggested_category: { type: String },
+        summary: { type: String },
+    },
 }, { timestamps: true });
 
 export default mongoose.model<IReportMetadata>('ReportMetadata', ReportMetadataSchema);

@@ -52,13 +52,29 @@ void callbackDispatcher() {
 class SyncService {
   static final _workmanager = Workmanager();
 
+  static bool get _isWorkmanagerSupported {
+    // Workmanager only supports Android and iOS (not web, desktop, or other platforms).
+    if (kIsWeb) return false;
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
   static void initialize() {
+    if (!_isWorkmanagerSupported) {
+      debugPrint('Workmanager is not supported on this platform - skipping initialization.');
+      return;
+    }
+
     _workmanager.initialize(
       callbackDispatcher,
     );
   }
 
   static void scheduleSync() {
+    if (!_isWorkmanagerSupported) {
+      debugPrint('Workmanager is not supported on this platform - skipping scheduling.');
+      return;
+    }
+
     _workmanager.registerOneOffTask(
       "sync-reports",
       "syncTask",

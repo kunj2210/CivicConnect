@@ -1,11 +1,11 @@
 import 'package:location/location.dart';
+import 'package:flutter/foundation.dart';
 import 'package:exif/exif.dart';
-import 'dart:io';
 
 class LocationService {
   final Location _location = Location();
 
-  Future<LocationData?> getCurrentLocation() async {
+  Future<LocationData?> getCurrentLocation({int timeoutSeconds = 10}) async {
     bool serviceEnabled;
     PermissionStatus permissionGranted;
 
@@ -21,12 +21,26 @@ class LocationService {
       if (permissionGranted != PermissionStatus.granted) return null;
     }
 
-    return await _location.getLocation();
+    // Phase 1 MVP: Accuracy Thresholding and Timeout
+    try {
+      final locData = await _location.getLocation().timeout(Duration(seconds: timeoutSeconds));
+      if (locData.accuracy != null && locData.accuracy! <= 20.0) {
+        return locData;
+      } else {
+        debugPrint("Location accuracy (${locData.accuracy}) exceeds 20m threshold. Rejecting.");
+        return null; // Triggers UI fallback
+      }
+    } catch (e) {
+      debugPrint("Location acquisition timed out or failed: $e");
+      return null;
+    }
   }
 
-  Future<Map<String, double>?> getExifLocation(File imageFile) async {
-    final bytes = await imageFile.readAsBytes();
-    final data = await readExifFromBytes(bytes);
+  /// Reads EXIF metadata from image bytes.
+  ///
+  /// This avoids using `dart:io` (File) on web, where dart:io file operations are unsupported.
+  Future<Map<String, double>?> getExifLocation(Uint8List imageBytes) async {
+    final data = await readExifFromBytes(imageBytes);
 
     if (data.isEmpty) return null;
 

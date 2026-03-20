@@ -11,16 +11,17 @@ export const upload = multer({
         console.log('Originalname:', file.originalname);
         console.log('Mimetype Received:', file.mimetype);
 
-        // Accept all files that have an "image/" mimetype
+        // Accept all files that have an "image/" or "audio/" mimetype
         const isImage = file.mimetype.startsWith('image/');
+        const isAudio = file.mimetype.startsWith('audio/') || file.mimetype === 'video/ogg' || file.originalname.endsWith('.wav') || file.originalname.endsWith('.mp3') || file.originalname.endsWith('.m4a');
 
-        console.log(`Validation -> isImage: ${isImage}`);
+        console.log(`Validation -> isImage: ${isImage}, isAudio: ${isAudio}`);
 
-        if (isImage) {
+        if (isImage || isAudio) {
             return cb(null, true);
         }
 
-        const errorMsg = `Only image files are allowed. Received: ${file.mimetype}`;
+        const errorMsg = `Only image and audio files are allowed. Received: ${file.mimetype}`;
         console.warn('REJECTED:', errorMsg);
         cb(new Error(errorMsg));
     },
