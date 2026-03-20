@@ -4,7 +4,9 @@ import { UserDevice } from '../models/UserDevice.js';
 export const sendNotificationToUser = async (userId: string, title: string, body: string, data?: any) => {
     try {
         const devices = await UserDevice.findAll({ where: { user_id: userId } });
-        const tokens = devices.map(d => d.fcm_token);
+        const tokens = devices
+            .map(d => d.fcm_token)
+            .filter((t): t is string => !!t && typeof t === 'string' && t.trim().length > 0);
 
         console.log(`[FCM] Attempting to send notification to user: ${userId}`);
         console.log(`[FCM] Found ${tokens.length} tokens for this user.`);

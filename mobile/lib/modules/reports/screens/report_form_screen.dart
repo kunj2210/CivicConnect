@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive/hive.dart';
@@ -14,6 +15,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http_parser/http_parser.dart' as http_parser;
+import '../widgets/audio_recording_widget.dart';
 
 class ReportFormScreen extends StatefulWidget {
   const ReportFormScreen({super.key});
@@ -24,11 +26,14 @@ class ReportFormScreen extends StatefulWidget {
 
 class _ReportFormScreenState extends State<ReportFormScreen> {
   File? _image;
+  XFile? _pickedImage;
+  Uint8List? _imageBytes;
   final ImagePicker _picker = ImagePicker();
   final LocationService _locationService = LocationService();
   final TextEditingController _descriptionController = TextEditingController();
   String? _category;
   Map<String, double>? _location;
+  String? _audioPath;
   bool _isLocating = false;
   bool _isSubmitting = false;
 
@@ -75,14 +80,21 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
   Future<void> _pickImage(ImageSource source) async {
     final XFile? photo = await _picker.pickImage(source: source);
     if (photo != null) {
-      File imageFile = File(photo.path);
+      final bytes = await photo.readAsBytes();
+
       setState(() {
-        _image = imageFile;
+        _pickedImage = photo;
+        _imageBytes = bytes;
         _isLocating = true;
+
+        // Only keep a dart:io File for non-web platforms (used for compression and file-path based uploads).
+        if (!kIsWeb) {
+          _image = File(photo.path);
+        }
       });
 
       try {
-        final exifLoc = await _locationService.getExifLocation(imageFile);
+        final exifLoc = await _locationService.getExifLocation(bytes);
         if (exifLoc != null) {
           setState(() => _location = exifLoc);
         } else {
@@ -94,6 +106,15 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
                 'longitude': gpsLoc.longitude!,
               },
             );
+          } else {
+            // MVP Fallback: High-accuracy lock failed
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not get precise GPS lock. Please select location manually on map.'),
+                duration: Duration(seconds: 4),
+              ),
+            );
           }
         }
       } finally {
@@ -103,7 +124,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
   }
 
   Future<void> _submitReport() async {
-    if (_image == null || _category == null || _location == null) {
+    if ((_image == null && _imageBytes == null) || _category == null || _location == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -116,22 +137,34 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
 
     setState(() => _isSubmitting = true);
 
-    File fileToUpload = _image!;
-    try {
-      final dir = await getTemporaryDirectory();
-      final targetPath = '${dir.absolute.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final result = await FlutterImageCompress.compressAndGetFile(
-        _image!.absolute.path,
-        targetPath,
-        quality: 60,
-        format: CompressFormat.jpeg,
-      );
-      if (result != null) {
-        fileToUpload = File(result.path);
-        debugPrint("Compressed image from ${_image!.lengthSync()} to ${fileToUpload.lengthSync()} bytes.");
+    // Ensure we have bytes for uploading (mobile + web).
+    Uint8List? bytesToUpload = _imageBytes;
+    String filename = 'image.jpg';
+
+    if (!kIsWeb && _image != null) {
+      File fileToUpload = _image!;
+      try {
+        final dir = await getTemporaryDirectory();
+        final targetPath = '${dir.absolute.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final result = await FlutterImageCompress.compressAndGetFile(
+          _image!.absolute.path,
+          targetPath,
+          quality: 60,
+          format: CompressFormat.jpeg,
+        );
+        if (result != null) {
+          fileToUpload = File(result.path);
+          debugPrint("Compressed image from ${_image!.lengthSync()} to ${fileToUpload.lengthSync()} bytes.");
+        }
+      } catch (e) {
+        debugPrint("Compression failed: $e");
       }
-    } catch (e) {
-      debugPrint("Compression failed: $e");
+
+      bytesToUpload = await fileToUpload.readAsBytes();
+      filename = fileToUpload.path.split('/').last;
+    } else if (_imageBytes != null) {
+      // If we're running on web, we only have bytes.
+      filename = _pickedImage?.name ?? 'image.jpg';
     }
 
     try {
@@ -152,21 +185,34 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
       request.fields['longitude'] = _location!['longitude'].toString();
       request.fields['citizen_phone'] = identifier;
 
-      final extension = fileToUpload.path.split('.').last.toLowerCase();
+      final extension = filename.split('.').last.toLowerCase();
       final subType = (extension == 'jpg' || extension == 'jpeg')
           ? 'jpeg'
           : extension;
 
       request.files.add(
-        await http.MultipartFile.fromPath(
+        http.MultipartFile.fromBytes(
           'image',
-          fileToUpload.path,
+          bytesToUpload!,
+          filename: filename,
           contentType: http_parser.MediaType('image', subType),
         ),
       );
 
+      if (!kIsWeb && _audioPath != null) {
+        final audioFile = File(_audioPath!);
+        final audioExtension = _audioPath!.split('.').last.toLowerCase();
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'audio',
+            audioFile.path,
+            contentType: http_parser.MediaType('audio', audioExtension),
+          ),
+        );
+      }
+
+
       var response = await request.send().timeout(const Duration(seconds: 30));
-      final responseBody = await response.stream.bytesToString();
 
       if (response.statusCode == 201) {
         if (!mounted) return;
@@ -193,7 +239,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
         final draft = ReportDraft(
           category: _category!,
           description: _descriptionController.text,
-          imagePath: fileToUpload.path,
+          imagePath: _image?.path ?? _pickedImage?.path ?? '',
           latitude: _location!['latitude']!,
           longitude: _location!['longitude']!,
           timestamp: DateTime.now(),
@@ -293,6 +339,15 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
             const SizedBox(height: 24),
             _buildSectionHeader('Report Description'),
             const SizedBox(height: 12),
+            AudioRecordingWidget(
+              onRecordingComplete: (path, transcription) {
+                setState(() => _audioPath = path);
+                if (transcription != null && transcription.isNotEmpty) {
+                  _descriptionController.text = transcription;
+                }
+              },
+            ),
+            const SizedBox(height: 16),
             _buildInputFields(),
             const SizedBox(height: 32),
             ElevatedButton(

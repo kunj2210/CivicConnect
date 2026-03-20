@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../../../config/api_config.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/report_service.dart';
 
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -16,6 +15,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   Map<String, dynamic>? _report;
   bool _isLoading = true;
   String? _error;
+  final ReportService _reportService = ReportService();
+  bool _isUpvoting = false;
+  bool _isConfirming = false;
 
   @override
   void initState() {
@@ -24,22 +26,102 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Future<void> _fetchReportDetails() async {
+    setState(() => _isLoading = true);
     try {
-      final response = await http.get(Uri.parse('${ApiConfig.reportsUrl}/${widget.reportId}'));
-      if (response.statusCode == 200) {
-        setState(() {
-          _report = json.decode(response.body);
-          _isLoading = false;
-        });
-      } else {
-        throw Exception('Failed to load report');
-      }
+      final data = await _reportService.getReportById(widget.reportId);
+      setState(() {
+        _report = data;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _handleUpvote() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final identifier = user.phoneNumber ?? user.email ?? user.uid;
+    
+    setState(() => _isUpvoting = true);
+    try {
+      await _reportService.upvoteReport(widget.reportId, identifier);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report upvoted!'), backgroundColor: Colors.green),
+      );
+      _fetchReportDetails(); // Refresh to get new priority/stats if any
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Upvote failed: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: Colors.red),
+      );
+    } finally {
+      setState(() => _isUpvoting = false);
+    }
+  }
+
+  Future<void> _handleConfirmResolution(int rating) async {
+    setState(() => _isConfirming = true);
+    try {
+      await _reportService.confirmResolution(widget.reportId, rating);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Resolution confirmed. Thank you!'), backgroundColor: Colors.green),
+      );
+      _fetchReportDetails();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Confirmation failed: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      setState(() => _isConfirming = false);
+    }
+  }
+
+  void _showRatingDialog() {
+    int selectedRating = 5;
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Rate Resolution'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('How satisfied are you with the work?'),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) => IconButton(
+                  icon: Icon(
+                    index < selectedRating ? Icons.star : Icons.star_border,
+                    color: Colors.amber,
+                    size: 32,
+                  ),
+                  onPressed: () => setDialogState(() => selectedRating = index + 1),
+                )),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _handleConfirmResolution(selectedRating);
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -140,6 +222,71 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                       fontFamily: 'Courier',
                       color: colorScheme.onSurfaceVariant,
                     ),
+                  ),
+                  
+                  const Divider(height: 48),
+
+                  if (status == 'Pending Confirmation') ...[
+                    const _SectionHeader(icon: Icons.rate_review_outlined, title: 'Action Required'),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'The department has marked this issue as resolved. Please review and confirm.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          if (metadata['resolution_image_url'] != null) ...[
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                metadata['resolution_image_url'],
+                                height: 150,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          ElevatedButton(
+                            onPressed: _isConfirming ? null : _showRatingDialog,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              minimumSize: const Size(double.infinity, 48),
+                            ),
+                            child: _isConfirming 
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Text('Confirm & Close'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isUpvoting ? null : _handleUpvote,
+                          icon: _isUpvoting 
+                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.thumb_up_outlined),
+                          label: Text('Upvote (${metadata['upvote_count'] ?? 0})'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   
                   const SizedBox(height: 40),

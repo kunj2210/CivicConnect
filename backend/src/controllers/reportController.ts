@@ -6,10 +6,12 @@ import ReportMetadata from '../models/ReportMetadata.js';
 import CitizenProfile from '../models/CitizenProfile.js';
 import { UserDevice } from '../models/UserDevice.js';
 import { Department } from '../models/Department.js';
+import { AuditLog } from '../models/AuditLog.js';
 import { sendNotificationToUser } from '../services/notificationService.js';
 import { bucket } from '../config/firebase.js';
 import { v4 as uuidv4 } from 'uuid';
 import { RoutingService } from '../services/routingService.js';
+import { AIService } from '../services/aiService.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,60 +20,106 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const createReport = async (req: Request, res: Response) => {
-    console.log('--- Incoming Report Request ---');
+    console.log('--- Incoming AI-Enhanced Report Request ---');
     console.log('Body:', req.body);
-    console.log('File:', req.file ? 'Received' : 'Not Received');
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const imageFile = files?.['image']?.[0];
+    const audioFile = files?.['audio']?.[0];
+
+    console.log('Files:', {
+        image: imageFile ? 'Received' : 'Not Received',
+        audio: audioFile ? 'Received' : 'Not Received'
+    });
+
     try {
         const { category, description, latitude, longitude, citizen_phone, exif_data } = req.body;
-        const file = req.file;
 
         console.log('Step 1: Data extraction success', { category, lat: latitude, long: longitude, citizen_phone });
 
         const reportId = uuidv4();
         let imageUrl = 'https://via.placeholder.com/400x300.png?text=Report+Image'; // Fallback
+        let audioUrl = '';
 
         // Identify Jurisdiction
         console.log('Step 2: Identifying jurisdiction...');
         const jurisdiction = await RoutingService.identifyJurisdiction(parseFloat(latitude), parseFloat(longitude));
         console.log('Step 2: Jurisdiction identified:', jurisdiction);
 
-        // Step 3: Handle Multimedia Upload
-        if (bucket && file) {
+        // Step 3: Handle Multimedia Upload (Image)
+        if (bucket && imageFile) {
             try {
-                console.log('Step 3: Starting Firebase Upload...');
-                const fileName = `reports/${reportId}-${file.originalname}`;
+                console.log('Step 3: Starting Firebase Image Upload...');
+                const fileName = `reports/${reportId}-${imageFile.originalname}`;
                 const blob = bucket.file(fileName);
                 const blobStream = blob.createWriteStream({
-                    metadata: { contentType: file.mimetype },
+                    metadata: { contentType: imageFile.mimetype },
                 });
 
                 await new Promise((resolve, reject) => {
                     blobStream.on('error', reject);
                     blobStream.on('finish', resolve);
-                    blobStream.end(file.buffer);
+                    blobStream.end(imageFile.buffer);
                 });
 
                 imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
-                console.log('Step 3: Firebase Upload Success:', imageUrl);
+                console.log('Step 3: Firebase Image Success:', imageUrl);
             } catch (fbError: any) {
-                console.error('Step 3: Firebase Upload Failed, falling back to local storage:', fbError.message);
-                imageUrl = await handleLocalStorage(req, file, reportId);
+                console.error('Step 3: Firebase Image Failed, falling back to local storage:', fbError.message);
+                imageUrl = await handleLocalStorage(req, imageFile, reportId);
             }
-        } else if (file) {
-            console.log('Step 3: Firebase Storage unconfigured, using local storage fallback');
-            imageUrl = await handleLocalStorage(req, file, reportId);
-        } else {
-            console.log('Step 3: Skipping Upload (No file provided)');
-            imageUrl = `https://placehold.co/800x600/f1f5f9/94a3b8?text=No+Image+Provided`;
+        } else if (imageFile) {
+            imageUrl = await handleLocalStorage(req, imageFile, reportId);
         }
 
-        // Step 4: Deterministic Department Auto-Assignment
+        // Step 3.5: Handle Audio Upload
+        if (bucket && audioFile) {
+            try {
+                const fileName = `audio/${reportId}-${audioFile.originalname}`;
+                const blob = bucket.file(fileName);
+                const blobStream = blob.createWriteStream({
+                    metadata: { contentType: audioFile.mimetype },
+                });
+
+                await new Promise((resolve, reject) => {
+                    blobStream.on('error', reject);
+                    blobStream.on('finish', resolve);
+                    blobStream.end(audioFile.buffer);
+                });
+
+                audioUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
+            } catch (fbError: any) {
+                audioUrl = await handleLocalStorage(req, audioFile, `audio-${reportId}`);
+            }
+        } else if (audioFile) {
+            audioUrl = await handleLocalStorage(req, audioFile, `audio-${reportId}`);
+        }
+
+        // Step 3.7: AI Transcription & Analysis
+        let aiProcessingResult: any = null;
+        let transcription = '';
+
+        if (audioFile) {
+            console.log('Step 3.7: Transcribing audio...');
+            transcription = await AIService.transcribeAudio(audioFile.buffer, audioFile.originalname);
+            console.log('Step 3.7: Transcription Success:', transcription);
+        }
+
+        const textToAnalyze = description || transcription;
+        if (textToAnalyze) {
+            console.log('Step 3.7: Analyzing text with AI...');
+            aiProcessingResult = await AIService.analyzeText(textToAnalyze);
+            console.log('Step 3.7: AI Analysis Success:', aiProcessingResult);
+        }
+
+        // Step 4: Deterministic Department Auto-Assignment (with AI Category Override)
         console.log('Step 4: Assigning Department...');
+        const finalCategory = aiProcessingResult?.suggested_category || category;
         const departments = await Department.findAll();
         let assignedDepartmentId: number | null = null;
 
         for (const dept of departments) {
-            if (dept.handled_categories && dept.handled_categories.includes(category)) {
+            if (dept.handled_categories && dept.handled_categories.includes(finalCategory)) {
                 assignedDepartmentId = dept.id;
                 break;
             }
@@ -79,57 +127,55 @@ export const createReport = async (req: Request, res: Response) => {
         console.log(`Step 4: Assigned Department ID: ${assignedDepartmentId}`);
 
         // Step 4.5: Calculate Priority Score and SLA Deadline
-        let priorityScore = 30; // Default low
+        let priorityScore = aiProcessingResult?.urgency_score || 30; // Use AI score if available
         let slaDays = 7;
 
-        const highPriority = ['Potholes', 'Road Surface Degradation', 'Water Leakage', 'Missing Manhole Covers', 'Fallen Lines'];
-        const medPriority = ['Uncleared Garbage', 'Dead Animals', 'Malfunctioning Streetlights', 'Illegal Construction', 'Encroachment'];
-
-        if (highPriority.some(cat => category.includes(cat))) {
-            priorityScore = 80;
-            slaDays = 1; // 24 hours SLA
-        } else if (medPriority.some(cat => category.includes(cat))) {
-            priorityScore = 50;
-            slaDays = 3;
-        }
-
-        // Mock User Credibility Adjustment
-        if (citizen_phone && citizen_phone !== 'anonymous') {
-            priorityScore += 10;
-        }
+        if (priorityScore >= 80) slaDays = 1;
+        else if (priorityScore >= 50) slaDays = 3;
 
         const slaDeadline = new Date();
         slaDeadline.setDate(slaDeadline.getDate() + slaDays);
-        console.log(`Step 4.5: Priority Score: ${priorityScore}, SLA Deadline: ${slaDeadline}`);
 
         // Save to PostgreSQL (Structured/Spatial)
         console.log('Step 5: Saving to PostgreSQL...');
         await Report.create({
             report_id: reportId,
-            category,
+            category: finalCategory,
             location: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
             status: 'Pending',
             assigned_department_id: assignedDepartmentId,
             priority_score: priorityScore,
             sla_deadline: slaDeadline,
         });
-        console.log('Step 5: PostgreSQL Save Success');
 
-        // Save to MongoDB (Flexible Metadata)
+        // Step 6: Save to MongoDB (Flexible Metadata + AI Insights)
         console.log('Step 6: Saving to MongoDB...');
         await ReportMetadata.create({
             report_id: reportId,
             image_url: imageUrl,
-            description,
+            audio_url: audioUrl,
+            description: description,
+            transcription: transcription,
+            translation: aiProcessingResult?.translation,
+            ai_insights: aiProcessingResult ? {
+                urgency_score: aiProcessingResult.urgency_score,
+                urgency_label: aiProcessingResult.urgency_label,
+                suggested_category: aiProcessingResult.suggested_category,
+                summary: aiProcessingResult.summary,
+            } : undefined,
             exif_data: exif_data ? (typeof exif_data === 'string' ? JSON.parse(exif_data) : exif_data) : {},
             citizen_phone,
             jurisdiction,
             assigned_department_id: assignedDepartmentId,
         });
-        console.log('Step 6: MongoDB Save Success');
 
-        console.log('--- Report Successfully Created ---', reportId);
-        res.status(201).json({ success: true, report_id: reportId, jurisdiction });
+        console.log('--- Report Successfully Created with AI Insights ---', reportId);
+        res.status(201).json({
+            success: true,
+            report_id: reportId,
+            jurisdiction,
+            ai_summary: aiProcessingResult?.summary
+        });
     } catch (error: any) {
         console.error('CRITICAL ERROR in createReport:', error);
         res.status(500).json({ error: error.message || 'Internal Server Error', stack: error.stack });
@@ -199,11 +245,19 @@ export const getReportStats = async (req: Request, res: Response) => {
     try {
         const { citizen_phone } = req.query;
         let where: any = {};
+        let green_credits = 0;
+
         if (citizen_phone) {
             // Find in MongoDB metadata first to get IDs
             const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone as string });
             const reportIds = metadata.map(m => m.report_id);
             where = { report_id: reportIds };
+
+            // Fetch Green Credits
+            const profile = await CitizenProfile.findOne({ identifier: citizen_phone as string });
+            if (profile) {
+                green_credits = profile.green_credits;
+            }
         }
 
         const total = await Report.count({ where });
@@ -235,6 +289,7 @@ export const getReportStats = async (req: Request, res: Response) => {
             rank,
             total,
             resolved,
+            green_credits,
             categoryData: Object.entries(categoryStats).map(([name, value]) => ({ name, value }))
         });
     } catch (error: any) {
@@ -267,7 +322,7 @@ export const getReportById = async (req: Request, res: Response) => {
 export const updateReport = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { status, category, description, jurisdiction, remarks } = req.body;
+        const { status, category, description, jurisdiction, remarks, assigned_department_id } = req.body;
 
         const report = await Report.findOne({ where: { report_id: id } });
         if (!report) return res.status(404).json({ error: 'Report not found' });
@@ -277,7 +332,8 @@ export const updateReport = async (req: Request, res: Response) => {
         // Update PostgreSQL
         if (status) report.status = status;
         if (category) report.category = category;
-        if (remarks) report.remarks = remarks; // Added remarks update
+        if (remarks !== undefined) report.remarks = remarks;
+        if (assigned_department_id !== undefined) report.assigned_department_id = assigned_department_id;
         await report.save();
 
         // Update MongoDB Metadata if exists
@@ -289,6 +345,13 @@ export const updateReport = async (req: Request, res: Response) => {
         }
 
         if (status && status !== oldStatus) {
+            // Step 5.5: Log Status Change
+            await AuditLog.create({
+                report_id: id,
+                initiating_actor_id: 'SYSTEM_ADMIN', // Placeholder for authenticated actor
+                lifecycle_state_change: `STATUS_CHANGED: ${oldStatus} -> ${status}`,
+            });
+
             const metadata = await ReportMetadata.findOne({ report_id: id as any });
             if (metadata && metadata.citizen_phone) {
                 await sendNotificationToUser(
@@ -297,6 +360,19 @@ export const updateReport = async (req: Request, res: Response) => {
                     `Your report (#${id}) status has been changed to ${status}.`,
                     { report_id: id, status: status }
                 );
+
+                // If manually resolved by admin, award credits if not already awarded
+                if (status === 'Resolved' && oldStatus !== 'Resolved') {
+                    if (metadata.citizen_phone !== 'anonymous') {
+                        const creditsEarned = report.priority_score * 10;
+                        await CitizenProfile.findOneAndUpdate(
+                            { identifier: metadata.citizen_phone },
+                            { $inc: { green_credits: creditsEarned } },
+                            { upsert: true, returnDocument: 'after' }
+                        );
+                        console.log(`[Gamification-Manual] Awarded ${creditsEarned} Green Credits to ${metadata.citizen_phone} for manual resolution of report ${id}`);
+                    }
+                }
             }
         }
 
@@ -487,7 +563,7 @@ export const confirmResolution = async (req: Request, res: Response): Promise<an
                 await CitizenProfile.findOneAndUpdate(
                     { identifier: metadata.citizen_phone },
                     { $inc: { green_credits: creditsEarned } },
-                    { upsert: true, new: true }
+                    { upsert: true, returnDocument: 'after' }
                 );
                 console.log(`[Gamification] Awarded ${creditsEarned} Green Credits to ${metadata.citizen_phone} for resolving report ${id}`);
             }
@@ -540,6 +616,19 @@ export const upvoteReport = async (req: Request, res: Response): Promise<any> =>
         await report.save();
 
         res.json({ success: true, message: 'Report upvoted successfully', priority_score: report.priority_score });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const getAuditLogs = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const logs = await AuditLog.findAll({
+            where: { report_id: id },
+            order: [['timestamp', 'DESC']],
+        });
+        res.json(logs);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

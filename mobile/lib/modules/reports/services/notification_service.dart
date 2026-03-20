@@ -110,4 +110,29 @@ class NotificationService {
       );
     }
   }
+
+  Future<List<dynamic>> getNotifications() async {
+    final user = _auth.currentUser;
+    if (user == null) return [];
+
+    final identifier = user.phoneNumber ?? user.email ?? user.uid;
+    try {
+      final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/notifications?user_id=$identifier'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching notifications: $e');
+      return [];
+    }
+  }
+
+  Future<void> markAsRead(int notificationId) async {
+    try {
+      await http.patch(Uri.parse('${ApiConfig.baseUrl}/notifications/$notificationId/read'));
+    } catch (e) {
+      debugPrint('Error marking notification as read: $e');
+    }
+  }
 }

@@ -1,0 +1,17 @@
+{
+  "name": "civicconnect",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:dashboard": "npm --prefix admin-dashboard run dev",
+    "dev:mobile-chrome": "cd mobile && flutter run -d chrome",
+    "dev:mobile-android": "cd mobile && flutter run -d CPH2381",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:dashboard\" \"npm run dev:mobile\"",
+    "analyze:mobile": "cd mobile && flutter analyze",
+    "seed:users": "npm --prefix backend run seed:users"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

@@ -81,6 +81,12 @@ class DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                  onPressed: () => Navigator.pushNamed(context, '/notifications'),
+                ),
+              ],
             ),
             SliverToBoxAdapter(
               child: Padding(
