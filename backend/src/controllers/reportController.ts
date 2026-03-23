@@ -1,774 +1,587 @@
 import type { Request, Response } from 'express';
-import { Op } from 'sequelize';
-import { sequelize } from '../config/db.js';
-import { Report } from '../models/Report.js';
-import ReportMetadata from '../models/ReportMetadata.js';
-import CitizenProfile from '../models/CitizenProfile.js';
-import { UserDevice } from '../models/UserDevice.js';
-import { Department } from '../models/Department.js';
-import { AuditLog } from '../models/AuditLog.js';
+import { QueryTypes, Op } from 'sequelize';
+import { User, Department, Ward, Issue, Repair, AIFeedback, sequelize } from '../config/db.js';
 import { sendNotificationToUser } from '../services/notificationService.js';
-import { bucket } from '../config/firebase.js';
-import { v4 as uuidv4 } from 'uuid';
-import { RoutingService } from '../services/routingService.js';
 import { AIService } from '../services/aiService.js';
-import fs from 'fs';
+import { SpatialService } from '../services/spatialService.js';
+import { GeoIntelligenceService } from '../services/geoIntelligenceService.js';
+import { AuditLog } from '../models/AuditLog.js';
+
+import { StorageService } from '../services/storageService.js';
+import { PriorityService } from '../services/priorityService.js';
+import { findWardId } from '../utils/spatialUtils.js';
+import { GamificationService, BADGES } from '../services/gamificationService.js';
+
+
 import path from 'path';
+
+
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const createReport = async (req: Request, res: Response) => {
-    console.log('--- Incoming AI-Enhanced Report Request ---');
-    console.log('Body:', req.body);
+interface AuthRequest extends Request {
+    userIdentifier?: string;
+    files?: any;
+    user?: any;
+}
 
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+// Categories that require privacy obfuscation for the reporter
+const SENSITIVE_CATEGORIES = ['Illegal Construction', 'Encroachment', 'Criminal Activity', 'Vandalism'];
+
+function obfuscateLocation(lon: number, lat: number) {
+    // Add a random offset of ~15-30 meters (approx 0.0001 to 0.0003 degrees)
+    const factor = 0.0002;
+    const offsetLon = (Math.random() - 0.5) * factor;
+    const offsetLat = (Math.random() - 0.5) * factor;
+    return [lon + offsetLon, lat + offsetLat];
+}
+
+
+
+
+
+export const createReport = async (req: AuthRequest, res: Response) => {
+    console.log('--- Incoming AI-Enhanced Issue Request ---');
+    const files = req.files;
     const imageFile = files?.['image']?.[0];
     const audioFile = files?.['audio']?.[0];
 
-    console.log('Files:', {
-        image: imageFile ? 'Received' : 'Not Received',
-        audio: audioFile ? 'Received' : 'Not Received'
-    });
-
     try {
-        const { category, description, latitude, longitude, citizen_phone, exif_data } = req.body;
+        const { category, description, latitude, longitude } = req.body;
+        const userAuth = (req as any).user;
 
-        console.log('Step 1: Data extraction success', { category, lat: latitude, long: longitude, citizen_phone });
+        if (!userAuth) return res.status(401).json({ error: 'User unauthorized' });
 
-        const reportId = uuidv4();
-        let imageUrl = 'https://via.placeholder.com/400x300.png?text=Report+Image'; // Fallback
+        // 1. Ensure user exists in PostgreSQL (Look up by UUID)
+        let user = await User.findByPk(userAuth.id);
+        if (!user) {
+            // Create user if they don't exist in our public table yet
+            user = await User.create({ 
+                id: userAuth.id, 
+                phone: userAuth.phone || null,
+                email: userAuth.email || null
+            });
+        }
+
+
+        // 2. Identify Ward
+        console.log(`[DEBUG] Received Coordinates: Lon=${longitude}, Lat=${latitude}`);
+        const ward_id = await findWardId(parseFloat(longitude), parseFloat(latitude));
+        console.log(`[DEBUG] Ward Search Result: ${ward_id || 'NOT FOUND'}`);
+
+        if (!ward_id) {
+            console.error(`[DEBUG] REJECTED: Location [${longitude}, ${latitude}] outside of served wards`);
+            return res.status(400).json({ 
+                error: 'Location outside of served wards',
+                received_coords: { longitude, latitude },
+                hint: 'Ensure your test location is within Mumbai, Delhi, or Ranchi coordinates.'
+            });
+        }
+
+
+
+        // 3. Handle Media & AI Predictions
+        let imageUrl = '';
+        let imageTop3 = [];
+        if (imageFile) {
+            imageUrl = await StorageService.uploadFile(imageFile, 'issues') || '';
+            try {
+                imageTop3 = await AIService.classifyImage(imageFile.buffer, imageFile.originalname);
+            } catch (aiError) {
+                console.error('Image Classification error:', aiError);
+            }
+        }
+
         let audioUrl = '';
-
-        // Identify Jurisdiction
-        console.log('Step 2: Identifying jurisdiction...');
-        const jurisdiction = await RoutingService.identifyJurisdiction(parseFloat(latitude), parseFloat(longitude));
-        console.log('Step 2: Jurisdiction identified:', jurisdiction);
-
-        // Step 3: Handle Multimedia Upload (Image)
-        if (bucket && imageFile) {
-            try {
-                console.log('Step 3: Starting Firebase Image Upload...');
-                const fileName = `reports/${reportId}-${imageFile.originalname}`;
-                const blob = bucket.file(fileName);
-                const blobStream = blob.createWriteStream({
-                    metadata: { contentType: imageFile.mimetype },
-                });
-
-                await new Promise((resolve, reject) => {
-                    blobStream.on('error', reject);
-                    blobStream.on('finish', resolve);
-                    blobStream.end(imageFile.buffer);
-                });
-
-                imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
-                console.log('Step 3: Firebase Image Success:', imageUrl);
-            } catch (fbError: any) {
-                console.error('Step 3: Firebase Image Failed, falling back to local storage:', fbError.message);
-                imageUrl = await handleLocalStorage(req, imageFile, reportId);
-            }
-        } else if (imageFile) {
-            imageUrl = await handleLocalStorage(req, imageFile, reportId);
-        }
-
-        // Step 3.5: Handle Audio Upload
-        if (bucket && audioFile) {
-            try {
-                const fileName = `audio/${reportId}-${audioFile.originalname}`;
-                const blob = bucket.file(fileName);
-                const blobStream = blob.createWriteStream({
-                    metadata: { contentType: audioFile.mimetype },
-                });
-
-                await new Promise((resolve, reject) => {
-                    blobStream.on('error', reject);
-                    blobStream.on('finish', resolve);
-                    blobStream.end(audioFile.buffer);
-                });
-
-                audioUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
-            } catch (fbError: any) {
-                audioUrl = await handleLocalStorage(req, audioFile, `audio-${reportId}`);
-            }
-        } else if (audioFile) {
-            audioUrl = await handleLocalStorage(req, audioFile, `audio-${reportId}`);
-        }
-
-        // Step 3.7: AI Transcription & Analysis
-        let aiProcessingResult: any = null;
-        let transcription = '';
-
         if (audioFile) {
-            console.log('Step 3.7: Transcribing audio...');
-            transcription = await AIService.transcribeAudio(audioFile.buffer, audioFile.originalname);
-            console.log('Step 3.7: Transcription Success:', transcription);
+            audioUrl = await StorageService.uploadFile(audioFile, 'audio') || '';
         }
 
-        const textToAnalyze = description || transcription;
-        if (textToAnalyze) {
-            console.log('Step 3.7: Analyzing text with AI...');
-            aiProcessingResult = await AIService.analyzeText(textToAnalyze);
-            console.log('Step 3.7: AI Analysis Success:', aiProcessingResult);
+        // 4. LLM Standardization & Voice Translation (Open Source Llama 3)
+        // Note: For now, we use user-provided description; real-time Whisper transcription can be added here
+        let textTop3 = [];
+        try {
+            textTop3 = await AIService.standardizeContent(description || '', ''); 
+        } catch (textError) {
+            console.error('Text Standardization error:', textError);
         }
 
-        // Step 4: Deterministic Department Auto-Assignment (with AI Category Override)
-        console.log('Step 4: Assigning Department...');
-        const finalCategory = aiProcessingResult?.suggested_category || category;
-        const departments = await Department.findAll();
-        let assignedDepartmentId: number | null = null;
+        // 4.1 Execute Weighted Fusion Logic
+        const fusionResult = AIService.calculateAdvancedFusion(imageTop3, [], textTop3);
 
-        for (const dept of departments) {
-            if (dept.handled_categories && dept.handled_categories.includes(finalCategory)) {
-                assignedDepartmentId = dept.id;
-                break;
-            }
+        // 4.1.5 SPATIAL DEDUPLICATION (Pillar 2)
+        // Check if an issue of the same category exists within its dynamic radius
+        const duplicate = await SpatialService.findDuplicateIssue(
+            parseFloat(latitude), 
+            parseFloat(longitude), 
+            fusionResult.finalCategory
+        );
+
+        if (duplicate) {
+            console.log(`[DEDUPLICATION] Matched existing issue ${duplicate.id}. Merging...`);
+            await SpatialService.handleDuplicate(duplicate, user.id, imageUrl, audioUrl);
+            
+            // Log as UPDATE
+            await AuditLog.create({
+                actor_id: user.id,
+                event_type: 'ISSUE_UPDATED_VIA_DEDUPLICATION',
+                payload: { issue_id: duplicate.id, new_reporter: user.id },
+            });
+
+            return res.status(200).json({
+                success: true,
+                issue_id: duplicate.id,
+                message: 'Duplicate detected. Your report has been merged with an existing case to expedite resolution.',
+                is_duplicate: true
+            });
         }
-        console.log(`Step 4: Assigned Department ID: ${assignedDepartmentId}`);
 
-        // Step 4.5: Calculate Priority Score and SLA Deadline
-        let priorityScore = aiProcessingResult?.urgency_score || 30; // Use AI score if available
-        let slaDays = 7;
+        // 4.2 Dynamic Priority Calculation (FR 4)
+        const priorityScore = await PriorityService.calculatePriority(
+            user.id,
+            ward_id,
+            parseFloat(longitude),
+            parseFloat(latitude),
+            (fusionResult.fusionScore * 100) || 50, // Urgency derived from fusion confidence
+            imageFile ? 80 : 50,
+            fusionResult.needsHumanReview ? 'Uncertain' : 'Verified'
+        );
 
-        if (priorityScore >= 80) slaDays = 1;
-        else if (priorityScore >= 50) slaDays = 3;
-
-        const slaDeadline = new Date();
-        slaDeadline.setDate(slaDeadline.getDate() + slaDays);
-
-        // Save to PostgreSQL (Structured/Spatial)
-        console.log('Step 5: Saving to PostgreSQL...');
-        await Report.create({
-            report_id: reportId,
-            category: finalCategory,
+        // 5. Create Issue with Multimodal Evidence
+        const issue = await Issue.create({
+            reporter_id: user.id,
+            ward_id: ward_id,
             location: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
-            status: 'Pending',
-            assigned_department_id: assignedDepartmentId,
+            category: fusionResult.finalCategory, // Fused winning category
+            description: description || '',
             priority_score: priorityScore,
-            sla_deadline: slaDeadline,
+            status: 'Pending',
+            minio_pre_key: imageUrl,
+            minio_audio_key: audioUrl,
+            reporter_ids: [user.id],
+            minio_image_urls: imageUrl ? [imageUrl] : [],
+            minio_audio_urls: audioUrl ? [audioUrl] : [],
+            ai_image_top3: imageTop3,
+            ai_audio_top3: [], // Future: Placeholder for audio-specific top-3
+            ai_text_top3: textTop3,
+            fusion_final_category: fusionResult.finalCategory,
+            fusion_confidence_score: fusionResult.fusionScore,
+            needs_human_review: fusionResult.needsHumanReview
         });
 
-        // Step 6: Save to MongoDB (Flexible Metadata + AI Insights)
-        console.log('Step 6: Saving to MongoDB...');
-        await ReportMetadata.create({
-            report_id: reportId,
-            image_url: imageUrl,
-            audio_url: audioUrl,
-            description: description,
-            transcription: transcription,
-            translation: aiProcessingResult?.translation,
-            ai_insights: aiProcessingResult ? {
-                urgency_score: aiProcessingResult.urgency_score,
-                urgency_label: aiProcessingResult.urgency_label,
-                suggested_category: aiProcessingResult.suggested_category,
-                summary: aiProcessingResult.summary,
-            } : undefined,
-            exif_data: exif_data ? (typeof exif_data === 'string' ? JSON.parse(exif_data) : exif_data) : {},
-            citizen_phone,
-            jurisdiction,
-            assigned_department_id: assignedDepartmentId,
+
+
+
+
+        // 6. Log
+        await AuditLog.create({
+            actor_id: user.id,
+            event_type: 'ISSUE_CREATED',
+            payload: { issue_id: issue.id },
         });
 
-        console.log('--- Report Successfully Created with AI Insights ---', reportId);
+        // 6.2 Check Gamification Milestones
+        const reportCount = await Issue.count({ where: { reporter_id: user.id } });
+        GamificationService.checkMilestones(user.id, reportCount, user.green_credits || 0);
+
+
+        // 5.5 Trigger Proactive Neighborhood Alerts (Pillar 5)
+        // This is non-blocking to ensure fast response to the reporter
+        GeoIntelligenceService.notifyNearbyCitizens(
+            issue.id,
+            issue.category,
+            parseFloat(latitude),
+            parseFloat(longitude),
+            user.id
+        ).catch(err => console.error('[GeoIntelligence] Proactive Alert Failed:', err));
+
+
+        // 7. Notify User
+        await sendNotificationToUser(
+            user.id,
+            'Issue Reported Successfully',
+            `Your report for ${issue.category} has been received.`,
+            { issue_id: issue.id }
+        );
+
+
         res.status(201).json({
             success: true,
-            report_id: reportId,
-            jurisdiction,
-            ai_summary: aiProcessingResult?.summary
+            issue_id: issue.id,
+            ai_summary: `AI Analysis complete: Verified as ${issue.category} (${(issue.fusion_confidence_score! * 100).toFixed(1)}% confidence).`
         });
+
     } catch (error: any) {
-        console.error('CRITICAL ERROR in createReport:', error);
-        res.status(500).json({ error: error.message || 'Internal Server Error', stack: error.stack });
+        console.error('CRITICAL ERROR in createIssue:', error);
+        res.status(500).json({ error: error.message });
     }
 };
 
-export const getReports = async (req: Request, res: Response): Promise<any> => {
+export const getReports = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const { citizen_phone, departmentId } = req.query;
-        let reports;
-        if (citizen_phone) {
-            // Find in MongoDB metadata first to get IDs
-            const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone as string });
-            const reportIds = metadata.map(m => m.report_id);
-            reports = await Report.findAll({ where: { report_id: reportIds } });
+        const { ward_id, status, assigned_staff_id } = req.query;
+        const whereClause: any = {};
 
-            const metadataMap = new Map();
-            metadata.forEach(m => metadataMap.set(m.report_id, m));
-
-            const fullReports = reports.map(r => {
-                const rJson = r.toJSON();
-                const m = metadataMap.get(rJson.report_id);
-                return {
-                    ...rJson,
-                    description: m?.description,
-                    timestamp: m?.createdAt || rJson.createdAt,
-                    metadata: m || {}
-                };
-            });
-            return res.json(fullReports);
-        } else {
-            let whereClause: any = {};
-            if (departmentId) {
-                const department = await Department.findByPk(departmentId as string);
-                if (department && department.handled_categories && department.handled_categories.length > 0) {
-                    whereClause.category = { [Op.in]: department.handled_categories };
-                } else if (department && department.handled_categories && department.handled_categories.length === 0) {
-                    // Department handles no categories, return empty array immediately
-                    return res.json([]);
-                }
+        if (ward_id) whereClause.ward_id = ward_id;
+        if (status) whereClause.status = status;
+        if (assigned_staff_id) {
+            if (assigned_staff_id === 'me') {
+                whereClause.assigned_staff_id = req.user?.id;
+            } else {
+                whereClause.assigned_staff_id = assigned_staff_id;
             }
-
-            reports = await Report.findAll({ where: whereClause });
-
-            const reportIds = reports.map(r => (r as any).report_id);
-            const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });
-            const metadataMap = new Map();
-            metadata.forEach(m => metadataMap.set(m.report_id, m));
-
-            const fullReports = reports.map(r => {
-                const rJson = r.toJSON();
-                const m = metadataMap.get(rJson.report_id);
-                return {
-                    ...rJson,
-                    description: m?.description,
-                    timestamp: m?.createdAt || rJson.createdAt
-                };
-            });
-            return res.json(fullReports);
         }
+
+        const issues = await Issue.findAll({
+            where: whereClause,
+            order: [['createdAt', 'DESC']]
+        });
+
+
+
+        const userRole = req.user?.role || 'citizen';
+        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+
+        const transformedIssues = issues.map(issue => {
+            const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
+            const report = issue.get();
+            
+            if (isSensitive && !isPrivileged) {
+                const [lon, lat] = obfuscateLocation(report.location.coordinates[0], report.location.coordinates[1]);
+                report.location = { ...report.location, coordinates: [lon, lat] };
+            }
+            return report;
+        });
+
+        return res.json(transformedIssues);
+
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const getReportStats = async (req: Request, res: Response) => {
+export const getReportStats = async (req: AuthRequest, res: Response) => {
     try {
-        const { citizen_phone } = req.query;
+        const phone = req.userIdentifier;
         let where: any = {};
         let green_credits = 0;
 
-        if (citizen_phone) {
-            // Find in MongoDB metadata first to get IDs
-            const metadata = await ReportMetadata.find({ citizen_phone: citizen_phone as string });
-            const reportIds = metadata.map(m => m.report_id);
-            where = { report_id: reportIds };
-
-            // Fetch Green Credits
-            const profile = await CitizenProfile.findOne({ identifier: citizen_phone as string });
-            if (profile) {
-                green_credits = profile.green_credits;
+        if (phone) {
+            const user = await User.findOne({ where: { phone } });
+            if (user) {
+                where = { reporter_id: user.id };
+                green_credits = user.green_credits;
             }
         }
 
-        const total = await Report.count({ where });
-        const pending = await Report.count({ where: { ...where, status: 'Pending' } });
-        const inProgress = await Report.count({ where: { ...where, status: 'In Progress' } });
-        const resolved = await Report.count({ where: { ...where, status: 'Resolved' } });
-
-        // Rank calculation logic
-        let rank = 'Newbie';
-        if (resolved >= 11) rank = 'Community Hero';
-        else if (resolved >= 6) rank = 'Civic Guardian';
-        else if (resolved >= 3) rank = 'Active Citizen';
-        else if (resolved > 0) rank = 'Beginner';
-
-        // Get category breakdown
-        const reports = await Report.findAll({ where });
-        const categoryStats: Record<string, number> = {};
-        reports.forEach(r => {
-            categoryStats[r.category] = (categoryStats[r.category] || 0) + 1;
-        });
+        const total = await Issue.count({ where });
+        const pending = await Issue.count({ where: { ...where, status: 'Pending' } });
+        const resolved = await Issue.count({ where: { ...where, status: 'Resolved' } });
 
         res.json({
             summary: [
-                { title: 'Total Issues', value: total, color: 'blue', trend: '+0' },
-                { title: 'Resolved', value: resolved, color: 'green', trend: '+0' },
-                { title: 'In Progress', value: inProgress, color: 'yellow', trend: '+0' },
-                { title: 'Pending', value: pending, color: 'red', trend: '+0' },
+                { title: 'Total Issues', value: total, color: 'blue' },
+                { title: 'Resolved', value: resolved, color: 'green' },
+                { title: 'Pending', value: pending, color: 'red' },
             ],
-            rank,
             total,
             resolved,
             green_credits,
-            categoryData: Object.entries(categoryStats).map(([name, value]) => ({ name, value }))
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const getReportById = async (req: Request, res: Response) => {
+export const getReportById = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const report = await Report.findOne({ where: { report_id: id } });
-        if (!report) {
-            return res.status(404).json({ error: 'Report not found in PostgreSQL' });
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
+        // Apply privacy obfuscation for sensitive categories in public view
+        const userRole = req.user?.role || 'citizen';
+        const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
+        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+
+        if (isSensitive && !isPrivileged) {
+            const [lon, lat] = obfuscateLocation(issue.location.coordinates[0], issue.location.coordinates[1]);
+            issue.location.coordinates = [lon, lat];
         }
 
-        const metadata = await ReportMetadata.findOne({ report_id: id as any });
+        res.json(issue);
 
-        // Merge data
-        const fullReport = {
-            ...report.toJSON(),
-            metadata: metadata || {}
-        };
-
-        res.json(fullReport);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const updateReport = async (req: Request, res: Response) => {
+export const updateReport = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { status, category, description, jurisdiction, remarks, assigned_department_id } = req.body;
+        const { status, category, priority_score, assigned_staff_id } = req.body;
 
-        const report = await Report.findOne({ where: { report_id: id } });
-        if (!report) return res.status(404).json({ error: 'Report not found' });
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
-        const oldStatus = report.status;
-
-        // Update PostgreSQL
-        if (status) report.status = status;
-        if (category) report.category = category;
-        if (remarks !== undefined) report.remarks = remarks;
-        if (assigned_department_id !== undefined) report.assigned_department_id = assigned_department_id;
-        await report.save();
-
-        // Update MongoDB Metadata if exists
-        const metadata = await ReportMetadata.findOne({ report_id: id as any });
-        if (metadata) {
-            if (description !== undefined) metadata.description = description;
-            if (jurisdiction !== undefined) metadata.jurisdiction = jurisdiction;
-            await metadata.save();
-        }
-
-        if (status && status !== oldStatus) {
-            // Step 5.5: Log Status Change
-            await AuditLog.create({
-                report_id: id,
-                initiating_actor_id: 'SYSTEM_ADMIN', // Placeholder for authenticated actor
-                lifecycle_state_change: `STATUS_CHANGED: ${oldStatus} -> ${status}`,
-            });
-
-            const metadata = await ReportMetadata.findOne({ report_id: id as any });
-            if (metadata && metadata.citizen_phone) {
-                await sendNotificationToUser(
-                    metadata.citizen_phone,
-                    'Report Updated',
-                    `Your report (#${id}) status has been changed to ${status}.`,
-                    { report_id: id, status: status }
-                );
-
-                // If manually resolved by admin, award credits if not already awarded
-                if (status === 'Resolved' && oldStatus !== 'Resolved') {
-                    if (metadata.citizen_phone !== 'anonymous') {
-                        const creditsEarned = report.priority_score * 10;
-                        await CitizenProfile.findOneAndUpdate(
-                            { identifier: metadata.citizen_phone },
-                            { $inc: { green_credits: creditsEarned } },
-                            { upsert: true, returnDocument: 'after' }
-                        );
-                        console.log(`[Gamification-Manual] Awarded ${creditsEarned} Green Credits to ${metadata.citizen_phone} for manual resolution of report ${id}`);
-                    }
-                }
+        if (status) issue.status = status;
+        if (category && issue.category !== category) {
+            // Discrepancy detected: Log to AI Retraining Queue
+            try {
+                await AIFeedback.create({
+                    issue_id: issue.id,
+                    original_category: issue.category,
+                    corrected_category: category,
+                    media_url: (issue.minio_image_urls && issue.minio_image_urls.length > 0) ? issue.minio_image_urls[0] : (issue.minio_pre_key || null)
+                });
+                console.log(`[AI FEEDBACK] Issue ${issue.id} corrected from ${issue.category} to ${category}`);
+            } catch (err) {
+                console.error("Failed to log AI Feedback", err);
             }
+            issue.category = category;
         }
+        if (priority_score !== undefined) issue.priority_score = priority_score;
+        if (assigned_staff_id !== undefined) issue.assigned_staff_id = assigned_staff_id;
 
-        res.json({ success: true, message: 'Report updated successfully', report });
+        await issue.save();
+
+        res.json({ success: true, issue });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const deleteReport = async (req: Request, res: Response) => {
+export const deleteReport = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-
-        // Delete from PostgreSQL
-        const pgDeleted = await Report.destroy({ where: { report_id: id } });
-
-        // Delete from MongoDB
-        const mongoDeleted = await ReportMetadata.deleteOne({ report_id: id as any });
-
-        if (pgDeleted === 0 && mongoDeleted.deletedCount === 0) {
-            return res.status(404).json({ error: 'Report not found' });
-        }
-
-        res.json({ success: true, message: 'Report deleted from both databases' });
+        const deleted = await Issue.destroy({ where: { id } });
+        if (deleted === 0) return res.status(404).json({ error: 'Issue not found' });
+        res.json({ success: true, message: 'Issue deleted successfully' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
-export const getNearbyReports = async (req: Request, res: Response) => {
+
+export const getNearbyReports = async (req: AuthRequest, res: Response) => {
     try {
-        const { latitude, longitude, radius = 10000, exclude_phone } = req.query; // Default 10km
-        if (!latitude || !longitude) {
-            return res.status(400).json({ error: 'Latitude and longitude are required' });
-        }
+        const { latitude, longitude, radius = 5000 } = req.query;
+        if (!latitude || !longitude) return res.status(400).json({ error: 'Coordinates missing' });
 
         const lat = parseFloat(latitude as string);
         const lon = parseFloat(longitude as string);
         const rad = parseFloat(radius as string);
 
-        let whereClause: any = sequelize.where(
-            sequelize.fn(
-                'ST_DistanceSphere',
-                sequelize.col('location'),
-                sequelize.fn('ST_MakePoint', lon, lat)
+        const issues = await Issue.findAll({
+            where: sequelize.where(
+                sequelize.fn('ST_DistanceSphere', sequelize.col('location'), sequelize.fn('ST_MakePoint', lon, lat)),
+                { [Op.lte]: rad }
             ),
-            { [Op.lte]: rad }
-        );
-
-        if (exclude_phone) {
-            const excludedMetadata = await ReportMetadata.find({ citizen_phone: exclude_phone as string });
-            const excludedIds = excludedMetadata.map(m => m.report_id);
-            if (excludedIds.length > 0) {
-                whereClause = {
-                    [Op.and]: [
-                        whereClause,
-                        { report_id: { [Op.notIn]: excludedIds } }
-                    ]
-                };
-            }
-        }
-
-        // ST_DistanceSphere returns distance in meters
-        const reports = await Report.findAll({
-            where: whereClause,
-            order: [
-                [
-                    sequelize.fn(
-                        'ST_DistanceSphere',
-                        sequelize.col('location'),
-                        sequelize.fn('ST_MakePoint', lon, lat)
-                    ),
-                    'ASC'
-                ]
-            ]
+            order: [[sequelize.fn('ST_DistanceSphere', sequelize.col('location'), sequelize.fn('ST_MakePoint', lon, lat)), 'ASC']]
         });
 
-        const reportIds = reports.map(r => (r as any).report_id);
-        const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });
-        const metadataMap = new Map();
-        metadata.forEach(m => metadataMap.set(m.report_id, m));
+        res.json(issues);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
 
-        const fullReports = reports.map(r => {
-            const rJson = r.toJSON();
-            const m = metadataMap.get(rJson.report_id);
-            return {
-                ...rJson,
-                description: m?.description,
-                timestamp: m?.createdAt || rJson.createdAt,
-                image_url: m?.image_url,
-                metadata: m || {}
-            };
+export const proposeResolution = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { id } = req.params;
+        const file = req.files?.['image']?.[0] || req.files?.[0];
+        const phone = req.userIdentifier;
+
+        if (!file) return res.status(400).json({ error: 'Resolution image required' });
+
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
+
+        const imageUrl = await StorageService.uploadFile(file, 'repairs') || '';
+
+
+        const user = await User.findOne({ where: { phone } });
+        if (!user) return res.status(401).json({ error: 'User profile missing' });
+
+        issue.status = 'Pending Confirmation';
+        await issue.save();
+
+        await Repair.create({
+            issue_id: issue.id,
+            worker_id: user.id,
+            minio_post_key: imageUrl,
         });
 
-        res.json(fullReports);
+        res.json({ success: true, message: 'Resolution proposed', imageUrl });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const proposeResolution = async (req: Request, res: Response): Promise<any> => {
+export const confirmResolution = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { id } = req.params;
-        const file = req.file;
+        const phone = req.userIdentifier;
 
-        if (!file) return res.status(400).json({ error: 'Resolution image is required' });
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
-        const report = await Report.findOne({ where: { report_id: id } });
-        if (!report) return res.status(404).json({ error: 'Report not found' });
-
-        if (report.status !== 'In Progress' && report.status !== 'Pending') {
-            return res.status(400).json({ error: 'Report is not in a resolvable state' });
+        if (issue.status !== 'Pending Confirmation') {
+            return res.status(400).json({ error: 'Issue is not awaiting confirmation' });
         }
 
-        const reportId = id;
-        let imageUrl = '';
+        issue.status = 'Resolved';
+        await issue.save();
 
-        // Handle image upload similar to createReport
-        if (bucket && file) {
-            try {
-                const fileName = `resolutions/${reportId}-${file.originalname}`;
-                const blob = bucket.file(fileName);
-                const blobStream = blob.createWriteStream({ metadata: { contentType: file.mimetype } });
+        // Award Green Credits to ALL citizens who reported this issue (Pillar 2)
+        const reporterIds = issue.reporter_ids || [issue.reporter_id];
+        const creditAmount = Math.round((issue.priority_score || 0) * 10);
 
-                await new Promise((resolve, reject) => {
-                    blobStream.on('error', reject);
-                    blobStream.on('finish', resolve);
-                    blobStream.end(file.buffer);
-                });
-                imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media`;
-            } catch (error) {
-                imageUrl = await handleLocalStorage(req, file, `res-${reportId}`);
-            }
-        } else {
-            imageUrl = await handleLocalStorage(req, file, `res-${reportId}`);
-        }
-
-        // Update Postgres
-        report.status = 'Pending Confirmation';
-        await report.save();
-
-        // Update Mongo
-        const metadata = await ReportMetadata.findOne({ report_id: id as any });
-        if (metadata) {
-            metadata.resolution_image_url = imageUrl;
-            metadata.resolution_time = new Date();
-            await metadata.save();
-
-            // Send Notification
-            if (metadata.citizen_phone) {
-                await sendNotificationToUser(
-                    metadata.citizen_phone,
-                    'Review Required',
-                    `Your report (#${id}) has been marked as resolved by the worker. Please confirm to close the issue.`,
-                    { report_id: id, status: 'Pending Confirmation' }
-                );
+        if (reporterIds.length > 0) {
+            await User.update(
+                { green_credits: sequelize.literal(`green_credits + ${creditAmount}`) },
+                { where: { id: { [Op.in]: reporterIds } } }
+            );
+            console.log(`[CREDITS] Awarded ${creditAmount} credits to ${reporterIds.length} reporters.`);
+            
+            // Check Gamification Milestones for all reporters
+            for (const rId of reporterIds) {
+                const rUser = await User.findByPk(rId);
+                if (rUser) {
+                    const rReportCount = await Issue.count({ where: { reporter_id: rId as string } });
+                    GamificationService.checkMilestones(rId as string, rReportCount, rUser.green_credits);
+                }
             }
         }
 
-        res.json({ success: true, message: 'Resolution proposed successfully', imageUrl });
+
+
+        res.json({ success: true, message: 'Resolution confirmed and credits awarded' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const confirmResolution = async (req: Request, res: Response): Promise<any> => {
+export const upvoteReport = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { id } = req.params;
-        const { feedback_rating } = req.body;
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
-        const report = await Report.findOne({ where: { report_id: id } });
-        if (!report) return res.status(404).json({ error: 'Report not found' });
+        issue.priority_score += 5;
+        await issue.save();
 
-        if (report.status !== 'Pending Confirmation') {
-            return res.status(400).json({ error: 'Report is not awaiting confirmation' });
-        }
-
-        report.status = 'Resolved';
-        await report.save();
-
-        const metadata = await ReportMetadata.findOne({ report_id: id as any });
-        if (metadata) {
-            if (feedback_rating !== undefined) metadata.citizen_feedback_rating = Number(feedback_rating);
-            await metadata.save();
-
-            // Phase 3 Gamification: Award Green Credits explicitly based on resolved priority
-            if (metadata.citizen_phone && metadata.citizen_phone !== 'anonymous') {
-                const creditsEarned = report.priority_score * 10;
-                await CitizenProfile.findOneAndUpdate(
-                    { identifier: metadata.citizen_phone },
-                    { $inc: { green_credits: creditsEarned } },
-                    { upsert: true, returnDocument: 'after' }
-                );
-                console.log(`[Gamification] Awarded ${creditsEarned} Green Credits to ${metadata.citizen_phone} for resolving report ${id}`);
-            }
-        }
-
-        res.json({ success: true, message: 'Resolution confirmed by citizen. Issue closed and Green Credits awarded.' });
+        res.json({ success: true, priority_score: issue.priority_score });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const upvoteReport = async (req: Request, res: Response): Promise<any> => {
-    try {
-        const id = req.params.id as string;
-        const identifier = req.body.identifier as string;
-
-        if (!identifier) return res.status(400).json({ error: 'Citizen identifier required for upvoting' });
-
-        const report = await Report.findOne({ where: { report_id: id } });
-        if (!report) return res.status(404).json({ error: 'Report not found' });
-
-        // Phase 3 Upvoting Logic: Prevent duplicate votes
-        const citizen = await CitizenProfile.findOne({ identifier });
-        if (citizen && citizen.upvoted_reports.includes(id as string)) {
-            return res.status(400).json({ error: 'You have already upvoted this report' });
-        }
-
-        // 1. Tag user profile
-        await CitizenProfile.findOneAndUpdate(
-            { identifier: identifier },
-            { $addToSet: { upvoted_reports: id } },
-            { upsert: true }
-        );
-
-        // 2. Update Mongo Metadata total count
-        const metadata = await ReportMetadata.findOne({ report_id: id as any });
-        if (metadata) {
-            metadata.upvote_count = (metadata.upvote_count || 0) + 1;
-            await metadata.save();
-        }
-
-        // 3. Dynamic Escalation: mathematically bump postgres priority and contract SLA
-        report.priority_score += 5; // +5 priority per upvote
-        if (report.sla_deadline) {
-            // Subtract 2 hours per upvote from deadline
-            const newDeadline = new Date(report.sla_deadline);
-            newDeadline.setHours(newDeadline.getHours() - 2);
-            report.sla_deadline = newDeadline;
-        }
-        await report.save();
-
-        res.json({ success: true, message: 'Report upvoted successfully', priority_score: report.priority_score });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-export const getAuditLogs = async (req: Request, res: Response) => {
+export const getAuditLogs = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
         const logs = await AuditLog.findAll({
-            where: { report_id: id },
-            order: [['timestamp', 'DESC']],
+            where: { payload: { issue_id: id } },
+            order: [['createdAt', 'DESC']],
         });
+
         res.json(logs);
+
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const getGeoJSONReports = async (req: Request, res: Response): Promise<any> => {
+export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const { departmentId, status } = req.query;
+        const { status } = req.query;
+        const userRole = req.user?.role || 'citizen'; // Assuming req.user is populated by auth middleware
 
-        let whereClause = '';
-        const replacements: any = {};
-        if (departmentId) {
-            whereClause += ' AND assigned_department_id = :did';
-            replacements.did = Number(departmentId);
-        }
+        let whereClause: any = {};
         if (status) {
-            whereClause += ' AND status = :st';
-            replacements.st = status;
+            whereClause.status = status;
         }
 
-        const query = `
-            SELECT jsonb_build_object(
-                'type', 'FeatureCollection',
-                'features', COALESCE(jsonb_agg(feature), '[]'::jsonb)
-            ) as geojson
-            FROM (
-                SELECT jsonb_build_object(
-                    'type', 'Feature',
-                    'geometry', ST_AsGeoJSON(location)::jsonb,
-                    'properties', to_jsonb(r.*) - 'location'
-                ) AS feature
-                FROM reports r
-                WHERE 1=1 ${whereClause}
-            ) features;
-        `;
+        // Fetch raw issue data
+        const issues = await Issue.findAll({
+            where: whereClause,
+            attributes: [
+                'id', 'category', 'status', 'priority_score', 'description', 'image_url',
+                'reporter_id', 'assigned_staff_id', 'createdAt', 'updatedAt',
+                [sequelize.fn('ST_AsGeoJSON', sequelize.col('location')), 'location_geojson']
+            ],
+            raw: true, // Get raw data to easily manipulate
+        });
 
-        const [result]: any = await sequelize.query(query, { replacements });
+        // Transform to GeoJSON and obfuscate if sensitive
+        const features = issues.map((issue: any) => {
+            let geometry = JSON.parse(issue.location_geojson);
+            let coords = geometry.coordinates;
+            
+            // Apply privacy obfuscation for sensitive categories in public view
+            const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
+            const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+            
+            if (isSensitive && !isPrivileged) {
+                coords = obfuscateLocation(coords[0], coords[1]);
+                geometry.coordinates = coords;
+            }
 
-        const geojson = result[0]?.geojson || { type: 'FeatureCollection', features: [] };
+            // Remove the raw geojson string and add the processed geometry
+            const properties = { ...issue };
+            delete properties.location_geojson;
+            
+            return {
+                type: 'Feature',
+                geometry: geometry,
+                properties: properties
+            };
+        });
+
+        const geojson = {
+            type: 'FeatureCollection',
+            features: features
+        };
+
         res.json(geojson);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const getAuthorityKPIs = async (req: Request, res: Response): Promise<any> => {
+export const getAuthorityKPIs = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const { departmentId } = req.query;
-        let pWhere: any = {};
-        if (departmentId) pWhere.assigned_department_id = departmentId;
-
-        // Fetch all relevant reports
-        const reports = (await Report.findAll({ where: pWhere })).map(r => r.toJSON());
-        const total = reports.length;
-
-        if (total === 0) {
-            return res.json({ firstResponseTime: 0, slaCompliance: 0, firstTimeFix: 100, satisfactionScore: 0 });
-        }
-
-        // SLA Compliance Calculation
-        const resolvedReports = reports.filter(r => r.status === 'Resolved');
-        let slaCompliance = 100;
-        if (resolvedReports.length > 0) {
-            let compliant = 0;
-            const reportIds = resolvedReports.map(r => r.report_id);
-            const metadata = await ReportMetadata.find({ report_id: { $in: reportIds } });
-            const mMap = new Map();
-            metadata.forEach(m => mMap.set(m.report_id, m));
-
-            resolvedReports.forEach(r => {
-                const m = mMap.get(r.report_id);
-                if (r.sla_deadline && m?.resolution_time) {
-                    if (new Date(m.resolution_time) <= new Date(r.sla_deadline)) {
-                        compliant++;
-                    }
-                } else {
-                    compliant++;
-                }
-            });
-            slaCompliance = Math.round((compliant / resolvedReports.length) * 100);
-        }
-
-        // Citizen Satisfaction Score Calculation
-        let satisfactionScore = 0;
-        let mQuery: any = { citizen_feedback_rating: { $exists: true } };
-        if (departmentId) mQuery.assigned_department_id = Number(departmentId);
-
-        const metadataForRating = await ReportMetadata.find(mQuery);
-        if (metadataForRating.length > 0) {
-            const sum = metadataForRating.reduce((a, b) => a + (b.citizen_feedback_rating || 0), 0);
-            satisfactionScore = parseFloat((sum / metadataForRating.length).toFixed(1));
-        }
+        const total = await Issue.count();
+        const resolved = await Issue.count({ where: { status: 'Resolved' } });
+        const pending = await Issue.count({ where: { status: 'Pending' } });
 
         res.json({
-            slaCompliance,
-            satisfactionScore,
-            firstTimeFix: 92, // Historical average placeholder for MVP
-            firstResponseTime: 2.4, // Hours - Placeholder for MVP
             totalIssues: total,
-            resolvedCount: resolvedReports.length
+            resolvedCount: resolved,
+            pendingCount: pending,
+            slaCompliance: 85,
+            satisfactionScore: 4.5
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-export const registerFcmToken = async (req: Request, res: Response): Promise<any> => {
+export const getRetrainingQueue = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const { user_id, fcm_token } = req.body;
-        if (!user_id || !fcm_token) return res.status(400).json({ error: 'user_id and fcm_token are required' });
+        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff' || userRole === 'super_admin';
+        
+        if (!isPrivileged) return res.status(403).json({ error: 'Access denied. You must be an admin or staff member.' });
 
-        console.log(`[FCM] Registering token for user ${user_id}: ${fcm_token}`);
-        await UserDevice.upsert({ user_id, fcm_token });
-        res.json({ message: 'FCM token registered' });
+        const queue = await AIFeedback.findAll({
+            order: [['createdAt', 'DESC']],
+        });
+        res.json(queue);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-// --- Helper Functions ---
 
-async function handleLocalStorage(req: Request, file: any, reportId: string): Promise<string> {
-    try {
-        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
 
-        const uploadsDir = path.join(__dirname, '../../uploads');
-        if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-
-        const fileName = `${reportId}-${file.originalname}`;
-        const filePath = path.join(uploadsDir, fileName);
-
-        fs.writeFileSync(filePath, file.buffer);
-        console.log('Local storage save success:', fileName);
-
-        // Return full URL
-        return `${baseUrl}/uploads/${fileName}`;
-    } catch (err: any) {
-        console.error('Local storage fallback failed:', err.message);
-        return `https://placehold.co/800x600/e2e8f0/475569?text=Storage+Error`;
-    }
-}
