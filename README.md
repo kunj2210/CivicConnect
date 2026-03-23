@@ -81,10 +81,15 @@ cp .env.example .env
 ## ⚙️ 3. Detailed Component Setup
 
 ### ✅ Backend (Node.js)
+For start the backend server run the following commands:
 ```bash
 cd backend
 npm install
 npm run dev
+```
+For seed the database run the following command in root directory:
+```bash
+npm run seed:users
 ```
 
 ### ✅ AI Microservice (Python)
@@ -113,6 +118,7 @@ docker run -p 9000:9000 -p 9001:9001 `
 docker exec minio mc alias set local http://localhost:9000 admin M@nthan1528
 docker exec minio mc anonymous set download local/civic-connect
 ```
+4. Note: You have to run this commands only one time after that you can directly run the minio server using docker desktop (start button).
 
 ### ✅ Admin Dashboard (React)
 ```bash
