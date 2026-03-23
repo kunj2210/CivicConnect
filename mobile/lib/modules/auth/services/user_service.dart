@@ -1,35 +1,70 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import '../../../config/api_config.dart';
 
 class UserService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final SupabaseClient _client = Supabase.instance.client;
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _client.auth.currentUser;
 
-  Future<void> updateProfile({String? displayName, String? photoURL}) async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      await user.updateDisplayName(displayName);
-      await user.updatePhotoURL(photoURL);
-      await user.reload();
+  Future<void> updateProfile({
+    String? displayName, 
+    String? photoURL,
+    Map<String, double>? homeLocation,
+    int? alertRadius,
+  }) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+
+    // 1. Update Supabase Auth Metadata
+    if (displayName != null || photoURL != null) {
+      await _client.auth.updateUser(
+        UserAttributes(
+          data: {
+            'full_name': ?displayName,
+            'avatar_url': ?photoURL,
+          },
+        ),
+      );
+    }
+
+    // 2. Update Public DB Profile via Backend API
+    try {
+      final body = <String, dynamic>{
+        'home_location': ?homeLocation,
+        'alert_radius_meters': ?alertRadius,
+      };
+
+
+      if (body.isNotEmpty) {
+        final response = await http.patch(
+          Uri.parse('${ApiConfig.usersUrl}/${user.id}'),
+          headers: ApiConfig.getHeaders(),
+          body: json.encode(body),
+        );
+        if (response.statusCode != 200) {
+          throw Exception('Failed to update DB profile: ${response.body}');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error updating public DB profile: $e');
     }
   }
 
+
   Future<Map<String, dynamic>> getUserStats() async {
-    final user = _auth.currentUser;
+    final user = _client.auth.currentUser;
     if (user == null) return {'total': 0, 'resolved': 0, 'rank': 'Newbie'};
 
     try {
-      // Consistently use phone, email, or UID as identifier
-      final identifier = (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
-          ? user.phoneNumber!
-          : (user.email != null && user.email!.isNotEmpty)
-              ? user.email!
-              : user.uid;
-      final response = await http.get(Uri.parse('${ApiConfig.statsUrl}?citizen_phone=$identifier'));
+      final identifier = user.phone ?? user.email ?? user.id;
+      final response = await http.get(
+        Uri.parse('${ApiConfig.statsUrl}?citizen_phone=$identifier'),
+        headers: ApiConfig.getHeaders(),
+      );
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -44,4 +79,22 @@ class UserService {
       return {'total': '0', 'resolved': '0', 'rank': 'Newbie'};
     }
   }
+
+  Future<List<dynamic>> getLeaderboard() async {
+    try {
+      final response = await http.get(
+        Uri.parse(ApiConfig.leaderboardUrl),
+        headers: ApiConfig.getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching leaderboard: $e');
+      return [];
+    }
+  }
+
 }
