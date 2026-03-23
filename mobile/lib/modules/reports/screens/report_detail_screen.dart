@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/report_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:location/location.dart';
+import 'package:latlong2/latlong.dart' as ll;
 
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -18,6 +21,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final ReportService _reportService = ReportService();
   bool _isUpvoting = false;
   bool _isConfirming = false;
+  bool _isUploadingResolution = false;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -26,47 +31,60 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Future<void> _fetchReportDetails() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
       final data = await _reportService.getReportById(widget.reportId);
+      if (!mounted) return;
       setState(() {
         _report = data;
         _isLoading = false;
       });
+
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
+
     }
   }
 
   Future<void> _handleUpvote() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    final identifier = user.phoneNumber ?? user.email ?? user.uid;
+    final identifier = user.phone ?? user.email ?? user.id;
     
+    if (!mounted) return;
     setState(() => _isUpvoting = true);
+
     try {
       await _reportService.upvoteReport(widget.reportId, identifier);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Report upvoted!'), backgroundColor: Colors.green),
       );
-      _fetchReportDetails(); // Refresh to get new priority/stats if any
+      _fetchReportDetails(); 
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Upvote failed: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: Colors.red),
       );
     } finally {
-      setState(() => _isUpvoting = false);
+      if (mounted) {
+        setState(() => _isUpvoting = false);
+      }
     }
+
   }
 
   Future<void> _handleConfirmResolution(int rating) async {
+    if (!mounted) return;
     setState(() => _isConfirming = true);
+
     try {
       await _reportService.confirmResolution(widget.reportId, rating);
       if (!mounted) return;
@@ -80,7 +98,73 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         SnackBar(content: Text('Confirmation failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
-      setState(() => _isConfirming = false);
+      if (mounted) {
+        setState(() => _isConfirming = false);
+      }
+    }
+
+  }
+
+  Future<void> _handleProposeResolution() async {
+    final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+    if (photo == null) return;
+
+    if (!mounted) return;
+    setState(() => _isUploadingResolution = true);
+
+    try {
+      final location = Location();
+      bool serviceEnabled;
+      PermissionStatus permissionGranted;
+
+      serviceEnabled = await location.serviceEnabled();
+      if (!serviceEnabled) {
+        serviceEnabled = await location.requestService();
+        if (!serviceEnabled) {
+          throw Exception('Location services are disabled.');
+        }
+      }
+
+      permissionGranted = await location.hasPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        permissionGranted = await location.requestPermission();
+        if (permissionGranted != PermissionStatus.granted) {
+          throw Exception('Location permissions are denied.');
+        }
+      }
+
+      final currentLocation = await location.getLocation();
+      final reportCoords = _report!['location']?['coordinates'] ?? [0.0, 0.0];
+      
+      final distance = const ll.Distance().as(
+        ll.LengthUnit.Meter,
+        ll.LatLng(currentLocation.latitude!, currentLocation.longitude!),
+        ll.LatLng(reportCoords[1], reportCoords[0]),
+      );
+
+      if (distance > 100) {
+        throw Exception('You are too far from the issue location to resolve it. Distance: ${distance.toStringAsFixed(1)}m. You must be within 100 meters to capture proof.');
+      }
+
+      final bytes = await photo.readAsBytes();
+      await _reportService.proposeResolution(widget.reportId, bytes, photo.name);
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Resolution submitted successfully!'), backgroundColor: Colors.green),
+      );
+      _fetchReportDetails();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')), 
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingResolution = false);
     }
   }
 
@@ -137,9 +221,14 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       );
     }
 
-    final metadata = _report!['metadata'] ?? {};
+    // Extract report data
     final status = _report!['status'] ?? 'Pending';
     final coords = _report!['location']?['coordinates'] ?? [0, 0];
+    final imageUrl = _report!['minio_pre_key'] ?? 'https://via.placeholder.com/400x300';
+    final category = _report!['category'] ?? 'General';
+    final description = _report!['description'] ?? 'No description provided.';
+    final reportedAt = _report!['reported_at'] ?? DateTime.now().toIso8601String();
+    final metadata = _report!['metadata'] ?? {};
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -154,10 +243,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               background: Image.network(
-                metadata['image_url'] ?? 'https://via.placeholder.com/400x300',
+                imageUrl,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => Container(
                   color: colorScheme.surfaceContainerHighest,
+
                   child: Icon(Icons.broken_image, size: 50, color: colorScheme.onSurfaceVariant),
                 ),
               ),
@@ -169,12 +259,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
-                          _report!['category'] ?? 'General',
+                          category,
                           style: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -183,19 +273,22 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                       _StatusBadge(status: status),
                     ],
                   ),
+
                   const SizedBox(height: 8),
                   Text(
-                    'Submitted on ${DateTime.parse(_report!['timestamp']).toLocal().toString().split('.')[0]}',
+                    'Submitted on ${DateTime.parse(reportedAt).toLocal().toString().split('.')[0]}',
                     style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
                   ),
+
                   const Divider(height: 32),
                   
                   const _SectionHeader(icon: Icons.description_outlined, title: 'Description'),
                   const SizedBox(height: 8),
                   Text(
-                    metadata['description'] ?? 'No description provided.',
+                    description,
                     style: textTheme.bodyLarge?.copyWith(color: colorScheme.onSurface, height: 1.5),
                   ),
+
                   const SizedBox(height: 24),
                   
                   const _SectionHeader(icon: Icons.location_on_outlined, title: 'Location'),
@@ -217,14 +310,42 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   const _SectionHeader(icon: Icons.info_outline, title: 'Report ID'),
                   const SizedBox(height: 4),
                   Text(
-                    _report!['report_id'],
+                    _report!['id'],
                     style: textTheme.bodySmall?.copyWith(
                       fontFamily: 'Courier',
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  
+
                   const Divider(height: 48),
+
+                  Builder(builder: (context) {
+                    final user = Supabase.instance.client.auth.currentUser;
+                    final isStaff = user?.userMetadata?['role'] == 'staff';
+
+                    if (isStaff && status != 'Resolved' && status != 'Pending Confirmation') {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _SectionHeader(icon: Icons.camera_alt_outlined, title: 'Field Action'),
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: _isUploadingResolution ? null : _handleProposeResolution,
+                            icon: _isUploadingResolution ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.camera_alt),
+                            label: const Text('Capture & Submit Resolution'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorScheme.secondary,
+                              foregroundColor: colorScheme.onSecondary,
+                              minimumSize: const Size(double.infinity, 50),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  }),
 
                   if (status == 'Pending Confirmation') ...[
                     const _SectionHeader(icon: Icons.rate_review_outlined, title: 'Action Required'),
@@ -235,6 +356,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                         color: Colors.orange.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+
                       ),
                       child: Column(
                         children: [
@@ -345,6 +467,7 @@ class _StatusBadge extends StatelessWidget {
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.5)),
+
       ),
       child: Text(
         status.toUpperCase(),
@@ -353,3 +476,4 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
+
