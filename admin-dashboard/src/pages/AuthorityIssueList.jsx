@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Filter, Search, Eye, Download, CheckCircle, ChevronDown } from 'lucide-react';
+import { api } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import { Zap, Map as MapIcon } from 'lucide-react';
+
+
 
 const StatusDropdown = ({ currentStatus, onUpdate, darkMode, getStatusColor }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -51,27 +54,29 @@ const AuthorityIssueList = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [filterStatus, setFilterStatus] = useState('All');
+    const [filterCategory, setFilterCategory] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const url = user?.departmentId
-            ? `http://localhost:5000/api/reports?departmentId=${user.departmentId}`
-            : 'http://localhost:5000/api/reports';
 
-        fetch(url)
-            .then(res => res.json())
+    useEffect(() => {
+        const params = {
+            ward_id: user?.ward_id,
+            department_id: user?.department_id
+        };
+
+        api.get('/reports', { params })
             .then(data => {
                 setIssues(data.map(i => ({
-                    id: i.report_id,
+                    id: i.id,
                     title: i.category,
                     description: i.location && i.location.coordinates
                         ? `Reported at ${i.location.coordinates[1]}, ${i.location.coordinates[0]}`
                         : 'Location unavailable',
                     category: i.category,
-                    status: (i.status === 'Submitted' || !i.status) ? 'Pending' : i.status,
-                    date: i.timestamp ? new Date(i.timestamp).toLocaleDateString() : 'Unknown'
+                    status: i.status,
+                    date: (i.createdAt || i.timestamp || i.reported_at) ? new Date(i.createdAt || i.timestamp || i.reported_at).toLocaleDateString() : 'Unknown'
                 })));
                 setLoading(false);
             })
@@ -79,14 +84,19 @@ const AuthorityIssueList = () => {
                 console.error('Error fetching authority issues:', err);
                 setLoading(false);
             });
-    }, []);
+    }, [user?.id, user?.ward_id]);
+
 
     const filteredIssues = issues.filter(issue => {
         const matchesStatus = filterStatus === 'All' || issue.status === filterStatus;
+        const matchesCategory = filterCategory === 'All' || issue.category === filterCategory;
         const matchesSearch = issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
             issue.category.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchesStatus && matchesSearch;
+        return matchesStatus && matchesCategory && matchesSearch;
     });
+
+    const categories = ['All', ...new Set(issues.map(i => i.category))];
+
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -99,20 +109,15 @@ const AuthorityIssueList = () => {
 
     const handleUpdateStatus = async (id, newStatus) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
-            });
-            if (response.ok) {
-                setIssues(issues.map(issue =>
-                    issue.id === id ? { ...issue, status: newStatus } : issue
-                ));
-            }
+            await api.patch(`/reports/${id}`, { status: newStatus });
+            setIssues(issues.map(issue =>
+                issue.id === id ? { ...issue, status: newStatus } : issue
+            ));
         } catch (err) {
             alert('Update failed: ' + err.message);
         }
     };
+
 
     return (
         <div className="space-y-8 animate-fade-in-up">
@@ -138,6 +143,17 @@ const AuthorityIssueList = () => {
                         <div className="relative">
                             <select
                                 className={`pl-4 pr-10 py-2 text-sm border-none rounded-md appearance-none focus:ring-1 focus:ring-gray-400 outline-none cursor-pointer font-bold ${darkMode ? 'bg-gray-900 text-gray-200' : 'bg-white text-gray-800'}`}
+                                value={filterCategory}
+                                onChange={(e) => setFilterCategory(e.target.value)}
+                            >
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <MapIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                        </div>
+
+                        <div className="relative">
+                            <select
+                                className={`pl-4 pr-10 py-2 text-sm border-none rounded-md appearance-none focus:ring-1 focus:ring-gray-400 outline-none cursor-pointer font-bold ${darkMode ? 'bg-gray-900 text-gray-200' : 'bg-white text-gray-800'}`}
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
                             >
@@ -149,6 +165,7 @@ const AuthorityIssueList = () => {
                             <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
                         </div>
                     </div>
+
                 </div>
             </div>
 

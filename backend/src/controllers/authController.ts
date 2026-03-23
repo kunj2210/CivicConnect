@@ -1,23 +1,51 @@
 import type { Request, Response } from 'express';
-import User from '../models/User.js';
+import { User } from '../config/db.js';
+import { supabase } from '../config/supabase.js';
 
 export const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body;
 
-        // In a real app, you should use bcrypt to hash and compare passwords
-        const user = await User.findOne({ email });
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+        });
 
-        if (!user || user.password !== password) {
-            return res.status(401).json({ message: 'Invalid email or password' });
+        if (error || !data.user) {
+            return res.status(401).json({ message: error?.message || 'Invalid email or password' });
+        }
+
+        // Fetch/Sync profile in PostgreSQL
+        const identifier = data.user.phone || data.user.email;
+        const { Op } = require('sequelize');
+        let user = await User.findOne({ 
+            where: { 
+                [Op.or]: [
+                    { id: data.user.id },
+                    { phone: identifier },
+                    { email: identifier }
+                ]
+            } 
+        });
+        
+        if (!user) {
+            user = await User.create({ 
+                id: data.user.id,
+                phone: data.user.phone || null,
+                email: data.user.email || null,
+                role: data.user.user_metadata?.role || 'citizen'
+            });
         }
 
         res.status(200).json({
-            id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            departmentId: user.departmentId
+            id: data.user.id,
+            token: data.session?.access_token,
+            user: {
+                id: user.id,
+                phone: user.phone,
+                green_credits: user.green_credits,
+                role: data.user.user_metadata?.role || 'Citizen',
+            }
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -26,22 +54,28 @@ export const login = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { name, email, password, role, departmentId } = req.body;
+        const { phone, password, role } = req.body;
 
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ message: 'User already exists' });
+        // Register in Supabase Auth
+        const { data, error } = await supabase.auth.signUp({
+            phone,
+            password,
+            options: {
+                data: { role: role || 'Citizen' }
+            }
+        });
+
+        if (error || !data.user) {
+            return res.status(400).json({ message: error?.message || 'Registration failed' });
         }
 
-        const newUser = new User({ name, email, password, role, departmentId });
-        await newUser.save();
+        // Create in PostgreSQL
+        const user = await User.create({ phone });
 
         res.status(201).json({
-            id: newUser._id,
-            name: newUser.name,
-            email: newUser.email,
-            role: newUser.role,
-            departmentId: newUser.departmentId
+            id: user.id,
+            phone: user.phone,
+            role: role || 'Citizen'
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -51,49 +85,18 @@ export const register = async (req: Request, res: Response) => {
 export const updateProfile = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { name } = req.body;
+        const { ward_id } = req.body;
 
-        const updatedUser = await User.findByIdAndUpdate(
-            id,
-            { name },
-            { new: true }
-        );
+        const user = await User.findByPk(id as string);
 
-        if (!updatedUser) {
-            return res.status(404).json({ message: 'User not found' });
-        }
+        if (!user) return res.status(404).json({ message: 'User not found' });
 
-        res.status(200).json({
-            id: updatedUser._id,
-            name: updatedUser.name,
-            email: updatedUser.email,
-            role: updatedUser.role
-        });
-    } catch (error: any) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-export const updatePassword = async (req: Request, res: Response) => {
-    try {
-        const { id } = req.params;
-        const { currentPassword, newPassword } = req.body;
-
-        const user = await User.findById(id);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // In a real app, use bcrypt comparison
-        if (user.password !== currentPassword) {
-            return res.status(401).json({ message: 'Incorrect current password' });
-        }
-
-        user.password = newPassword;
+        if (ward_id) user.ward_id = ward_id;
         await user.save();
 
-        res.status(200).json({ message: 'Password updated successfully' });
+        res.status(200).json(user);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
 };
+

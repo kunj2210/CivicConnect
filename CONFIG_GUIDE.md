@@ -21,6 +21,7 @@ The backend is built with Express.js, TypeScript, and handles data management th
 1. Navigate to the `backend/` directory.
 2. Create a `.env` file based on `.env.example`:
    ```bash
+   ```bash
    PORT=5000
    MONGODB_URI=mongodb://localhost:27017/civicconnect
    PG_HOST=localhost
@@ -28,11 +29,13 @@ The backend is built with Express.js, TypeScript, and handles data management th
    PG_USER=postgres
    PG_PASSWORD=your_password
    PG_DB=civicconnect
-   FIREBASE_SERVICE_ACCOUNT_PATH=../civicconnect-7c316-firebase-adminsdk-fbsvc-32969f9a65.json
-   FIREBASE_STORAGE_BUCKET=civicconnect-7c316.appspot.com
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_ANON_KEY=your_anon_key
+   SUPABASE_SERVICE_ROLE=your_service_role_key
    ```
    > [!IMPORTANT]
-   > Ensure the `FIREBASE_SERVICE_ACCOUNT_PATH` points to the JSON file located in the root of the project.
+   > Ensure these variables are correctly set in the `backend/.env` file.
+
 
 ### Step 2: Database Configuration
 1. Start your **MongoDB** and **PostgreSQL** services.

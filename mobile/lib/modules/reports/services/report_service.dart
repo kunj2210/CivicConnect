@@ -4,7 +4,11 @@ import '../../../config/api_config.dart';
 
 class ReportService {
   Future<Map<String, dynamic>> getReportById(String reportId) async {
-    final response = await http.get(Uri.parse('${ApiConfig.reportsUrl}/$reportId'));
+    final response = await http.get(
+      Uri.parse('${ApiConfig.reportsUrl}/$reportId'),
+      headers: ApiConfig.getHeaders(),
+    );
+
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
@@ -15,9 +19,10 @@ class ReportService {
   Future<void> upvoteReport(String reportId, String identifier) async {
     final response = await http.post(
       Uri.parse('${ApiConfig.reportsUrl}/$reportId/upvote'),
-      headers: {'Content-Type': 'application/json'},
+      headers: ApiConfig.getHeaders(),
       body: json.encode({'identifier': identifier}),
     );
+
     if (response.statusCode != 200) {
       final error = json.decode(response.body)['error'] ?? 'Failed to upvote';
       throw Exception(error);
@@ -27,11 +32,38 @@ class ReportService {
   Future<void> confirmResolution(String reportId, int rating) async {
     final response = await http.post(
       Uri.parse('${ApiConfig.reportsUrl}/$reportId/confirm-resolution'),
-      headers: {'Content-Type': 'application/json'},
+      headers: ApiConfig.getHeaders(),
       body: json.encode({'feedback_rating': rating}),
     );
+
     if (response.statusCode != 200) {
       throw Exception('Failed to confirm resolution');
+    }
+  }
+
+  Future<void> proposeResolution(String reportId, List<int> imageBytes, String filename) async {
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${ApiConfig.reportsUrl}/$reportId/propose-resolution'),
+    );
+    
+    // Combine standard headers with MultiPart requirements
+    final authHeaders = await ApiConfig.getHeaders(includeContentType: false);
+    request.headers.addAll(authHeaders);
+
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: filename,
+      ),
+    );
+
+    var response = await request.send();
+
+    if (response.statusCode != 200) {
+      final resStr = await response.stream.bytesToString();
+      throw Exception('Failed to propose resolution: $resStr');
     }
   }
 }

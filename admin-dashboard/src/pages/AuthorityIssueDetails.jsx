@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, Clock, AlertCircle, MapPin, User, Calendar, Tag, FileText, Camera, Send, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Clock, AlertCircle, MapPin, User, Calendar, Tag, FileText, Camera, Send, X, Zap, Mic } from 'lucide-react';
+
+import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
 
 const AuthorityIssueDetails = () => {
     const { id } = useParams();
@@ -12,17 +15,25 @@ const AuthorityIssueDetails = () => {
     const [submitting, setSubmitting] = useState(false);
     const [resImage, setResImage] = useState(null);
     const [resPreview, setResPreview] = useState(null);
+    const [staffMembers, setStaffMembers] = useState([]);
+    const [loadingStaff, setLoadingStaff] = useState(false);
+
 
     useEffect(() => {
         fetchReport();
     }, [id]);
 
+    useEffect(() => {
+        if (report?.ward_id) {
+            fetchStaff(report.ward_id, report.assigned_department_id);
+        }
+    }, [report?.ward_id, report?.assigned_department_id]);
+
+
     const fetchReport = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`);
-            if (!response.ok) throw new Error('Failed to fetch report details');
-            const data = await response.json();
+            const data = await api.get(`/reports/${id}`);
             if (data.status === 'Submitted' || !data.status) data.status = 'Pending';
             setReport(data);
         } catch (err) {
@@ -32,20 +43,44 @@ const AuthorityIssueDetails = () => {
         }
     };
 
+    const fetchStaff = async (wardId, deptId) => {
+        try {
+            setLoadingStaff(true);
+            const data = await api.get('/users/staff', { 
+                params: { ward_id: wardId, department_id: deptId } 
+            });
+            setStaffMembers(data);
+        } catch (err) {
+            console.error('Failed to fetch staff:', err);
+        } finally {
+            setLoadingStaff(false);
+        }
+    };
+
+
+
     const handleUpdateStatus = async (newStatus) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
-            });
-            if (response.ok) {
-                fetchReport();
-            }
+            await api.patch(`/reports/${id}`, { status: newStatus });
+            fetchReport();
         } catch (err) {
             alert('Update failed: ' + err.message);
         }
     };
+
+    const handleAssignStaff = async (staffId) => {
+        try {
+            setLoadingStaff(true);
+            await api.patch(`/reports/${id}`, { assigned_staff_id: staffId || null });
+            fetchReport();
+        } catch (err) {
+            alert('Staff assignment failed: ' + err.message);
+        } finally {
+            setLoadingStaff(false);
+        }
+    };
+
+
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -66,25 +101,18 @@ const AuthorityIssueDetails = () => {
             const formData = new FormData();
             formData.append('image', resImage);
 
-            const response = await fetch(`http://localhost:5000/api/reports/${id}/propose-resolution`, {
-                method: 'POST',
-                body: formData,
-            });
+            await api.post(`/reports/${id}/propose-resolution`, formData);
 
-            if (response.ok) {
-                setResImage(null);
-                setResPreview(null);
-                fetchReport();
-            } else {
-                const data = await response.json();
-                throw new Error(data.error || 'Failed to propose resolution');
-            }
+            setResImage(null);
+            setResPreview(null);
+            fetchReport();
         } catch (err) {
             alert(err.message);
         } finally {
             setSubmitting(false);
         }
     };
+
 
     if (loading) return <div className={`p-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading issue details...</div>;
     if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
@@ -121,22 +149,101 @@ const AuthorityIssueDetails = () => {
                         </div>
                         <div className={`p-1 min-h-[300px] flex items-center justify-center rounded-xl ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
                             <img
-                                src={report.metadata?.image_url || 'https://via.placeholder.com/800x600'}
+                                src={report.minio_pre_key || 'https://via.placeholder.com/800x600'}
                                 alt="Report Evidence"
                                 className="w-full aspect-video object-cover rounded-xl shadow-inner"
                             />
                         </div>
+
                     </div>
 
                     <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
                         <h2 className={`font-bold flex items-center mb-2 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                             <Tag className="w-5 h-5 mr-2 text-indigo-500" />
-                            Work Description
+                            Issue Category
                         </h2>
                         <p className={`leading-relaxed text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {report.metadata?.description || 'No description provided.'}
+                            {report.category || 'No category provided.'}
                         </p>
                     </div>
+
+                    {/* Multimodal AI Fusion Section */}
+                    <div className={`rounded-2xl shadow-sm border p-6 space-y-6 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between border-b pb-4">
+                            <h2 className={`font-bold flex items-center ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                <Zap className="w-5 h-5 mr-2 text-indigo-500" />
+                                AI Decision Matrix
+                            </h2>
+                            {report.needs_human_review && (
+                                <span className="flex items-center px-3 py-1 bg-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-full animate-pulse border border-red-500/30">
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                    Review Required
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Fused Verdict */}
+                        <div className={`p-5 rounded-2xl border-2 ${report.needs_human_review ? 'border-red-500/20 bg-red-500/5' : 'border-indigo-500/20 bg-indigo-500/5'}`}>
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-gray-500 mb-1 tracking-widest">Recommended Category</p>
+                                    <h3 className={`text-3xl font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{report.fusion_final_category || 'Assessing...'}</h3>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-black uppercase text-gray-500 mb-1">Fusion Confidence</p>
+                                    <span className="text-3xl font-black text-indigo-500">{(report.fusion_confidence_score * 100).toFixed(1)}%</span>
+                                </div>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full transition-all duration-1000 ${report.needs_human_review ? 'bg-red-500' : 'bg-indigo-500'}`}
+                                    style={{ width: `${report.fusion_confidence_score * 100}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Top-3 Matrix */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <FileText className="w-3 h-3 mr-1 text-indigo-500" /> Image Confidence
+                                </div>
+                                <div className="space-y-3">
+                                    {(report.ai_image_top3 || []).map((p, i) => (
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category}</span>
+                                                <span className="text-indigo-500">{(p.confidence * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-indigo-500/50 h-full" style={{ width: `${p.confidence * 100}%` }} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <Mic className="w-3 h-3 mr-1 text-emerald-500" /> Text/Audio Confidence
+                                </div>
+                                <div className="space-y-3">
+                                    {(report.ai_text_top3 || []).map((p, i) => (
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.category}</span>
+                                                <span className="text-emerald-500">{(p.confidence * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${p.confidence * 100}%` }} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
                 </div>
 
                 <div className="space-y-6">
@@ -230,10 +337,36 @@ const AuthorityIssueDetails = () => {
                             <div className="flex items-start space-x-3">
                                 <Calendar className="w-5 h-5 text-gray-400 shrink-0" />
                                 <div>
-                                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Assigned At</p>
-                                    <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{new Date(report.timestamp).toLocaleString()}</p>
+                                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Reported At</p>
+                                    <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{new Date(report.reported_at).toLocaleString()}</p>
                                 </div>
                             </div>
+
+                            <div className="flex items-start space-x-3 pt-2 border-t border-white/5">
+                                <User className="w-5 h-5 text-indigo-500 shrink-0" />
+                                <div className="flex-1">
+                                    <p className="text-xs text-indigo-600 uppercase font-bold tracking-wider">Assigned Staff</p>
+                                    <div className="flex items-center justify-between mt-1">
+                                        {loadingStaff ? (
+                                            <span className="text-sm animate-pulse text-gray-500 font-bold">Loading...</span>
+                                        ) : (
+                                            <select
+                                                value={report.assigned_staff_id || ''}
+                                                onChange={(e) => handleAssignStaff(e.target.value)}
+                                                className={`text-sm font-bold bg-transparent border-none outline-none focus:ring-0 p-0 cursor-pointer ${darkMode ? 'text-indigo-400' : 'text-indigo-700'}`}
+                                            >
+                                                <option value="">Unassigned</option>
+                                                {staffMembers.map(staff => (
+                                                    <option key={staff.id} value={staff.id}>{staff.phone || staff.email || 'Worker'}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 mt-1 italic">Delegate to field worker</p>
+                                </div>
+                            </div>
+
+
                         </div>
                     </div>
                 </div>

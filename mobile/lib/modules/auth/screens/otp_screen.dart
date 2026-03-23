@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 
 class OTPScreen extends StatefulWidget {
-  final String verificationId;
+  final String phoneNumber;
 
-  const OTPScreen({super.key, required this.verificationId});
+  const OTPScreen({super.key, required this.phoneNumber});
 
   @override
   State<OTPScreen> createState() => _OTPScreenState();
@@ -18,7 +18,7 @@ class _OTPScreenState extends State<OTPScreen> {
   void _verifyOTP() async {
     setState(() => _isLoading = true);
     try {
-      await _authService.verifyOTP(widget.verificationId, _otpController.text.trim());
+      await _authService.verifyOTP(widget.phoneNumber, _otpController.text.trim());
       if (!mounted) return;
       // Navigate to home or dashboard
       Navigator.pushReplacementNamed(context, '/home');

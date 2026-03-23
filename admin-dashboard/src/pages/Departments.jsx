@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Building2, Users, CheckCircle2, MoreVertical, Plus, Trash2, Edit2, Loader2 } from 'lucide-react';
+import { api } from '../utils/api';
+
 
 const Departments = () => {
     const { darkMode } = useOutletContext();
@@ -9,6 +11,8 @@ const Departments = () => {
     const [error, setError] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [newDept, setNewDept] = useState({ name: '', head: '', staff_count: 0, status: 'Active', handled_categories: [] });
+
+    const [editingId, setEditingId] = useState(null);
 
     // Based on mobile app hardcoded categories
     const AVAILABLE_CATEGORIES = [
@@ -26,9 +30,7 @@ const Departments = () => {
     const fetchDepartments = async () => {
         try {
             setLoading(true);
-            const response = await fetch('http://localhost:5000/api/departments');
-            if (!response.ok) throw new Error('Failed to fetch departments');
-            const data = await response.json();
+            const data = await api.get('/departments');
             setDepts(data);
         } catch (err) {
             setError(err.message);
@@ -37,33 +39,53 @@ const Departments = () => {
         }
     };
 
-    const handleCreate = async (e) => {
+    const handleEditClick = async (id) => {
+        try {
+            setLoading(true);
+            const dept = await api.get(`/departments/${id}`); // Fetches fresh data globally using the unimplemented GET /:id endpoint!
+            setNewDept({
+                name: dept.name || '',
+                head: dept.head || '',
+                staff_count: dept.staff_count || 0,
+                status: dept.status || 'Active',
+                handled_categories: dept.handled_categories || []
+            });
+            setEditingId(id);
+            setShowModal(true);
+        } catch (error) {
+            alert('Failed to load department details: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreateOrUpdate = async (e) => {
         e.preventDefault();
         try {
-            const response = await fetch('http://localhost:5000/api/departments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newDept),
-            });
-            if (response.ok) {
-                setShowModal(false);
-                setNewDept({ name: '', head: '', staff_count: 0, status: 'Active', handled_categories: [] });
-                fetchDepartments();
+            if (editingId) {
+                await api.patch(`/departments/${editingId}`, newDept); // utilizes the unimplemented PATCH endpoint
+            } else {
+                await api.post('/departments', newDept);
             }
+            setShowModal(false);
+            setEditingId(null);
+            setNewDept({ name: '', head: '', staff_count: 0, status: 'Active', handled_categories: [] });
+            fetchDepartments();
         } catch (err) {
-            alert('Create failed');
+            alert('Save failed: ' + err.message);
         }
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm('Delete this department?')) return;
         try {
-            const response = await fetch(`http://localhost:5000/api/departments/${id}`, { method: 'DELETE' });
-            if (response.ok) fetchDepartments();
+            await api.delete(`/departments/${id}`);
+            fetchDepartments();
         } catch (err) {
-            alert('Delete failed');
+            alert('Delete failed: ' + err.message);
         }
     };
+
 
     if (loading && depts.length === 0) return (
         <div className="flex flex-col items-center justify-center p-20 space-y-4">
@@ -80,7 +102,11 @@ const Departments = () => {
                     <p className={`mt-2 text-lg ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Manage municipal departments and operational staff.</p>
                 </div>
                 <button
-                    onClick={() => setShowModal(true)}
+                    onClick={() => {
+                        setEditingId(null);
+                        setNewDept({ name: '', head: '', staff_count: 0, status: 'Active', handled_categories: [] });
+                        setShowModal(true);
+                    }}
                     className="flex items-center gap-3 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:scale-105 active:scale-95 font-bold"
                 >
                     <Plus size={20} />
@@ -91,8 +117,8 @@ const Departments = () => {
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
                     <div className={`w-full max-w-md p-8 rounded-3xl shadow-2xl ${darkMode ? 'bg-gray-800 border border-white/10' : 'bg-white'}`}>
-                        <h2 className={`text-2xl font-black mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>New Department</h2>
-                        <form onSubmit={handleCreate} className="space-y-5">
+                        <h2 className={`text-2xl font-black mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>{editingId ? 'Edit Department' : 'New Department'}</h2>
+                        <form onSubmit={handleCreateOrUpdate} className="space-y-5">
                             <div>
                                 <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Department Name</label>
                                 <input
@@ -151,7 +177,10 @@ const Departments = () => {
                             <div className="flex gap-4 pt-4">
                                 <button
                                     type="button"
-                                    onClick={() => setShowModal(false)}
+                                    onClick={() => {
+                                        setShowModal(false);
+                                        setEditingId(null);
+                                    }}
                                     className={`flex-1 py-4 rounded-2xl font-bold transition-all ${darkMode ? 'bg-white/5 text-gray-400 hover:bg-white/10' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                                 >
                                     Cancel
@@ -160,7 +189,7 @@ const Departments = () => {
                                     type="submit"
                                     className="flex-1 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-extrabold shadow-lg shadow-blue-500/20 transition-all hover:scale-105"
                                 >
-                                    Create
+                                    {editingId ? 'Update' : 'Create'}
                                 </button>
                             </div>
                         </form>

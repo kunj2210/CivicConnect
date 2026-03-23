@@ -3,6 +3,8 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
 import { TrendingUp, CheckCircle, Clock, AlertCircle, MoreHorizontal } from 'lucide-react';
+import { api } from '../utils/api';
+
 
 const Dashboard = () => {
     const { darkMode } = useOutletContext();
@@ -14,8 +16,8 @@ const Dashboard = () => {
 
     useEffect(() => {
         Promise.all([
-            fetch('http://localhost:5000/api/reports/stats').then(res => res.json()),
-            fetch('http://localhost:5000/api/reports').then(res => res.json())
+            api.get('/reports/stats'),
+            api.get('/reports')
         ])
             .then(([statsData, issuesData]) => {
                 setStats(statsData);
@@ -27,6 +29,7 @@ const Dashboard = () => {
                 setLoading(false);
             });
     }, []);
+
 
     const StatCard = ({ title, value, color, icon: Icon, trend }) => (
         <div className={`p-6 rounded-2xl border transition-all duration-200 ${darkMode ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-200 hover:border-gray-300'}`}>
@@ -59,14 +62,15 @@ const Dashboard = () => {
 
         // CSV Rows
         const rows = issues.map(issue => [
-            issue.report_id,
+            issue.id,
             issue.category,
             issue.subcategory || 'N/A',
             issue.status,
             issue.priority || 'Medium',
-            new Date(issue.timestamp).toLocaleString(),
+            new Date(issue.reported_at).toLocaleString(),
             `"${issue.location?.latitude}, ${issue.location?.longitude}"`
         ]);
+
 
         // Combine into CSV string
         const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
@@ -125,7 +129,7 @@ const Dashboard = () => {
                         <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal /></button>
                     </div>
                     <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                             <BarChart data={stats.categoryData} barSize={40}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#374151' : '#E5E7EB'} />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} dy={10} />
@@ -156,7 +160,7 @@ const Dashboard = () => {
                 <div className={`p-8 rounded-2xl border flex flex-col justify-between ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                     <h2 className={`mb-6 text-lg font-bold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Resolution Status</h2>
                     <div className="h-64 flex justify-center relative">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                             <PieChart>
                                 <Pie
                                     data={stats.categoryData || []}
@@ -204,8 +208,8 @@ const Dashboard = () => {
                 <div className="space-y-4">
                     {issues.slice(0, 5).map((issue) => (
                         <div
-                            key={issue.report_id}
-                            onClick={() => navigate(`/admin/issues/${issue.report_id}`)}
+                            key={issue.id}
+                            onClick={() => navigate(`/admin/issues/${issue.id}`)}
                             className={`flex items-center justify-between p-4 rounded-xl transition-all duration-200 border cursor-pointer ${darkMode ? 'bg-gray-800/30 hover:bg-gray-800 border-transparent hover:border-gray-700' : 'bg-gray-50/50 hover:bg-gray-50 border-transparent hover:border-gray-200'}`}
                         >
                             <div className="flex items-center">
@@ -214,14 +218,15 @@ const Dashboard = () => {
                                 </div>
                                 <div>
                                     <p className={`font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>New Report: {issue.category}</p>
-                                    <p className="text-sm text-gray-500 truncate max-w-xs">ID: {issue.report_id.slice(0, 8)}...</p>
+                                    <p className="text-sm text-gray-500 truncate max-w-xs">ID: {issue.id.slice(0, 8)}...</p>
                                 </div>
                             </div>
                             <span className={`text-xs font-medium px-2 py-1 rounded-md shadow-sm ${darkMode ? 'text-gray-300 bg-gray-600' : 'text-gray-400 bg-white'}`}>
-                                {new Date(issue.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {new Date(issue.reported_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                         </div>
                     ))}
+
                     {issues.length === 0 && <p className="text-center text-gray-500 py-4">No recent activity found.</p>}
                 </div>
             </div>

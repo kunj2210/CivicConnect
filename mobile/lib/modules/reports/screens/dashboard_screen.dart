@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:http/http.dart' as http;
 import '../../../config/api_config.dart';
 
@@ -29,30 +31,43 @@ class DashboardScreenState extends State<DashboardScreen> {
   void refreshStats() => _fetchStats();
 
   Future<void> _fetchStats() async {
+
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       String queryParams = '';
       if (user != null) {
-        final identifier = (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
-            ? user.phoneNumber!
-            : (user.email != null && user.email!.isNotEmpty)
-                ? user.email!
-                : user.uid;
-        queryParams = '?citizen_phone=$identifier';
+        final identifier = user.phone ?? user.email ?? user.id;
+        queryParams = '?user_id=$identifier';
       }
 
-      final response = await http.get(Uri.parse('${ApiConfig.statsUrl}$queryParams'));
+      final response = await http.get(
+        Uri.parse('${ApiConfig.statsUrl}$queryParams'),
+        headers: ApiConfig.getHeaders(),
+      );
+
       if (response.statusCode == 200) {
+        if (!mounted) return;
         setState(() {
           _stats = json.decode(response.body);
           _isLoading = false;
         });
+
+      } else {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+
       }
     } catch (e) {
       debugPrint('Error fetching stats: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
+
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +120,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 24),
                     _isLoading
-                        ? const Center(child: CircularProgressIndicator())
+                        ? _buildSkeletonRow(theme)
                         : Row(
                             children: [
                               Expanded(
@@ -152,6 +167,20 @@ class DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonRow(ThemeData theme) {
+    return Shimmer.fromColors(
+      baseColor: theme.brightness == Brightness.dark ? Colors.grey[800]! : Colors.grey[300]!,
+      highlightColor: theme.brightness == Brightness.dark ? Colors.grey[700]! : Colors.grey[100]!,
+      child: Row(
+        children: [
+          Expanded(child: Container(height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)))),
+          const SizedBox(width: 16),
+          Expanded(child: Container(height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)))),
+        ],
       ),
     );
   }

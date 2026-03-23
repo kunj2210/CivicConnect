@@ -1,44 +1,48 @@
 import { DataTypes, Model } from 'sequelize';
-import { sequelize } from '../config/db.js';
+import { sequelize } from '../config/database.js';
 
 export class Notification extends Model {
-    public id!: number;
-    public user_id!: string; // Citizen phone or Admin ID
-    public title!: string;
-    public message!: string;
-    public type!: string; // 'Info', 'Alert', 'Success'
-    public read_status!: boolean;
-    public timestamp!: Date;
+    declare id: string;
+    declare user_id: string;
+    declare title: string;
+    declare body: string;
+    declare data: any;
+    declare is_read: boolean;
 }
 
 Notification.init({
     id: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
     },
     user_id: {
-        type: DataTypes.STRING,
+        type: DataTypes.UUID,
         allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id',
+        },
     },
     title: {
         type: DataTypes.STRING,
         allowNull: false,
     },
-    message: {
+    body: {
         type: DataTypes.TEXT,
         allowNull: false,
     },
-    type: {
-        type: DataTypes.STRING,
-        defaultValue: 'Info', // Info, Alert, Success
+    data: {
+        type: DataTypes.JSONB,
+        allowNull: true,
     },
-    read_status: {
+    is_read: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
     },
 }, {
     sequelize,
-    modelName: 'Notification',
+    tableName: 'notifications',
     timestamps: true,
 });
+

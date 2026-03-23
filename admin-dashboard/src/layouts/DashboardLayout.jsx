@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { Bell, Search, Moon, Sun } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
+
 
 const DashboardLayout = () => {
     const { user } = useAuth();
@@ -33,21 +35,73 @@ const DashboardLayout = () => {
     }, [darkMode]);
 
     useEffect(() => {
+        if (!user) return;
+
         const fetchNotifications = async () => {
             try {
-                const response = await fetch('http://localhost:5000/api/notifications');
-                const data = await response.json();
-                setNotifications(data);
-                setUnreadCount(data.filter(n => !n.read).length);
+                const { data, error } = await supabase
+                    .from('notifications')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('createdAt', { ascending: false })
+                    .limit(20);
+
+                if (error) throw error;
+                setNotifications(data || []);
+                setUnreadCount(data?.filter(n => !n.is_read).length || 0);
             } catch (error) {
                 console.error('Error fetching notifications:', error);
             }
         };
 
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000); // Poll every 30s
-        return () => clearInterval(interval);
-    }, []);
+
+        // Subscribe to Custom Broadcast Notifications (matching User's SQL trigger)
+        const channelName = `user:${user.id}:notifications`;
+        const subscription = supabase
+            .channel(channelName, {
+                config: {
+                    broadcast: { self: false },
+                    private: true
+                }
+            })
+            .on('broadcast', { event: 'INSERT' }, (payload) => {
+                console.log('[Realtime] New Broadcast Payload:', payload);
+                
+                // Flexible extraction
+                const record = payload.new || payload.record || payload.payload?.record || payload; 
+                console.log('[Realtime] Extracted Record:', record);
+                
+                if (record) {
+                    // Normalize fields if needed (handle potential case differences)
+                    const normalizedNotif = {
+                        id: record.id || record.ID,
+                        title: record.title || record.Title || record.event_type || 'New Notification',
+                        body: record.body || record.Body || record.message || record.Message || 'Details...',
+                        createdAt: record.createdAt || record.created_at || record.timestamp || new Date().toISOString(),
+                        is_read: record.is_read || false
+                    };
+
+                    console.log('[Realtime] Normalized Notification:', normalizedNotif);
+                    
+                    setNotifications(prev => [normalizedNotif, ...prev]);
+                    setUnreadCount(prev => prev + 1);
+                }
+            })
+
+
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`[Realtime] Subscribed to ${channelName}`);
+                }
+            });
+
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, [user]);
+
+
 
     const markAllAsRead = async () => {
         // Implementation for marking all as read (could be an API call)
@@ -109,14 +163,15 @@ const DashboardLayout = () => {
                                         {notifications.length > 0 ? (
                                             notifications.map((notif) => (
                                                 <div
-                                                    key={notif._id || notif.id}
-                                                    className={`p-4 border-b last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer ${!notif.read ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}
+                                                    key={notif.id}
+                                                    className={`p-4 border-b last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer ${!notif.is_read ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}
                                                 >
                                                     <p className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{notif.title}</p>
-                                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{notif.message}</p>
-                                                    <p className="text-[10px] text-gray-400 mt-2">{new Date(notif.timestamp || notif.createdAt).toLocaleString()}</p>
+                                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{notif.body}</p>
+                                                    <p className="text-[10px] text-gray-400 mt-2">{new Date(notif.createdAt).toLocaleString()}</p>
                                                 </div>
                                             ))
+
                                         ) : (
                                             <div className="p-8 text-center text-gray-500 text-sm font-medium">
                                                 No notifications found

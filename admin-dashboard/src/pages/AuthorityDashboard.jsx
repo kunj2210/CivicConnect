@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { TrendingUp, CheckCircle, Clock, AlertCircle, MapPin, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
+
 
 const AuthorityDashboard = () => {
     const { darkMode } = useOutletContext();
@@ -12,17 +14,17 @@ const AuthorityDashboard = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const url = user?.departmentId
-            ? `http://localhost:5000/api/reports?departmentId=${user.departmentId}`
-            : 'http://localhost:5000/api/reports';
+        const path = user?.departmentId
+            ? `/reports?departmentId=${user.departmentId}`
+            : '/reports';
 
-        const kpiUrl = user?.departmentId
-            ? `http://localhost:5000/api/reports/kpi?departmentId=${user.departmentId}`
-            : 'http://localhost:5000/api/reports/kpi';
+        const kpiPath = user?.departmentId
+            ? `/reports/kpi?departmentId=${user.departmentId}`
+            : '/reports/kpi';
 
         Promise.all([
-            fetch(url).then(res => res.json()),
-            fetch(kpiUrl).then(res => res.json())
+            api.get(path),
+            api.get(kpiPath)
         ])
             .then(([issuesData, kpiData]) => {
                 setIssues(issuesData);
@@ -34,6 +36,7 @@ const AuthorityDashboard = () => {
                 setLoading(false);
             });
     }, [user?.departmentId]);
+
 
     const stats = kpis ? [
         { title: 'SLA Compliance', value: `${kpis.slaCompliance}%`, color: 'green', icon: CheckCircle },
@@ -94,10 +97,10 @@ const AuthorityDashboard = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {issues.slice(0, 5).map((issue) => (
-                                <tr key={issue.report_id} className={`transition-all duration-200 group ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}>
+                                <tr key={issue.id} className={`transition-all duration-200 group ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}>
                                     <td className="px-6 py-4">
                                         <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{issue.category}</p>
-                                        <p className="text-xs text-gray-500 truncate max-w-xs">{issue.report_id}</p>
+                                        <p className="text-xs text-gray-500 truncate max-w-xs">{issue.id?.slice(0, 8)}</p>
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 text-[10px] font-bold rounded-full border ${issue.status === 'Resolved' ? 'bg-green-100 text-green-700 border-green-200' :
@@ -112,7 +115,7 @@ const AuthorityDashboard = () => {
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <button
-                                            onClick={() => navigate(`/authority/issues/${issue.report_id}`)}
+                                            onClick={() => navigate(`/authority/issues/${issue.id}`)}
                                             className="text-gray-900 bg-gray-100 hover:bg-gray-200 dark:text-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-xs font-bold transition-all opacity-0 group-hover:opacity-100"
                                         >
                                             Take Action

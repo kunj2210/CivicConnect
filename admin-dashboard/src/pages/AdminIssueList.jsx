@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Filter, Search, Eye, Trash2, Download, CheckCircle, ChevronDown } from 'lucide-react';
+import { api } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+import { Zap, Map as MapIcon } from 'lucide-react';
+
+
 
 const StatusDropdown = ({ currentStatus, onUpdate, darkMode, getStatusColor }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -47,25 +52,36 @@ const StatusDropdown = ({ currentStatus, onUpdate, darkMode, getStatusColor }) =
 
 const AdminIssueList = () => {
     const { darkMode } = useOutletContext();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const [filterStatus, setFilterStatus] = useState('All');
+    const [filterCategory, setFilterCategory] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    const isSuperAdmin = user?.role === 'super_admin';
+    const isAuthority = user?.role === 'authority';
+    const isStaff = user?.role === 'staff';
+
     useEffect(() => {
-        fetch('http://localhost:5000/api/reports')
-            .then(res => res.json())
+        const params = {};
+        if (isAuthority) params.ward_id = user.ward_id;
+        if (isStaff) params.assigned_staff_id = user.id;
+
+        api.get('/reports', { params })
             .then(data => {
                 setIssues(data.map(i => ({
-                    id: i.report_id,
+                    id: i.id,
                     title: i.category,
                     description: i.location && i.location.coordinates
                         ? `Reported at ${i.location.coordinates[1]}, ${i.location.coordinates[0]}`
                         : 'Location unavailable',
                     category: i.category,
-                    status: (i.status === 'Submitted' || !i.status) ? 'Pending' : i.status,
-                    date: i.timestamp ? new Date(i.timestamp).toLocaleDateString() : 'Unknown'
+                    status: i.status,
+                    ward_id: i.ward_id,
+                    assigned_staff_id: i.assigned_staff_id,
+                    date: (i.createdAt || i.timestamp || i.reported_at) ? new Date(i.createdAt || i.timestamp || i.reported_at).toLocaleDateString() : 'Unknown'
                 })));
                 setLoading(false);
             })
@@ -73,14 +89,20 @@ const AdminIssueList = () => {
                 console.error('Error fetching admin issues:', err);
                 setLoading(false);
             });
-    }, []);
+    }, [user?.id, user?.role, user?.ward_id]);
+
+
 
     const filteredIssues = issues.filter(issue => {
         const matchesStatus = filterStatus === 'All' || issue.status === filterStatus;
+        const matchesCategory = filterCategory === 'All' || issue.category === filterCategory;
         const matchesSearch = issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
             issue.category.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchesStatus && matchesSearch;
+        return matchesStatus && matchesCategory && matchesSearch;
     });
+
+    const categories = ['All', ...new Set(issues.map(i => i.category))];
+
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -117,40 +139,39 @@ const AdminIssueList = () => {
 
     const handleUpdateStatus = async (id, newStatus) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
-            });
-            if (response.ok) {
-                setIssues(issues.map(issue =>
-                    issue.id === id ? { ...issue, status: newStatus } : issue
-                ));
-            }
+            await api.patch(`/reports/${id}`, { status: newStatus });
+            setIssues(issues.map(issue =>
+                issue.id === id ? { ...issue, status: newStatus } : issue
+            ));
         } catch (err) {
             alert('Update failed: ' + err.message);
         }
     };
 
+
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this report?')) return;
         try {
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`, { method: 'DELETE' });
-            if (response.ok) {
-                setIssues(issues.filter(issue => issue.id !== id));
-            }
+            await api.delete(`/reports/${id}`);
+            setIssues(issues.filter(issue => issue.id !== id));
         } catch (err) {
             alert('Delete failed: ' + err.message);
         }
     };
 
+
     return (
         <div className="space-y-8 animate-fade-in-up">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
-                    <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Admin Issue Control</h1>
-                    <p className={`mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Global oversight of municipal complaints.</p>
+                    <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {isSuperAdmin ? 'Global Control Center' : isAuthority ? 'Ward Command' : 'My Tasks'}
+                    </h1>
+                    <p className={`mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {isSuperAdmin ? 'Full oversight of city-wide municipal health.' : `Managing issues for ${user?.ward?.name || 'Assigned Area'}`}
+                    </p>
                 </div>
+
 
                 <div className="flex items-center gap-3">
                     <button
@@ -176,6 +197,17 @@ const AdminIssueList = () => {
                         <div className="relative">
                             <select
                                 className={`pl-4 pr-10 py-2 text-sm border-none rounded-md appearance-none focus:ring-1 focus:ring-gray-400 outline-none cursor-pointer font-bold ${darkMode ? 'bg-gray-900 text-gray-200' : 'bg-white text-gray-800'}`}
+                                value={filterCategory}
+                                onChange={(e) => setFilterCategory(e.target.value)}
+                            >
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <MapIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                        </div>
+
+                        <div className="relative">
+                            <select
+                                className={`pl-4 pr-10 py-2 text-sm border-none rounded-md appearance-none focus:ring-1 focus:ring-gray-400 outline-none cursor-pointer font-bold ${darkMode ? 'bg-gray-900 text-gray-200' : 'bg-white text-gray-800'}`}
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
                             >
@@ -187,6 +219,7 @@ const AdminIssueList = () => {
                             <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
                         </div>
                     </div>
+
                 </div>
             </div>
 

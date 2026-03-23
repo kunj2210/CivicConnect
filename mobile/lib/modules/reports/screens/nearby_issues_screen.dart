@@ -32,23 +32,29 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
   }
 
   Future<void> _fetchNearbyReports() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
+
     try {
       // 1. Get current location
       final locationData = await _locationService.getCurrentLocation();
       if (locationData == null) {
-        setState(() {
-          _error = 'Could not get your location. Please ensure location services are enabled and permissions are granted.';
-          _isLoading = false;
-        });
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not get your location. Please ensure location services are enabled and permissions are granted.';
+        _isLoading = false;
+      });
+
         return;
       }
 
+      if (!mounted) return;
       setState(() => _currentLocation = locationData);
+
 
       // 2. Fetch nearby reports from backend
       final url = Uri.parse('${ApiConfig.nearbyReportsUrl}'
@@ -85,30 +91,38 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
           }
         }
         
+        if (!mounted) return;
         setState(() {
           _nearbyReports = processedReports;
           _isLoading = false;
           _updateMarkers();
         });
+
       } else {
+        if (!mounted) return;
         setState(() {
           _error = 'Failed to load reports from server.';
           _isLoading = false;
         });
+
       }
     } catch (e) {
       debugPrint('Error fetching nearby reports: $e');
+      if (!mounted) return;
       setState(() {
         _error = 'An error occurred while fetching reports.';
         _isLoading = false;
       });
+
     }
   }
 
   void _updateMarkers() {
     debugPrint('Updating markers for ${_nearbyReports.length} reports');
     // Markers are now built directly in the widget tree for better flexibility
+    if (!mounted) return;
     setState(() {});
+
   }
 
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -275,8 +289,9 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ReportDetailScreen(reportId: report['report_id']),
+                        builder: (context) => ReportDetailScreen(reportId: report['id']),
                       ),
+
                     );
                   },
                   icon: const Icon(Icons.remove_red_eye_outlined),
@@ -311,8 +326,9 @@ class _NearbyReportListItem extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => ReportDetailScreen(reportId: report['report_id'])),
+        MaterialPageRoute(builder: (context) => ReportDetailScreen(reportId: report['id'])),
       ),
+
       child: Container(
         decoration: BoxDecoration(
           color: theme.cardColor,

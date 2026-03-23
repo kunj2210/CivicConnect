@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:hive_flutter/hive_flutter.dart';
 import 'modules/auth/screens/login_screen.dart';
 import 'modules/auth/screens/signup_screen.dart';
@@ -16,7 +16,8 @@ import 'shared/providers/theme_provider.dart';
 import 'shared/providers/navigation_provider.dart';
 import 'modules/reports/services/notification_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'firebase_options.dart';
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,13 +29,13 @@ void main() async {
 
   SyncService.initialize();
 
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint("Firebase initialization error: $e");
-  }
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: dotenv.get('SUPABASE_URL'),
+    anonKey: dotenv.get('SUPABASE_ANON_KEY'),
+  );
+
+
   runApp(
     MultiProvider(
       providers: [
@@ -121,18 +122,20 @@ class _MyAppState extends State<MyApp> {
           fillColor: Colors.grey[900],
         ),
       ),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
+      home: StreamBuilder<AuthState>(
+        stream: Supabase.instance.client.auth.onAuthStateChange,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(body: Center(child: CircularProgressIndicator()));
           }
-          if (snapshot.hasData) {
+          final session = snapshot.data?.session;
+          if (session != null) {
             return const MainNavigationScreen();
           }
           return const LoginScreen();
         },
       ),
+
       routes: {
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignUpScreen(),

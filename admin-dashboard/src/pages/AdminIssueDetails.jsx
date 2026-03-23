@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { ArrowLeft, Trash2, CheckCircle, Clock, AlertCircle, MapPin, User, Calendar, Tag, FileText, Mic, Globe, Zap } from 'lucide-react';
+import { api } from '../utils/api';
+
 
 const AdminIssueDetails = () => {
     const { id } = useParams();
@@ -12,7 +14,11 @@ const AdminIssueDetails = () => {
     const [departments, setDepartments] = useState([]);
     const [remarks, setRemarks] = useState('');
     const [updatingDeps, setUpdatingDeps] = useState(false);
+    const [updatingCategory, setUpdatingCategory] = useState(false);
     const [auditLogs, setAuditLogs] = useState([]);
+    const [staffMembers, setStaffMembers] = useState([]);
+    const [loadingStaff, setLoadingStaff] = useState(false);
+
 
     useEffect(() => {
         fetchReport();
@@ -20,36 +26,52 @@ const AdminIssueDetails = () => {
         fetchAuditLogs();
     }, [id]);
 
+    useEffect(() => {
+        if (report?.ward_id) {
+            fetchStaff(report.ward_id, report.assigned_department_id);
+        }
+    }, [report?.ward_id, report?.assigned_department_id]);
+
+
     const fetchDepartments = async () => {
         try {
-            const response = await fetch('http://localhost:5000/api/departments');
-            if (response.ok) {
-                const data = await response.json();
-                setDepartments(data);
-            }
+            const data = await api.get('/departments');
+            setDepartments(data);
         } catch (err) {
             console.error('Failed to fetch departments:', err);
         }
     };
 
+
     const fetchAuditLogs = async () => {
         try {
-            const response = await fetch(`http://localhost:5000/api/reports/${id}/audit`);
-            if (response.ok) {
-                const data = await response.json();
-                setAuditLogs(data);
-            }
+            const data = await api.get(`/reports/${id}/audit`);
+            setAuditLogs(data);
         } catch (err) {
             console.error('Failed to fetch audit logs:', err);
         }
     };
 
+    const fetchStaff = async (wardId, deptId) => {
+        try {
+            setLoadingStaff(true);
+            const data = await api.get('/users/staff', { 
+                params: { ward_id: wardId, department_id: deptId } 
+            });
+            setStaffMembers(data);
+        } catch (err) {
+            console.error('Failed to fetch staff:', err);
+        } finally {
+            setLoadingStaff(false);
+        }
+    };
+
+
+
     const fetchReport = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`);
-            if (!response.ok) throw new Error('Failed to fetch report details');
-            const data = await response.json();
+            const data = await api.get(`/reports/${id}`);
             if (data.status === 'Submitted' || !data.status) data.status = 'Pending';
             setReport(data);
             setRemarks(data.remarks || '');
@@ -60,32 +82,22 @@ const AdminIssueDetails = () => {
         }
     };
 
+
     const handleUpdateStatus = async (newStatus) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus, remarks }),
-            });
-            if (response.ok) {
-                fetchReport();
-            }
+            await api.patch(`/reports/${id}`, { status: newStatus, remarks });
+            fetchReport();
         } catch (err) {
             alert('Update failed: ' + err.message);
         }
     };
 
+
     const handleReassign = async (deptId) => {
         try {
             setUpdatingDeps(true);
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ assigned_department_id: parseInt(deptId) }),
-            });
-            if (response.ok) {
-                fetchReport();
-            }
+            await api.patch(`/reports/${id}`, { assigned_department_id: deptId ? parseInt(deptId) : null });
+            fetchReport();
         } catch (err) {
             alert('Reassignment failed: ' + err.message);
         } finally {
@@ -93,17 +105,43 @@ const AdminIssueDetails = () => {
         }
     };
 
+    const handleAssignStaff = async (staffId) => {
+        try {
+            setLoadingStaff(true);
+            await api.patch(`/reports/${id}`, { assigned_staff_id: staffId || null });
+            fetchReport();
+        } catch (err) {
+            alert('Staff assignment failed: ' + err.message);
+        } finally {
+            setLoadingStaff(false);
+        }
+    };
+
+    const handleCategoryChange = async (newCategory) => {
+        if (!window.confirm(`Are you sure you want to change this category to ${newCategory}? This will train the AI.`)) return;
+        try {
+            setUpdatingCategory(true);
+            await api.patch(`/reports/${id}`, { category: newCategory });
+            fetchReport();
+        } catch (err) {
+            alert('Category update failed: ' + err.message);
+        } finally {
+            setUpdatingCategory(false);
+        }
+    };
+
+
+
     const handleDelete = async () => {
         if (!window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) return;
         try {
-            const response = await fetch(`http://localhost:5000/api/reports/${id}`, { method: 'DELETE' });
-            if (response.ok) {
-                navigate('/admin/issues');
-            }
+            await api.delete(`/reports/${id}`);
+            navigate('/admin/issues');
         } catch (err) {
             alert('Delete failed: ' + err.message);
         }
     };
+
 
     if (loading) return <div className={`p-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading issue details...</div>;
     if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
@@ -149,13 +187,12 @@ const AdminIssueDetails = () => {
                         </div>
                         <div className={`p-1 min-h-[300px] flex items-center justify-center rounded-xl ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
                             <img
-                                src={report.metadata?.image_url?.startsWith('/uploads')
-                                    ? `http://localhost:5000${report.metadata.image_url}`
-                                    : report.metadata?.image_url || 'https://via.placeholder.com/800x600'}
+                                src={report.minio_pre_key || 'https://via.placeholder.com/800x600'}
                                 alt="Report Evidence"
                                 className="w-full aspect-video object-cover rounded-xl shadow-inner"
                             />
                         </div>
+
                     </div>
 
                     {(report.status === 'Pending Confirmation' || report.status === 'Resolved') && report.metadata?.resolution_image_url && (
@@ -180,95 +217,139 @@ const AdminIssueDetails = () => {
                     )}
 
                     <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
-                        <h2 className={`font-bold flex items-center mb-2 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                            <Tag className="w-5 h-5 mr-2 text-blue-500" />
-                            Case Description
-                        </h2>
-                        <p className={`leading-relaxed text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {report.metadata?.description || 'No description provided.'}
-                        </p>
-                    </div>
-
-                    {/* AI Insights Section */}
-                    {(report.metadata?.transcription || report.metadata?.ai_insights) && (
-                        <div className={`rounded-2xl shadow-sm border p-6 space-y-6 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
-                            <h2 className={`font-bold flex items-center border-b pb-4 ${darkMode ? 'text-gray-200 border-white/5' : 'text-gray-800'}`}>
-                                <Zap className="w-5 h-5 mr-2 text-amber-500" />
-                                AI-Powered Insights
+                        <div className="flex items-center justify-between pointer-events-auto">
+                             <h2 className={`font-bold flex items-center ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                <Tag className="w-5 h-5 mr-2 text-blue-500" />
+                                Case Category
                             </h2>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {report.metadata?.ai_insights && (
-                                    <div className={`p-4 rounded-xl ${darkMode ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
-                                        <p className="text-xs font-bold uppercase text-amber-600 mb-1">AI Priority Score</p>
-                                        <div className="flex items-center space-x-2">
-                                            <span className="text-2xl font-black text-amber-700">{report.metadata.ai_insights.urgency_score}</span>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${darkMode ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-200 text-amber-800'}`}>
-                                                {report.metadata.ai_insights.urgency_label}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
-                                {report.metadata?.ai_insights?.suggested_category && (
-                                    <div className={`p-4 rounded-xl ${darkMode ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
-                                        <p className="text-xs font-bold uppercase text-blue-600 mb-1">Suggested Category</p>
-                                        <p className="text-lg font-bold text-blue-700">{report.metadata.ai_insights.suggested_category}</p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {report.metadata?.audio_url && (
-                                <div className={`p-4 rounded-xl border ${darkMode ? 'bg-gray-900/50 border-white/5' : 'bg-gray-50 border-gray-100'}`}>
-                                    <div className="flex items-center mb-3">
-                                        <Mic className="w-4 h-4 mr-2 text-red-500" />
-                                        <span className="text-xs font-bold text-gray-500 uppercase">Voice Complaint Record</span>
-                                    </div>
-                                    <audio
-                                        controls
-                                        src={report.metadata.audio_url.startsWith('/uploads')
-                                            ? `http://localhost:5000${report.metadata.audio_url}`
-                                            : report.metadata.audio_url}
-                                        className="w-full h-10"
-                                    />
-                                </div>
-                            )}
-
-                            {report.metadata?.transcription && (
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                            <Mic className="w-3 h-3 mr-1" /> Original Transcription
-                                        </div>
-                                        <p className={`p-4 rounded-xl italic ${darkMode ? 'bg-white/5 text-gray-300' : 'bg-gray-50 text-gray-700'}`}>
-                                            "{report.metadata.transcription}"
-                                        </p>
-                                    </div>
-
-                                    {report.metadata?.translation && report.metadata.translation !== report.metadata.transcription && (
-                                        <div className="space-y-2">
-                                            <div className="flex items-center text-xs font-bold text-emerald-600 uppercase tracking-wider">
-                                                <Globe className="w-3 h-3 mr-1" /> English Translation
-                                            </div>
-                                            <p className={`p-4 rounded-xl font-medium ${darkMode ? 'bg-emerald-500/10 text-emerald-100' : 'bg-emerald-50 text-emerald-900'}`}>
-                                                {report.metadata.translation}
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {report.metadata?.ai_insights?.summary && (
-                                        <div className="space-y-2">
-                                            <div className="flex items-center text-xs font-bold text-blue-600 uppercase tracking-wider">
-                                                <Zap className="w-3 h-3 mr-1" /> AI Brief
-                                            </div>
-                                            <p className={`p-4 rounded-xl font-bold bg-blue-500/5 border border-blue-500/20 ${darkMode ? 'text-blue-200' : 'text-blue-900'}`}>
-                                                {report.metadata.ai_insights.summary}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                            {updatingCategory ? (
+                                <span className="text-sm animate-pulse text-blue-500 font-bold">Logging to Retraining Queue...</span>
+                            ) : (
+                                <select
+                                    value={report.category || ''}
+                                    onChange={(e) => handleCategoryChange(e.target.value)}
+                                    className={`text-lg font-bold bg-transparent border-none outline-none focus:ring-0 p-0 cursor-pointer ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}
+                                >
+                                    {['Road/Potholes', 'Waste Management', 'Street Light', 'Water Leakage', 'Drainage', 'Other'].map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
                             )}
                         </div>
-                    )}
+                        <p className={`text-xs italic ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>* Editing this logs the original AI prediction into the Retraining Queue.</p>
+                    </div>
+
+
+                    {/* Multimodal AI Fusion Section */}
+                    <div className={`rounded-2xl shadow-sm border p-6 space-y-6 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between border-b pb-4">
+                            <h2 className={`font-bold flex items-center ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                <Zap className="w-5 h-5 mr-2 text-amber-500" />
+                                Multimodal Data Fusion Analysis
+                            </h2>
+                            {report.needs_human_review && (
+                                <span className="flex items-center px-3 py-1 bg-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-full animate-pulse border border-red-500/30">
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                    High Conflict - Manual Review Required
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Winning Fusion Result */}
+                        <div className={`p-5 rounded-2xl border-2 ${report.needs_human_review ? 'border-red-500/20 bg-red-500/5' : 'border-blue-500/20 bg-blue-500/5'}`}>
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-gray-500 mb-1 tracking-widest">Final Fused Verdict</p>
+                                    <h3 className={`text-3xl font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{report.fusion_final_category || 'Calculating...'}</h3>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-black uppercase text-gray-500 mb-1">Aggregated Confidence</p>
+                                    <span className="text-3xl font-black text-blue-500">{(report.fusion_confidence_score * 100).toFixed(1)}%</span>
+                                </div>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full transition-all duration-1000 ${report.needs_human_review ? 'bg-red-500' : 'bg-blue-500'}`}
+                                    style={{ width: `${report.fusion_confidence_score * 100}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Modal Confidence Matrix */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Image Modality (Top 3) */}
+                            <div className="space-y-4">
+                                <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <FileText className="w-3 h-3 mr-1 text-blue-500" /> Image Preds (50% Weight)
+                                </div>
+                                <div className="space-y-3">
+                                    {(report.ai_image_top3 || []).map((p, i) => (
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category || p.label || p.name || 'Unknown'}</span>
+                                                <span className="text-blue-500">{((Number(p.confidence || p.score || p.probability) || 0) * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-blue-500/50 h-full" style={{ width: `${(Number(p.confidence) || 0) * 100}%` }} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Text Modality (Top 3) */}
+                            <div className="space-y-4">
+                                <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <Mic className="w-3 h-3 mr-1 text-emerald-500" /> Text Analysis (20% Weight)
+                                </div>
+                                <div className="space-y-3">
+                                    {(report.ai_text_top3 || []).map((p, i) => (
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category || p.label || p.name || 'Unknown'}</span>
+                                                <span className="text-emerald-500">{((Number(p.confidence || p.score || p.probability) || 0) * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${(Number(p.confidence) || 0) * 100}%` }} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Audio Modality (Top 3) */}
+                            <div className="space-y-4">
+                                <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <Mic className="w-3 h-3 mr-1 text-purple-500" /> Audio Mood (30% Weight)
+                                </div>
+                                <div className="space-y-3">
+                                    {(report.ai_audio_top3 || []).length > 0 ? (report.ai_audio_top3.map((p, i) => (
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category || p.label || p.name || 'Unknown'}</span>
+                                                <span className="text-purple-500">{((Number(p.confidence || p.score || p.probability) || 0) * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-purple-500/50 h-full" style={{ width: `${(Number(p.confidence) || 0) * 100}%` }} />
+                                            </div>
+                                        </div>
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No audio data processed</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {report.description && (
+                            <div className={`p-4 rounded-xl border ${darkMode ? 'bg-black/20 border-white/5 text-gray-400' : 'bg-gray-50 border-gray-100 text-gray-600'}`}>
+                                <p className="text-[10px] font-black uppercase text-gray-400 mb-2">Original Citizen Description</p>
+                                <p className="text-sm italic">"{report.description}"</p>
+                            </div>
+                        )}
+                    </div>
+
 
                     <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
                         <h2 className={`font-bold flex items-center mb-2 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -346,13 +427,14 @@ const AdminIssueDetails = () => {
                                     <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>+{report.metadata?.citizen_phone || 'Anonymous'}</p>
                                 </div>
                             </div>
-                            <div className="flex items-start space-x-3">
+                             <div className="flex items-start space-x-3">
                                 <Calendar className="w-5 h-5 text-gray-400 shrink-0" />
                                 <div>
-                                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Lodged At</p>
-                                    <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{new Date(report.timestamp).toLocaleString()}</p>
+                                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Reported At</p>
+                                    <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{new Date(report.createdAt || report.reported_at || report.timestamp).toLocaleString()}</p>
                                 </div>
                             </div>
+
                             <div className="flex items-start space-x-3">
                                 <AlertCircle className="w-5 h-5 text-emerald-500 shrink-0" />
                                 <div className="flex-1">
@@ -376,6 +458,31 @@ const AdminIssueDetails = () => {
                                     <p className="text-[10px] text-gray-500 mt-1 italic">Automatically routed by GIS logic</p>
                                 </div>
                             </div>
+
+                            <div className="flex items-start space-x-3">
+                                <Zap className="w-5 h-5 text-amber-500 shrink-0" />
+                                <div className="flex-1">
+                                    <p className="text-xs text-amber-600 uppercase font-bold tracking-wider">Assigned Field Worker</p>
+                                    <div className="flex items-center justify-between mt-1">
+                                        {loadingStaff ? (
+                                            <span className="text-sm animate-pulse text-gray-500 font-bold">Loading...</span>
+                                        ) : (
+                                            <select
+                                                value={report.assigned_staff_id || ''}
+                                                onChange={(e) => handleAssignStaff(e.target.value)}
+                                                className={`text-sm font-bold bg-transparent border-none outline-none focus:ring-0 p-0 cursor-pointer ${darkMode ? 'text-amber-400' : 'text-amber-700'}`}
+                                            >
+                                                <option value="">Unassigned</option>
+                                                {staffMembers.map(staff => (
+                                                    <option key={staff.id} value={staff.id}>{staff.phone || staff.email || 'Worker'}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 mt-1 italic">Manual delegation for resolution</p>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 
@@ -386,20 +493,21 @@ const AdminIssueDetails = () => {
                         </h2>
                         <div className="space-y-4">
                             {auditLogs.length > 0 ? (
-                                auditLogs.map((log, idx) => (
-                                    <div key={log.audit_id || idx} className={`flex items-start space-x-3 p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-gray-50'}`}>
+                                 auditLogs.map((log, idx) => (
+                                    <div key={log.id || idx} className={`flex items-start space-x-3 p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-gray-50'}`}>
                                         <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${idx === 0 ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'}`} />
                                         <div className="flex-1 space-y-1">
                                             <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                                                {log.lifecycle_state_change}
+                                                {log.event_type}
                                             </p>
                                             <div className="flex justify-between items-center text-[10px] text-gray-500">
-                                                <span>Actor: {log.initiating_actor_id}</span>
-                                                <span>{new Date(log.timestamp).toLocaleString()}</span>
+                                                <span>Actor: {log.actor_id?.slice(0, 8)}...</span>
+                                                <span>{new Date(log.createdAt || log.ts).toLocaleString()}</span>
                                             </div>
                                         </div>
                                     </div>
                                 ))
+
                             ) : (
                                 <p className="text-sm text-gray-500 italic">No audit records found for this case.</p>
                             )}

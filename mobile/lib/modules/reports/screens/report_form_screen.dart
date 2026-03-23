@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:hive/hive.dart';
 import '../../../config/api_config.dart';
 import '../services/location_service.dart';
@@ -165,21 +165,24 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
     } else if (_imageBytes != null) {
       // If we're running on web, we only have bytes.
       filename = _pickedImage?.name ?? 'image.jpg';
+      if (!filename.contains('.')) {
+        filename = '$filename.jpg';
+      }
     }
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      String identifier = (user?.phoneNumber != null && user!.phoneNumber!.isNotEmpty)
-          ? user.phoneNumber!
-          : (user?.email != null && user!.email!.isNotEmpty)
-              ? user.email!
-              : (user?.uid ?? 'anonymous');
+      final user = Supabase.instance.client.auth.currentUser;
+      String identifier = user?.phone ?? user?.email ?? user?.id ?? 'anonymous';
+
 
       var request = http.MultipartRequest(
         'POST',
         Uri.parse(ApiConfig.reportsUrl),
       );
+      request.headers.addAll(ApiConfig.getHeaders(includeContentType: false));
+
       request.fields['category'] = _category!;
+
       request.fields['description'] = _descriptionController.text;
       request.fields['latitude'] = _location!['latitude'].toString();
       request.fields['longitude'] = _location!['longitude'].toString();
@@ -212,7 +215,8 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
       }
 
 
-      var response = await request.send().timeout(const Duration(seconds: 30));
+      var response = await request.send().timeout(const Duration(seconds: 60));
+
 
       if (response.statusCode == 201) {
         if (!mounted) return;
@@ -233,8 +237,9 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
       
       try {
         final box = Hive.box<ReportDraft>('report_drafts');
-        final user = FirebaseAuth.instance.currentUser;
-        final identifier = user?.phoneNumber ?? user?.email ?? user?.uid ?? 'anonymous';
+        final user = Supabase.instance.client.auth.currentUser;
+        final identifier = user?.phone ?? user?.email ?? user?.id ?? 'anonymous';
+
         
         final draft = ReportDraft(
           category: _category!,
@@ -311,9 +316,14 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
                           image: FileImage(_image!),
                           fit: BoxFit.cover,
                         )
-                      : null,
+                      : _imageBytes != null
+                          ? DecorationImage(
+                              image: MemoryImage(_imageBytes!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                 ),
-                child: _image == null
+                child: (_image == null && _imageBytes == null)
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

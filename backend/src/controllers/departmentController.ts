@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { Department } from '../models/Department.js';
+import { Department } from '../config/db.js';
 
 export const getDepartments = async (_req: Request, res: Response) => {
     try {
@@ -13,7 +13,7 @@ export const getDepartments = async (_req: Request, res: Response) => {
 export const getDepartmentById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const dept = await Department.findByPk(id as any);
+        const dept = await Department.findByPk(id as string);
         if (!dept) return res.status(404).json({ error: 'Department not found' });
         res.json(dept);
     } catch (error: any) {
@@ -23,13 +23,10 @@ export const getDepartmentById = async (req: Request, res: Response) => {
 
 export const createDepartment = async (req: Request, res: Response) => {
     try {
-        const { name, head, staff_count, status, handled_categories } = req.body;
+        const { name, contact_email } = req.body;
         const dept = await Department.create({
             name,
-            head,
-            staff_count,
-            status,
-            handled_categories: handled_categories || []
+            contact_email
         });
         res.status(201).json(dept);
     } catch (error: any) {
@@ -40,15 +37,12 @@ export const createDepartment = async (req: Request, res: Response) => {
 export const updateDepartment = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, head, staff_count, status, handled_categories } = req.body;
-        const dept = await Department.findByPk(id as any);
+        const { name, contact_email } = req.body;
+        const dept = await Department.findByPk(id as string);
         if (!dept) return res.status(404).json({ error: 'Department not found' });
 
         if (name) dept.name = name;
-        if (head) dept.head = head;
-        if (staff_count !== undefined) dept.staff_count = staff_count;
-        if (status) dept.status = status;
-        if (handled_categories) dept.handled_categories = handled_categories;
+        if (contact_email) dept.contact_email = contact_email;
 
         await dept.save();
         res.json(dept);
@@ -67,3 +61,4 @@ export const deleteDepartment = async (req: Request, res: Response) => {
         res.status(500).json({ error: error.message });
     }
 };
+

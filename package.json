@@ -7,9 +7,13 @@
     "dev:dashboard": "npm --prefix admin-dashboard run dev",
     "dev:mobile-chrome": "cd mobile && flutter run -d chrome",
     "dev:mobile-android": "cd mobile && flutter run -d CPH2381",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:dashboard\" \"npm run dev:mobile\"",
+    "dev:ai-service": "cd ai_service && .\\venv\\Scripts\\activate && python main.py",
+    "dev": "concurrently --kill-others --names \"BACKEND,ADMIN,AI,MOBILE\" --prefix \"[{name}]\" --prefix-colors \"blue,green,magenta,cyan\" \"npm run dev:backend\" \"npm run dev:dashboard\" \"npm run dev:ai-service\"",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix admin-dashboard install && cd mobile && flutter pub get && cd ../ai_service && python -m venv venv && .\\venv\\Scripts\\activate && pip install -r requirements.txt",
     "analyze:mobile": "cd mobile && flutter analyze",
-    "seed:users": "npm --prefix backend run seed:users"
+    "seed:users": "npm --prefix backend run seed:users",
+    "build:backend": "npm --prefix backend run build",
+    "build:dashboard": "npm --prefix admin-dashboard run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.0"

@@ -1,21 +1,88 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import { DataTypes, Model } from 'sequelize';
+import { sequelize } from '../config/database.js';
 
-export interface IUser extends Document {
-    name: string;
-    email: string;
-    password: string;
-    role: 'Admin' | 'Authority';
-    departmentId?: number; // Maps to PostgreSQL Department ID
-    createdAt: Date;
+export class User extends Model {
+    declare id: string;
+    declare phone: string | null;
+    declare email: string | null;
+    declare green_credits: number;
+    declare ward_id: string | null;
+    declare role: string;
+    declare department_id: number | null;
+    declare is_active: boolean;
+    declare home_location: any;
+    declare alert_radius_meters: number;
+    declare achievements: any;
 }
 
-const UserSchema: Schema = new Schema({
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    role: { type: String, enum: ['Admin', 'Authority'], required: true },
-    departmentId: { type: Number, required: false },
-    createdAt: { type: Date, default: Date.now }
+
+
+
+
+User.init({
+    id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false
+    },
+    phone: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+    },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+    },
+
+
+    green_credits: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+    },
+    ward_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'wards',
+            key: 'id',
+        },
+    },
+    role: {
+        type: DataTypes.ENUM('citizen', 'staff', 'authority', 'admin', 'super_admin'),
+        defaultValue: 'citizen',
+    },
+    department_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'departments',
+            key: 'id',
+        },
+    },
+    is_active: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+    },
+    home_location: {
+        type: DataTypes.GEOMETRY('POINT', 4326),
+        allowNull: true,
+    },
+    alert_radius_meters: {
+        type: DataTypes.INTEGER,
+        defaultValue: 2000,
+    },
+    achievements: {
+        type: DataTypes.JSONB,
+        defaultValue: [], // Array of { badgeId, awardedAt }
+    },
+}, {
+
+
+
+    sequelize,
+    tableName: 'users',
+    timestamps: true,
 });
 
-export default mongoose.model<IUser>('User', UserSchema);

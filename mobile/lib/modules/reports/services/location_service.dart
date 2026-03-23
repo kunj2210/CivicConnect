@@ -5,31 +5,31 @@ import 'package:exif/exif.dart';
 class LocationService {
   final Location _location = Location();
 
-  Future<LocationData?> getCurrentLocation({int timeoutSeconds = 10}) async {
-    bool serviceEnabled;
-    PermissionStatus permissionGranted;
-
-    serviceEnabled = await _location.serviceEnabled();
-    if (!serviceEnabled) {
-      serviceEnabled = await _location.requestService();
-      if (!serviceEnabled) return null;
-    }
-
-    permissionGranted = await _location.hasPermission();
-    if (permissionGranted == PermissionStatus.denied) {
-      permissionGranted = await _location.requestPermission();
-      if (permissionGranted != PermissionStatus.granted) return null;
-    }
-
-    // Phase 1 MVP: Accuracy Thresholding and Timeout
+  Future<LocationData?> getCurrentLocation({int timeoutSeconds = 25}) async {
     try {
+      if (!kIsWeb) {
+        bool serviceEnabled = await _location.serviceEnabled();
+        if (!serviceEnabled) {
+          serviceEnabled = await _location.requestService();
+          if (!serviceEnabled) return null;
+        }
+
+        PermissionStatus permissionGranted = await _location.hasPermission();
+        if (permissionGranted == PermissionStatus.denied) {
+          permissionGranted = await _location.requestPermission();
+          if (permissionGranted != PermissionStatus.granted) return null;
+        }
+      }
+
+      // Phase 1 MVP: Accuracy Thresholding and Timeout
       final locData = await _location.getLocation().timeout(Duration(seconds: timeoutSeconds));
-      if (locData.accuracy != null && locData.accuracy! <= 20.0) {
+      if (kIsWeb || (locData.accuracy != null && locData.accuracy! <= 100.0)) {
         return locData;
       } else {
-        debugPrint("Location accuracy (${locData.accuracy}) exceeds 20m threshold. Rejecting.");
+        debugPrint("Location accuracy (${locData.accuracy}) exceeds 100m threshold. Rejecting.");
         return null; // Triggers UI fallback
       }
+
     } catch (e) {
       debugPrint("Location acquisition timed out or failed: $e");
       return null;
@@ -40,17 +40,22 @@ class LocationService {
   ///
   /// This avoids using `dart:io` (File) on web, where dart:io file operations are unsupported.
   Future<Map<String, double>?> getExifLocation(Uint8List imageBytes) async {
-    final data = await readExifFromBytes(imageBytes);
+    try {
+      final data = await readExifFromBytes(imageBytes);
 
-    if (data.isEmpty) return null;
+      if (data.isEmpty) return null;
 
-    final lat = _extractCoordinate(data['GPS GPSLatitude'], data['GPS GPSLatitudeRef']);
-    final lon = _extractCoordinate(data['GPS GPSLongitude'], data['GPS GPSLongitudeRef']);
+      final lat = _extractCoordinate(data['GPS GPSLatitude'], data['GPS GPSLatitudeRef']);
+      final lon = _extractCoordinate(data['GPS GPSLongitude'], data['GPS GPSLongitudeRef']);
 
-    if (lat != null && lon != null) {
-      return {'latitude': lat, 'longitude': lon};
+      if (lat != null && lon != null) {
+        return {'latitude': lat, 'longitude': lon};
+      }
+      return null;
+    } catch (e) {
+      debugPrint("Error reading EXIF data (often fails on web): $e");
+      return null;
     }
-    return null;
   }
 
   double? _extractCoordinate(IfdTag? tag, IfdTag? ref) {
