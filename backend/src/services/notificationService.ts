@@ -1,53 +1,42 @@
-import admin from '../config/firebase.js';
-import { UserDevice } from '../models/UserDevice.js';
+import { Notification } from '../models/Notification.js';
+import { supabase } from '../config/supabase.js';
 
 export const sendNotificationToUser = async (userId: string, title: string, body: string, data?: any) => {
     try {
-        const devices = await UserDevice.findAll({ where: { user_id: userId } });
-        const tokens = devices
-            .map(d => d.fcm_token)
-            .filter((t): t is string => !!t && typeof t === 'string' && t.trim().length > 0);
+        console.log(`[Notification] Persisting & Sending to user: ${userId} - ${title}: ${body}`);
+        
+        // 1. Persist to Database (Supabase Realtime will pick this up if enabled on the table)
+        await Notification.create({
+            user_id: userId,
+            title,
+            body,
+            data
+        });
 
-        console.log(`[FCM] Attempting to send notification to user: ${userId}`);
-        console.log(`[FCM] Found ${tokens.length} tokens for this user.`);
-
-        if (tokens.length === 0) {
-            console.log(`[FCM] SKIP: No FCM tokens found for user: ${userId}`);
-            return;
-        }
-
-        const message = {
-            notification: { title, body },
-            data: data || {},
-            tokens: tokens,
-        };
-
-        const response = await admin.messaging().sendEachForMulticast(message);
-        console.log(`[FCM] Multicast response: ${response.successCount} success, ${response.failureCount} failure`);
-
-        if (response.failureCount > 0) {
-            response.responses.forEach((resp, idx) => {
-                if (!resp.success) {
-                    console.error(`[FCM] Token ${idx} failed:`, resp.error);
-                }
-            });
-        }
+        // 2. Also Broadcast via Supabase Realtime Channel (Optional, for instant UI updates if not using table listeners)
+        await supabase.channel(`notifications:${userId}`).send({
+            type: 'broadcast',
+            event: 'new_notification',
+            payload: { title, body, data, ts: new Date().toISOString() }
+        });
+        
     } catch (error) {
-        console.error('[FCM] CRITICAL: Error sending notification:', error);
+        console.error('[Notification] Error:', error);
     }
 };
 
 export const broadcastNotification = async (topic: string, title: string, body: string, data?: any) => {
     try {
-        const message = {
-            notification: { title, body },
-            data: data || {},
-            topic: topic,
-        };
-
-        const response = await admin.messaging().send(message);
-        console.log('Successfully sent message:', response);
+        console.log(`[Notification] Broadcasting to ${topic}: ${title} - ${body}`);
+        
+        await supabase.channel(`topic:${topic}`).send({
+            type: 'broadcast',
+            event: 'broadcast_notification',
+            payload: { title, body, data, ts: new Date().toISOString() }
+        });
     } catch (error) {
-        console.error('Error broadcasting notification:', error);
+        console.error('[Notification] Error:', error);
     }
 };
+
+
