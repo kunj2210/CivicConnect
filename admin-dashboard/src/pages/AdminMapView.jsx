@@ -1,16 +1,34 @@
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { api } from '../utils/api';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { AlertCircle, Eye, Calendar } from 'lucide-react';
 
 // Status-based icons
-const getIcon = (status, darkMode) => {
+const getIcon = (issue, colorMode, darkMode) => {
     let color = '#3B82F6'; // Default Blue
-    if (status === 'Resolved') color = '#10B981'; // Green
-    if (status === 'In Progress') color = '#F59E0B'; // Amber
-    if (status === 'Pending') color = '#EF4444'; // Red
+
+    if (colorMode === 'Status') {
+        if (issue.status === 'Resolved') color = '#10B981'; // Green
+        if (issue.status === 'In Progress') color = '#F59E0B'; // Amber
+        if (issue.status === 'Pending') color = '#EF4444'; // Red
+    } else if (colorMode === 'Priority') {
+        if (issue.priority_score >= 80) color = '#EF4444';
+        else if (issue.priority_score >= 50) color = '#F59E0B';
+        else color = '#10B981';
+    } else if (colorMode === 'Category') {
+        const catMap = {
+            'Road/Potholes': '#3B82F6',
+            'Waste Management': '#8B5CF6',
+            'Street Light': '#EAB308',
+            'Water Leakage': '#06B6D4',
+            'Drainage': '#14B8A6',
+            'Other': '#64748B'
+        };
+        color = catMap[issue.category] || '#64748B';
+    }
 
     const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="32" height="32">
@@ -36,17 +54,21 @@ const AdminMapView = () => {
     const [center, setCenter] = useState([22.5540, 72.9299]);
     const [statusFilter, setStatusFilter] = useState('All');
     const [jurisdictionFilter, setJurisdictionFilter] = useState('All');
+    const [colorMode, setColorMode] = useState('Status');
 
     // Extract unique jurisdictions
-    const jurisdictions = ['All', ...new Set(issues.filter(i => i.metadata?.jurisdiction).map(i => i.metadata.jurisdiction))];
+    const jurisdictions = ['All', ...new Set(issues.filter(f => f.properties?.metadata?.jurisdiction).map(f => f.properties.metadata.jurisdiction))];
 
     useEffect(() => {
-        fetch('http://localhost:5000/api/reports')
-            .then(res => res.json())
+        api.get('/reports/geojson')
             .then(data => {
-                setIssues(data);
-                if (data.length > 0 && data[0].location) {
-                    setCenter([data[0].location.coordinates[1], data[0].location.coordinates[0]]);
+                if (data && data.type === 'FeatureCollection') {
+                    setIssues(data.features);
+                    if (data.features.length > 0 && data.features[0].geometry) {
+                        setCenter([data.features[0].geometry.coordinates[1], data.features[0].geometry.coordinates[0]]);
+                    }
+                } else {
+                    setIssues([]);
                 }
                 setLoading(false);
             })
@@ -77,6 +99,15 @@ const AdminMapView = () => {
                         <option value="Resolved">Resolved</option>
                     </select>
                     <select
+                        value={colorMode}
+                        onChange={(e) => setColorMode(e.target.value)}
+                        className={`p-2 rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border`}
+                    >
+                        <option value="Status">Color by Status</option>
+                        <option value="Priority">Color by Priority</option>
+                        <option value="Category">Color by Category</option>
+                    </select>
+                    <select
                         value={jurisdictionFilter}
                         onChange={(e) => setJurisdictionFilter(e.target.value)}
                         className={`p-2 rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border`}
@@ -89,23 +120,24 @@ const AdminMapView = () => {
             <div className={`flex-1 overflow-hidden border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
                 <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    {issues.map((issue) => {
-                        if (!issue.location) return null;
+                    {issues.map((feature) => {
+                        if (!feature.geometry || !feature.properties) return null;
+                        const issue = feature.properties;
                         if (statusFilter !== 'All' && issue.status !== statusFilter) return null;
                         if (jurisdictionFilter !== 'All' && issue.metadata?.jurisdiction !== jurisdictionFilter) return null;
-                        const pos = [issue.location.coordinates[1], issue.location.coordinates[0]];
+                        const pos = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
                         return (
                             <Marker
-                                key={issue.report_id}
+                                key={issue.id}
                                 position={pos}
-                                icon={getIcon(issue.status, darkMode)}
+                                icon={getIcon(issue, colorMode, darkMode)}
                             >
                                 <Popup className="custom-popup">
                                     <div className="p-1 min-w-[220px] space-y-3">
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <h3 className="font-bold text-gray-900 text-sm leading-tight">{issue.category}</h3>
-                                                <p className="text-[10px] text-gray-500 mt-0.5">#{issue.report_id.slice(0, 8)}</p>
+                                                <p className="text-[10px] text-gray-500 mt-0.5">#{issue.id?.slice(0, 8)}</p>
                                             </div>
                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${issue.status === 'Resolved' ? 'bg-emerald-100 text-emerald-700' :
                                                 issue.status === 'In Progress' ? 'bg-amber-100 text-amber-700' :
@@ -117,11 +149,11 @@ const AdminMapView = () => {
 
                                         <div className="flex items-center gap-2 text-[11px] text-gray-600 bg-gray-50 p-2 rounded-lg">
                                             <Calendar size={12} className="text-gray-400" />
-                                            {new Date(issue.timestamp).toLocaleDateString()}
+                                            {new Date(issue.createdAt || issue.timestamp).toLocaleDateString()}
                                         </div>
 
                                         <button
-                                            onClick={() => navigate(`/admin/issues/${issue.report_id}`)}
+                                            onClick={() => navigate(`/admin/issues/${issue.id}`)}
                                             className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
                                         >
                                             <Eye size={14} />
