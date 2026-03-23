@@ -3,14 +3,18 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { connectMongo, connectPostgres } from './config/db.js';
+import { connectPostgres } from './config/db.js';
 import { seedUlbBoundaries } from './seed/ulbBoundaries.js';
-import './config/firebase.js'; // Initialize firebase admin
+import { startSpatialDeduplicator } from './cron/deduplicator.js';
+import './config/supabase.js'; // Initialize Supabase
+
 
 import reportRoutes from './routes/reportRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+
 
 dotenv.config();
 
@@ -19,6 +23,7 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
 
 // Serve local uploads
 const __filename = fileURLToPath(import.meta.url);
@@ -29,6 +34,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+
 
 app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -37,7 +44,7 @@ app.get('/health', (req: Request, res: Response) => {
 const startServer = async () => {
     await connectPostgres();
     await seedUlbBoundaries();
-    await connectMongo();
+    startSpatialDeduplicator();
 
     app.listen(Number(PORT), '0.0.0.0', () => {
         console.log(`Server is running on http://0.0.0.0:${PORT}`);
@@ -49,8 +56,10 @@ startServer().catch(err => {
     process.exit(1);
 });
 
+
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: any) => {
     console.error('Global Error:', err);
     res.status(500).json({ error: err.message || 'Internal Server Error', stack: err.stack });
 });
+
