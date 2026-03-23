@@ -1,121 +1,138 @@
 # CivicConnect 🏙️
 
-**CivicConnect** is an enterprise-grade platform designed to streamline civic engagement and urban management. It provides a multi-tenant solution for citizens to report issues and for authorities to track, manage, and resolve them efficiently.
+**CivicConnect** is an enterprise-grade platform designed to automate civic engagement and urban management. It provides a multi-tenant solution for citizens to report issues and for authorities to track, manage, and resolve them efficiently with AI-backed verification.
 
 ---
 
 ## 🚀 Key Features
 
-- **Multi-Tenancy**: Strict data isolation using Supabase Row Level Security (RLS).
-- **Intelligent Reporting**: Citizens can report civic issues (e.g., potholes, streetlights) with GPS verification.
-- **AI Fusion Engine**: Multimodal AI fusion for accurate priority scoring of reports.
-- **Enterprise Dashboard**: A robust admin interface for ULB (Urban Local Body) authorities to manage reports and staff.
-- **Deduplication**: Automated nightly deduplication jobs using PostGIS to prevent redundant reports.
-- **Real-time Notifications**: Instant updates for status changes on reported issues.
+- **Multi-Tenancy**: Strict data isolation using **Supabase Row Level Security (RLS)**.
+- **Intelligent Reporting**: Citizens report civic issues with **GPS verification** and image capture.
+- **AI Fusion Engine**: Multimodal AI fusion (Computer Vision + LLM) for automated data-driven priority scoring.
+- **Enterprise Dashboard**: A robust admin interface for ULB (Urban Local Body) authorities to manage reports, staff, and heatmaps.
+- **Spatial Intelligence**: Automated nightly deduplication jobs using **PostGIS** to cluster and resolve redundant reports.
+- **Gamification**: Green Credits and XP-based leaderboard for citizen engagement.
+- **Real-time Notifications**: Custom broadcast channels for live updates on issues.
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture & Tech Stack
 
-The project is divided into four main components:
+The architecture is highly modular, separating concerns into four core areas:
 
-1.  **Backend**: Express.js + TypeScript server handling business logic and data persistence.
-2.  **Admin Dashboard**: React + Vite + Tailwind CSS for authority management.
-3.  **Mobile App**: Flutter application for citizens and field staff.
-4.  **AI Service**: Python-based service for multimodal analysis and priority scoring.
-
----
-
-## 🛠️ Tech Stack
-
--   **Frontend**: React, Vite, Tailwind CSS
--   **Mobile**: Flutter (Dart)
--   **Backend**: Node.js, Express, TypeScript
--   **Database**: MongoDB (Reports & Metadata), PostgreSQL + PostGIS (Geospatial data & Boundaries)
--   **Auth & Security**: Supabase (RLS)
--   **AI**: Python, FastAPI/Flask (AI Service)
+1.  **Backend**: Node.js + Express + TypeScript + **Sequelize (PostgreSQL)**
+2.  **Admin Dashboard**: React + Vite + Tailwind CSS + Lucide Icons
+3.  **Mobile App**: Flutter (Dart) for Android, iOS, and Web
+4.  **AI Service**: Python + FastAPI + Groq (Llama 3.1) + MobileNetV2
 
 ---
 
-## ⚙️ Setup & Installation
-
-### Prerequisites
-
-Ensure you have the following installed:
-- **Node.js**: v18+
-- **MongoDB**: Local or Remote
-- **Postgres**: v14+ with **PostGIS** extension
-- **Flutter SDK**: Latest stable
-- **Python**: 3.9+ (for AI Service)
-
-### 1. Backend Setup
-
-1.  Navigate to `backend/`.
-2.  Create `.env` (refer to `.env.example`).
-3.  Install dependencies:
-    ```bash
-    npm install
-    ```
-4.  Ensure **MongoDB** and **PostgreSQL** are running.
-5.  Enable PostGIS: `CREATE EXTENSION postgis;`
-6.  Run the server:
-    ```bash
-    npm run dev
-    ```
-7.  Seed default users:
-    ```bash
-    npm run seed:users
-    ```
-    - **Admin**: `admin@civicconnect.gov` / `admin123`
-    - **Authority**: `authority@civicconnect.gov` / `auth123`
-
-### 2. Admin Dashboard Setup
-
-1.  Navigate to `admin-dashboard/`.
-2.  Install & Run:
-    ```bash
-    npm install
-    ```
-    ```bash
-    npm run dev
-    ```
-
-### 3. Mobile Application Setup
-
-1.  Navigate to `mobile/`.
-2.  Update `.env` with your base API URL.
-3.  Fetch dependencies:
-    ```bash
-    flutter pub get
-    ```
-4.  Run:
-    ```bash
-    flutter run
-    ```
-
-### 4. AI Service Setup
-
-1.  Navigate to `ai_service/`.
-2.  Set up a virtual environment and install `requirements.txt`.
-3.  Run:
-    ```bash
-    python main.py
-    ```
+## 📋 Prerequisites
+Ensure the following are installed:
+1. **Git** (for version control)
+2. **Node.js** (v18+) & **npm**
+3. **Flutter SDK** (Android Studio / VS Code)
+4. **Python 3.10+** (for AI services)
+5. **PostgreSQL** (Port 5432) or access to the **Supabase Cloud** project
+6. **Docker Desktop** (for MinIO Object Storage)
 
 ---
 
-## 📖 Development Scripts
+## 📂 1. Repository Setup
+```bash
+git clone https://github.com/kunj2210/CivicConnect.git
+cd CivicConnect
+git checkout main
+```
 
-The root `package.json` contains several helper scripts:
+### 🌐 Networking & IP Discovery
+For the mobile app to communicate with the backend, you must use your machine's **Local IP Address**, not `localhost`.
 
--   `npm run install:all`: Install dependencies for all components.
--   `npm run dev`: Start Backend, Admin Dashboard, and AI Service concurrently.
--   `npm run seed:users`: Seed initial admin and authority accounts.
--   `npm run dev:mobile-android`: Run mobile app on Android.
--   `npm run dev:mobile-chrome`: Run mobile app on Web (Chrome).
+1. **Find your IP**: Open Terminal/PowerShell and type `ipconfig`. Look for "IPv4 Address" (e.g., `192.168.1.5`).
+2. **Set Backend BASE_URL**: In `backend/.env`, set `BASE_URL=http://192.168.1.5:5000`.
+3. **Set Mobile API_BASE_URL**: In `mobile/.env`, set `API_BASE_URL=http://192.168.1.5:5000/api`.
+4. **Set MINIO_ENDPOINT**: In `backend/.env`, set `MINIO_ENDPOINT=192.168.1.5`.
 
 ---
 
-## 📄 License
+## 🛠️ 2. Environment Configuration
+You must create `.env` files for each component by copying the `.env.example` templates.
 
-This project is private and intended for enterprise use.
+### Backend (`/backend/.env`)
+```bash
+cp .env.example .env
+# Edit .env with your Supabase credentials, Groq API Key, and Machine IP
+```
+
+### Admin Dashboard (`/admin-dashboard/.env`)
+```bash
+cp .env.example .env
+# Edit .env with your Supabase credentials and Local API URL
+```
+
+### Mobile App (`/mobile/.env`)
+```bash
+cp .env.example .env
+# Set API_BASE_URL to your Machine's Local IP
+```
+
+---
+
+## ⚙️ 3. Detailed Component Setup
+
+### ✅ Backend (Node.js)
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+### ✅ AI Microservice (Python)
+Ensure `CivicConnect_Production_Model.pth` is in the `AI-Related-Files/` directory.
+```bash
+cd ai_service
+python -m venv venv
+.\venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+python main.py
+```
+
+### ✅ MinIO Object Storage (Docker Desktop)
+1. Open **Docker Desktop**.
+2. Run the MinIO container:
+```powershell
+docker run -p 9000:9000 -p 9001:9001 `
+  --name minio `
+  -e "MINIO_ROOT_USER=admin" `
+  -e "MINIO_ROOT_PASSWORD=M@nthan1528" `
+  -v D:\minio_data:/data `
+  minio/minio server /data --console-address ":9001"
+```
+3. Set policy using MinIO Client (mc) inside Docker:
+```powershell
+docker exec minio mc alias set local http://localhost:9000 admin M@nthan1528
+docker exec minio mc anonymous set download local/civic-connect
+```
+
+### ✅ Admin Dashboard (React)
+```bash
+cd admin-dashboard
+npm install
+npm run dev
+```
+
+### ✅ Mobile App (Flutter)
+```bash
+cd mobile
+flutter pub get
+flutter run
+```
+
+---
+
+## 🧪 4. Final Sanity Check
+- Verify that `check_db.js` in the backend folder returns valid Supabase users.
+- Ensure the **Supabase RLS Policies** (apply_rls.ts) are active in the database.
+- Use the **Manual Deployment Map** artifact for deep file-level architecture details.
+
+**Project is now ready for launch!** 🚀
