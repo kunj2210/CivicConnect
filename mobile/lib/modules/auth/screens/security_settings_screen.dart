@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -109,19 +110,18 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 }
                 setDialogState(() => isLoading = true);
                 try {
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user != null) {
-                    // Re-authenticate if necessary, but for simplicity we'll try direct update
-                    // Note: Firebase requires recent login for password changes
-                    await user.updatePassword(newPasswordController.text);
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Password changed successfully')),
-                      );
-                    }
+                  final client = Supabase.instance.client;
+                  await client.auth.updateUser(
+                    UserAttributes(password: newPasswordController.text),
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Password changed successfully')),
+                    );
                   }
                 } catch (e) {
+
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Failed to change password: $e')),

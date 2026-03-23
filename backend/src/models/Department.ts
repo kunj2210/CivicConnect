@@ -1,19 +1,16 @@
 import { DataTypes, Model } from 'sequelize';
-import { sequelize } from '../config/db.js';
+import { sequelize } from '../config/database.js';
 
 export class Department extends Model {
-    declare id: number;
+    declare id: string;
     declare name: string;
-    declare head: string;
-    declare staff_count: number;
-    declare status: string;
-    declare handled_categories: string[];
+    declare contact_email: string;
 }
 
 Department.init({
     id: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
     },
     name: {
@@ -21,23 +18,12 @@ Department.init({
         allowNull: false,
         unique: true,
     },
-    head: {
+    contact_email: {
         type: DataTypes.STRING,
         allowNull: false,
     },
-    staff_count: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0,
-    },
-    status: {
-        type: DataTypes.ENUM('Active', 'Maintenance', 'Inactive'),
-        defaultValue: 'Active',
-    },
-    handled_categories: {
-        type: DataTypes.JSONB,
-        defaultValue: [],
-    },
 }, {
     sequelize,
-    modelName: 'Department',
+    tableName: 'departments',
 });
+

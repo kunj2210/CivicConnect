@@ -8,6 +8,11 @@ import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'help_center_screen.dart';
 import 'about_screen.dart';
+import 'location_settings_screen.dart';
+import '../../reports/screens/leaderboard_screen.dart';
+
+
+
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -71,13 +76,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1), width: 4),
+
+
                       ),
                       child: CircleAvatar(
                         radius: 55,
                         backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                        child: user?.photoURL != null 
-                          ? ClipOval(child: Image.network(user!.photoURL!, width: 110, height: 110, fit: BoxFit.cover))
+                        child: user?.userMetadata?['avatar_url'] != null 
+                          ? ClipOval(child: Image.network(user!.userMetadata!['avatar_url']!, width: 110, height: 110, fit: BoxFit.cover))
                           : Icon(Icons.person, size: 65, color: theme.colorScheme.primary),
+
                       ),
                     ),
                     Positioned(
@@ -106,13 +114,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                user?.displayName ?? 'Citizen User',
+                user?.userMetadata?['full_name'] ?? 'Citizen User',
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               Text(
-                user?.email ?? user?.phoneNumber ?? 'anonymous@civicconnect.gov',
+                user?.email ?? user?.phone ?? 'anonymous@civicconnect.gov',
                 style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6), fontSize: 14),
               ),
+
+
               const SizedBox(height: 32),
               
               // Stats Row
@@ -141,6 +151,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 theme: theme,
               ),
               _buildProfileOption(
+                icon: Icons.location_on_outlined, 
+                title: 'Location & Privacy', 
+                subtitle: 'Safety zone & neighborhood alerts',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LocationSettingsScreen())),
+                theme: theme,
+              ),
+
+
+              _buildProfileOption(
                 icon: Icons.lock_outline, 
                 title: 'Security', 
                 subtitle: 'Password & authentication',
@@ -148,7 +167,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 theme: theme,
               ),
               
+              const _SectionTitle(title: 'Community'),
+              _buildProfileOption(
+                icon: Icons.leaderboard_outlined, 
+                title: 'Leaderboard', 
+                subtitle: 'Top civic contributors',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LeaderboardScreen())),
+                theme: theme,
+              ),
               const _SectionTitle(title: 'Support & Info'),
+
               _buildProfileOption(
                 icon: Icons.help_center_outlined, 
                 title: 'Help Center', 

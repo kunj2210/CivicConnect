@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, Map, Users, Settings, LogOut, Hexagon } from 'lucide-react';
+import { LayoutDashboard, FileText, Map, Users, Settings, LogOut, Trophy, BrainCircuit, UserCog } from 'lucide-react';
+
 import { useAuth } from '../context/AuthContext';
 
 const Sidebar = ({ darkMode }) => {
@@ -15,9 +16,13 @@ const Sidebar = ({ darkMode }) => {
         { path: `${prefix}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
         { path: `${prefix}/issues`, label: 'Issues', icon: FileText },
         { path: `${prefix}/map`, label: 'Live Map', icon: Map },
+        { path: `${prefix}/leaderboard`, label: 'Leaderboard', icon: Trophy },
+        ...(isAdmin ? [{ path: '/admin/ai-retraining', label: 'AI Retraining', icon: BrainCircuit }] : []),
         ...(isAdmin ? [{ path: '/admin/departments', label: 'Departments', icon: Users }] : []),
+        ...(isAdmin ? [{ path: '/admin/users', label: 'Users', icon: UserCog }] : []),
         { path: `${prefix}/settings`, label: 'Settings', icon: Settings },
     ];
+
 
     return (
         <aside className={`hidden md:flex flex-col w-72 h-screen px-5 py-8 border-r z-20 transition-all duration-300 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>

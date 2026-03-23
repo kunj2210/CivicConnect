@@ -59,7 +59,7 @@ const AuthorityMapView = () => {
                         if (!issue.location) return null;
                         const pos = [issue.location.coordinates[1], issue.location.coordinates[0]];
                         return (
-                            <Marker key={issue.report_id} position={pos}>
+                            <Marker key={issue.id} position={pos}>
                                 <Popup className="custom-popup">
                                     <div className="p-2 min-w-[200px] space-y-3">
                                         <div className="flex justify-between items-start">
@@ -69,7 +69,7 @@ const AuthorityMapView = () => {
                                             </span>
                                         </div>
                                         <button
-                                            onClick={() => navigate(`/authority/issues/${issue.report_id}`)}
+                                            onClick={() => navigate(`/authority/issues/${issue.id}`)}
                                             className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/20"
                                         >
                                             <Eye size={14} />

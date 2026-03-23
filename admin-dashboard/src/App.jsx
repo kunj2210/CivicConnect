@@ -9,6 +9,9 @@ import AdminIssueList from './pages/AdminIssueList';
 import AdminIssueDetails from './pages/AdminIssueDetails';
 import AdminMapView from './pages/AdminMapView';
 import AdminSettings from './pages/AdminSettings';
+import Leaderboard from './pages/Leaderboard';
+import AIRetraining from './pages/AIRetraining';
+import AdminUsers from './pages/AdminUsers';
 
 // Authority specific pages
 import AuthorityIssueList from './pages/AuthorityIssueList';
@@ -42,7 +45,11 @@ function App() {
             <Route path="issues/:id" element={<AdminIssueDetails />} />
             <Route path="map" element={<AdminMapView />} />
             <Route path="departments" element={<Departments />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="ai-retraining" element={<AIRetraining />} />
             <Route path="settings" element={<AdminSettings />} />
+
           </Route>
 
           {/* Authority Routes */}
@@ -59,7 +66,9 @@ function App() {
             <Route path="issues" element={<AuthorityIssueList />} />
             <Route path="issues/:id" element={<AuthorityIssueDetails />} />
             <Route path="map" element={<AuthorityMapView />} />
+            <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="settings" element={<AuthoritySettings />} />
+
           </Route>
 
           {/* Fallback */}

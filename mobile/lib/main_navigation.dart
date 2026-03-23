@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'shared/providers/navigation_provider.dart';
 import 'modules/reports/screens/dashboard_screen.dart';
 import 'modules/reports/screens/history_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'modules/auth/screens/profile_screen.dart';
+import 'modules/reports/screens/staff_dashboard_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -19,8 +21,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
+    final user = Supabase.instance.client.auth.currentUser;
+    final role = user?.userMetadata?['role'] ?? 'citizen';
+
     _screens = [
-      DashboardScreen(key: _dashboardKey),
+      role == 'staff' ? const StaffDashboardScreen() : DashboardScreen(key: _dashboardKey),
       const HistoryScreen(),
       const ProfileScreen(),
     ];

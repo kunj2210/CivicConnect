@@ -20,25 +20,15 @@ class _LoginScreenState extends State<LoginScreen> {
   void _sendOTP() async {
     setState(() => _isLoading = true);
     try {
-      await _authService.loginWithPhone(
-        _phoneController.text.trim(),
-        (verificationId, forceResendingToken) {
-          if (!mounted) return;
-          setState(() => _isLoading = false);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => OTPScreen(verificationId: verificationId),
-            ),
-          );
-        },
-        (error) {
-          if (!mounted) return;
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Verification Failed: ${error.message}')),
-          );
-        },
+      final phone = _phoneController.text.trim();
+      await _authService.loginWithPhone(phone);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OTPScreen(phoneNumber: phone),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -48,6 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
   }
+
 
   void _loginWithEmail() async {
     setState(() => _isLoading = true);

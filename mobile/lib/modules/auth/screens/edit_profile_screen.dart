@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../services/user_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -19,8 +20,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     final user = _userService.currentUser;
-    _nameController = TextEditingController(text: user?.displayName ?? '');
+    _nameController = TextEditingController(text: user?.userMetadata?['full_name'] ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
+
   }
 
   @override
@@ -79,6 +81,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         CircleAvatar(
                           radius: 60,
                           backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+
+
+
                           child: Icon(Icons.person, size: 70, color: theme.colorScheme.primary),
                         ),
                         Positioned(

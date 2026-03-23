@@ -17,13 +17,14 @@ export const getNotifications = async (req: Request, res: Response) => {
 
 export const createNotification = async (req: Request, res: Response) => {
     try {
-        const { user_id, title, message, type } = req.body;
-        const notification = await Notification.create({ user_id, title, message, type });
+        const { user_id, title, body, data } = req.body;
+        const notification = await Notification.create({ user_id, title, body, data });
         res.status(201).json(notification);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
+
 
 export const markAsRead = async (req: Request, res: Response) => {
     try {
@@ -31,10 +32,11 @@ export const markAsRead = async (req: Request, res: Response) => {
         const notification = await Notification.findByPk(id as any);
         if (!notification) return res.status(404).json({ error: 'Notification not found' });
 
-        notification.read_status = true;
+        notification.is_read = true;
         await notification.save();
         res.json(notification);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
+

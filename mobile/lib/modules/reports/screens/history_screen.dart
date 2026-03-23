@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:shimmer/shimmer.dart';
 import '../../../config/api_config.dart';
 import './report_detail_screen.dart';
 
@@ -23,18 +24,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _fetchReports() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    // Consistently use phone, email, or UID as identifier
-    final identifier = (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
-        ? user.phoneNumber!
-        : (user.email != null && user.email!.isNotEmpty)
-            ? user.email!
-            : user.uid;
+    final identifier = user.phone ?? user.email ?? user.id;
 
     try {
-      final response = await http.get(Uri.parse('${ApiConfig.reportsUrl}?citizen_phone=$identifier'));
+      final response = await http.get(
+        Uri.parse('${ApiConfig.reportsUrl}?citizen_phone=$identifier'),
+        headers: ApiConfig.getHeaders(),
+      );
+
       if (response.statusCode == 200) {
         setState(() {
           _reports = json.decode(response.body);
@@ -63,7 +63,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
+        ? _buildSkeletonList(theme)
         : _reports.isEmpty
           ? const Center(child: Text('No reports found'))
           : ListView.separated(
@@ -75,12 +75,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 return GestureDetector(
                   onTap: () => Navigator.push(
                     context, 
-                    MaterialPageRoute(builder: (context) => ReportDetailScreen(reportId: report['report_id']))
+                    MaterialPageRoute(builder: (context) => ReportDetailScreen(reportId: report['id']))
                   ),
+
                   child: _ReportListItem(report: report)
                 );
               },
             ),
+    );
+  }
+
+  Widget _buildSkeletonList(ThemeData theme) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 5,
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Shimmer.fromColors(
+            baseColor: theme.brightness == Brightness.dark ? Colors.grey[800]! : Colors.grey[300]!,
+            highlightColor: theme.brightness == Brightness.dark ? Colors.grey[700]! : Colors.grey[100]!,
+            child: Container(
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -139,9 +163,10 @@ class _ReportListItem extends StatelessWidget {
                 Icon(Icons.calendar_today, size: 14, color: theme.hintColor.withValues(alpha: 0.6)),
                 const SizedBox(width: 4),
                 Text(
-                  report['timestamp'] != null ? report['timestamp'].toString().substring(0, 10) : 'Just now',
+                  report['reported_at'] != null ? report['reported_at'].toString().substring(0, 10) : 'Just now',
                   style: TextStyle(color: theme.hintColor.withValues(alpha: 0.6), fontSize: 12),
                 ),
+
                 const Spacer(),
                 Text(
                   'View Details',

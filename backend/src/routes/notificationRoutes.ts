@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { getNotifications, createNotification, markAsRead } from '../controllers/notificationController.js';
-import { registerFcmToken } from '../controllers/reportController.js';
+import { verifySupabaseToken } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
+router.use(verifySupabaseToken);
+
 router.get('/', getNotifications);
 router.post('/', createNotification);
-router.post('/register-fcm', registerFcmToken);
 router.patch('/:id/read', markAsRead);
+
+
 
 export default router;

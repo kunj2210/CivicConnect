@@ -2,17 +2,37 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path_provider/path_provider.dart';
+
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../../config/api_config.dart';
+
 import '../models/report_draft.dart';
 
+@pragma('vm:entry-point')
 void callbackDispatcher() {
+
   Workmanager().executeTask((task, inputData) async {
     try {
+      await dotenv.load(fileName: ".env");
       final appDocumentDir = await getApplicationDocumentsDirectory();
       Hive.init(appDocumentDir.path);
       if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(ReportDraftAdapter());
+
+      // Initialize Supabase in background isolate
+      try {
+        await Supabase.initialize(
+          url: dotenv.get('SUPABASE_URL'),
+          anonKey: dotenv.get('SUPABASE_ANON_KEY'),
+        );
+      } catch (e) {
+        // Already initialized or other error
+        debugPrint('Supabase background init note: $e');
+      }
+
+
       
       final box = await Hive.openBox<ReportDraft>('report_drafts');
       final unsyncedReports = box.values.where((report) => !report.isSynced).toList();
@@ -22,7 +42,9 @@ void callbackDispatcher() {
           debugPrint("Background sync starting for: ${report.category}");
           
           var request = http.MultipartRequest('POST', Uri.parse(ApiConfig.reportsUrl));
+          request.headers.addAll(ApiConfig.getHeaders(includeContentType: false));
           request.fields['category'] = report.category;
+
           request.fields['description'] = report.description;
           request.fields['latitude'] = report.latitude.toString();
           request.fields['longitude'] = report.longitude.toString();
