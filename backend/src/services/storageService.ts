@@ -19,7 +19,7 @@ export class StorageService {
         try {
             const fileExt = file.originalname.split('.').pop();
             const fileName = `${folder}/${uuidv4()}.${fileExt}`;
-            
+
             // Upload to MinIO
             await minioClient.putObject(
                 this.bucketName,
@@ -33,7 +33,7 @@ export class StorageService {
             const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
             const host = process.env.MINIO_ENDPOINT || 'localhost';
             const port = process.env.MINIO_PORT || '9000';
-            
+
             return `${protocol}://${host}:${port}/${this.bucketName}/${fileName}`;
         } catch (error) {
             console.error('MinIO Storage Service Error:', error);
@@ -50,5 +50,8 @@ export class StorageService {
             return false;
         }
     }
-}
 
+    static getBucketName(): string {
+        return this.bucketName;
+    }
+}
