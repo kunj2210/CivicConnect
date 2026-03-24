@@ -17,8 +17,8 @@ const DashboardLayout = () => {
     const [unreadCount, setUnreadCount] = useState(0);
 
     const getInitials = (name) => {
-        if (!name) return '??';
-        return name.split(' ').map(n => n[0]).join('').toUpperCase();
+        if (!name) return 'U';
+        return name.split(/[\s@]/).map(n => n[0]).join('').toUpperCase().slice(0, 2);
     };
 
     // ... useEffects and handlers
@@ -67,11 +67,11 @@ const DashboardLayout = () => {
             })
             .on('broadcast', { event: 'INSERT' }, (payload) => {
                 console.log('[Realtime] New Broadcast Payload:', payload);
-                
+
                 // Flexible extraction
-                const record = payload.new || payload.record || payload.payload?.record || payload; 
+                const record = payload.new || payload.record || payload.payload?.record || payload;
                 console.log('[Realtime] Extracted Record:', record);
-                
+
                 if (record) {
                     // Normalize fields if needed (handle potential case differences)
                     const normalizedNotif = {
@@ -83,7 +83,7 @@ const DashboardLayout = () => {
                     };
 
                     console.log('[Realtime] Normalized Notification:', normalizedNotif);
-                    
+
                     setNotifications(prev => [normalizedNotif, ...prev]);
                     setUnreadCount(prev => prev + 1);
                 }
@@ -110,7 +110,7 @@ const DashboardLayout = () => {
     };
 
     return (
-        <div className={`flex min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'dark bg-gray-950 text-gray-100' : 'bg-white text-gray-900'}`}>
+        <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-300 ${darkMode ? 'dark bg-gray-950 text-gray-100' : 'bg-white text-gray-900'}`}>
             <Sidebar darkMode={darkMode} />
             <div className="flex-1 flex flex-col overflow-hidden relative">
 
@@ -187,7 +187,7 @@ const DashboardLayout = () => {
 
                         <div className="flex items-center gap-3">
                             <div className="text-right hidden sm:block">
-                                <p className={`text-sm font-bold leading-none ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user?.name || 'Guest User'}</p>
+                                <p className={`text-sm font-bold leading-none ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user?.name || user?.email?.split('@')[0] || 'User'}</p>
                                 <div className="flex justify-end mt-1.5">
                                     <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 border ${darkMode ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-600 border-gray-200'
                                         }`}>
@@ -197,7 +197,7 @@ const DashboardLayout = () => {
                             </div>
                             <div className={`h-10 w-10 flex items-center justify-center text-sm font-bold border transition-colors cursor-pointer ${darkMode ? 'bg-gray-900 text-white border-gray-700 hover:border-gray-600' : 'bg-gray-50 text-gray-900 border-gray-300 hover:border-gray-400'
                                 }`}>
-                                {getInitials(user?.name)}
+                                {getInitials(user?.name || user?.email)}
                             </div>
                         </div>
                     </div>
