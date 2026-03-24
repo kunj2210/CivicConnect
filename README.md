@@ -1,4 +1,4 @@
-# CivicConnect 🏙️
+# CivicConnect 🏙️ **Neon Onyx Edition**
 
 **CivicConnect** is an enterprise-grade platform designed to automate civic engagement and urban management. It provides a multi-tenant solution for citizens to report issues and for authorities to track, manage, and resolve them efficiently with AI-backed verification.
 
@@ -9,7 +9,9 @@
 - **Multi-Tenancy**: Strict data isolation using **Supabase Row Level Security (RLS)**.
 - **Intelligent Reporting**: Citizens report civic issues with **GPS verification** and image capture.
 - **AI Fusion Engine**: Multimodal AI fusion (Computer Vision + LLM) for automated data-driven priority scoring.
-- **Enterprise Dashboard**: A robust admin interface for ULB (Urban Local Body) authorities to manage reports, staff, and heatmaps.
+- **Neon Onyx Dashboard**: High-fidelity glassmorphic interface featuring **Bento Grids**, theme-aware **Bar Charts**, and pulse-glow indicators.
+- **Animated Mobile Experience**: Premium shimmering logo transitions and pulsing splash sequences powered by `flutter_animate`.
+- **Automated Storage Integrity**: Intelligent **MinIO Media Purging** that synchronizes physical storage deletion with database record removal.
 - **Spatial Intelligence**: Automated nightly deduplication jobs using **PostGIS** to cluster and resolve redundant reports.
 - **Gamification**: Green Credits and XP-based leaderboard for citizen engagement.
 - **Real-time Notifications**: Custom broadcast channels for live updates on issues.
@@ -20,9 +22,9 @@
 
 The architecture is highly modular, separating concerns into four core areas:
 
-1.  **Backend**: Node.js + Express + TypeScript + **Sequelize (PostgreSQL)**
-2.  **Admin Dashboard**: React + Vite + Tailwind CSS + Lucide Icons
-3.  **Mobile App**: Flutter (Dart) for Android, iOS, and Web
+1.  **Backend**: Node.js + Express + TypeScript + **Sequelize (PostgreSQL)** + **MinIO S3 Storage**
+2.  **Admin Dashboard**: React + Vite + Vanilla CSS (Glassmorphism) + Lucide Icons
+3.  **Mobile App**: Flutter (Dart) with **High-Parity Light/Dark Theme** support
 4.  **AI Service**: Python + FastAPI + Groq (Llama 3.1) + MobileNetV2
 
 ---
@@ -81,23 +83,21 @@ cp .env.example .env
 ## ⚙️ 3. Detailed Component Setup
 
 ### ✅ Backend (Node.js)
-For start the backend server run the following commands:
 ```bash
 cd backend
 npm install
 npm run dev
 ```
-For seed the database run the following command in root directory:
+For seed the database:
 ```bash
 npm run seed:users
 ```
 
 ### ✅ AI Microservice (Python)
-Ensure `CivicConnect_Production_Model.pth` is in the `AI-Related-Files/` directory.
 ```bash
 cd ai_service
 python -m venv venv
-.\venv\Scripts\activate  # Windows
+.\venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
@@ -113,12 +113,6 @@ docker run -p 9000:9000 -p 9001:9001 `
   -v D:\minio_data:/data `
   minio/minio server /data --console-address ":9001"
 ```
-3. Set policy using MinIO Client (mc) inside Docker:
-```powershell
-docker exec minio mc alias set local http://localhost:9000 admin M@nthan1528
-docker exec minio mc anonymous set download local/civic-connect
-```
-4. Note: You have to run this commands only one time after that you can directly run the minio server using docker desktop (start button).
 
 ### ✅ Admin Dashboard (React)
 ```bash
@@ -137,8 +131,7 @@ flutter run
 ---
 
 ## 🧪 4. Final Sanity Check
-- Verify that `check_db.js` in the backend folder returns valid Supabase users.
-- Ensure the **Supabase RLS Policies** (apply_rls.ts) are active in the database.
-- Use the **Manual Deployment Map** artifact for deep file-level architecture details.
+- Verify that `check_db.js` returns valid Supabase users.
+- Ensure the **Supabase RLS Policies** are active in the database.
 
 **Project is now ready for launch!** 🚀
