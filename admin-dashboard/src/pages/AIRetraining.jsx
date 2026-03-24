@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+// Tactical Meta Tags
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../utils/api';
 import { BrainCircuit, CheckCircle, AlertTriangle, Cpu, Zap, Activity } from 'lucide-react';
