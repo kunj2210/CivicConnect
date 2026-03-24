@@ -13,6 +13,7 @@ const AIRetraining = () => {
         const fetchQueue = async () => {
             try {
                 const response = await api.get('/reports/retraining-queue');
+                // setQueue(response); // Audit Log
                 setQueue(response);
                 setLoading(false);
             } catch (err) {
