@@ -8,30 +8,50 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    const determineRole = (supabaseUser, profile) => {
+        let role = 'Citizen';
+        if (profile?.role) role = profile.role;
+        else if (supabaseUser?.user_metadata?.role) role = supabaseUser.user_metadata.role;
+
+        // Force normalization to Title Case (e.g., "admin" -> "Admin")
+        return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+    };
+
     useEffect(() => {
-        // 1. Initial Session Check
+        // 1. Session Refresh Logic (Clear on Server Restart)
+        const restartId = import.meta.env.VITE_RESTART_ID;
+        const storedRestartId = localStorage.getItem('civic_restart_id');
+
+        if (storedRestartId && storedRestartId !== restartId) {
+            // New server start detected, flush previous session
+            supabase.auth.signOut();
+            localStorage.clear();
+        }
+        localStorage.setItem('civic_restart_id', restartId);
+
+        // 2. Initial Session Check
         supabase.auth.getSession().then(({ data, error }) => {
             if (error) {
-                console.error("Auth session error:", error);
                 setLoading(false);
                 return;
             }
             const session = data?.session;
             if (session) {
+                // Fetch profile and determine role
                 api.get('/users/me')
                     .then(profile => {
                         setUser({
                             ...session.user,
                             ...profile,
+                            role: determineRole(session.user, profile),
                             token: session.access_token
                         });
                         setLoading(false);
                     })
                     .catch(err => {
-                        console.warn("Profile resolving failed, using metadata fallback:", err.message);
                         setUser({
                             ...session.user,
-                            role: session.user.user_metadata?.role || 'Citizen',
+                            role: determineRole(session.user, null),
                             token: session.access_token
                         });
                         setLoading(false);
@@ -47,11 +67,13 @@ export const AuthProvider = ({ children }) => {
         // 2. Listen for Auth Changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session) {
+                setLoading(true); // Ensure app waits for profile
                 api.get('/users/me')
                     .then(profile => {
                         setUser({
                             ...session.user,
                             ...profile,
+                            role: determineRole(session.user, profile),
                             token: session.access_token
                         });
                         setLoading(false);
@@ -59,7 +81,7 @@ export const AuthProvider = ({ children }) => {
                     .catch(err => {
                         setUser({
                             ...session.user,
-                            role: session.user.user_metadata?.role || 'Citizen',
+                            role: determineRole(session.user, null),
                             token: session.access_token
                         });
                         setLoading(false);
@@ -80,7 +102,6 @@ export const AuthProvider = ({ children }) => {
         });
 
         if (error) {
-            console.error('[AuthContext] login error:', error);
             throw error;
         }
         return data;
@@ -91,7 +112,6 @@ export const AuthProvider = ({ children }) => {
             phone,
         });
         if (error) {
-            console.error('[AuthContext] signInWithPhone error:', error);
             throw error;
         }
         return data;
@@ -104,7 +124,6 @@ export const AuthProvider = ({ children }) => {
             type: 'sms',
         });
         if (error) {
-            console.error('[AuthContext] verifyPhoneOtp error:', error);
             throw error;
         }
         return data;
@@ -115,8 +134,12 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
     };
 
+    const updateUser = (data) => {
+        setUser(prev => ({ ...prev, ...data }));
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading, signInWithPhone, verifyPhoneOtp }}>
+        <AuthContext.Provider value={{ user, login, logout, loading, signInWithPhone, verifyPhoneOtp, updateUser, determineRole }}>
             {loading ? (
                 <div className="flex h-screen w-screen items-center justify-center bg-gray-900">
                     <div className="text-center">
