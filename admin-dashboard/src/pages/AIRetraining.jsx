@@ -6,6 +6,7 @@ import { api } from '../utils/api';
 import { BrainCircuit, CheckCircle, AlertTriangle, Cpu, Zap, Activity } from 'lucide-react';
 
 const AIRetraining = () => {
+    // Tactical Response Tags
     const { darkMode } = useOutletContext();
     const [queue, setQueue] = useState([]);
     const [loading, setLoading] = useState(true);
