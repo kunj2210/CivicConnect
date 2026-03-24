@@ -1,38 +1,144 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #f0f2f5;
-  color: #1f2937;
-  transition: background-color 0.3s ease, color 0.3s ease;
+@layer base {
+  :root {
+    /* Light Theme (Default) */
+    --bg-main: #f8fafc;
+    --surface-main: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --border-main: rgba(0, 0, 0, 0.08);
+    --glass-bg: rgba(255, 255, 255, 0.8);
+
+    --primary-neon: #7c3aed;
+    --primary-glow: rgba(124, 58, 237, 0.1);
+    --secondary-neon: #059669;
+    --secondary-glow: rgba(5, 150, 105, 0.1);
+
+    --sidebar-bg: #ffffff;
+    --sidebar-border: rgba(0, 0, 0, 0.05);
+    /* Higher contrast for light mode cards */
+    --surface-glass: rgba(255, 255, 255, 0.9);
+  }
+
+  .dark {
+    /* Dark Theme */
+    --bg-main: #020617;
+    --surface-main: #0f172a;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border-main: rgba(255, 255, 255, 0.05);
+    --glass-bg: rgba(15, 23, 42, 0.7);
+
+    --primary-neon: #8b5cf6;
+    --primary-glow: rgba(139, 92, 246, 0.3);
+    --secondary-neon: #10b981;
+    --secondary-glow: rgba(16, 185, 129, 0.3);
+
+    --sidebar-bg: #020617;
+    --sidebar-border: rgba(255, 255, 255, 0.05);
+    --surface-glass: rgba(15, 23, 42, 0.7);
+  }
+
+  body {
+    @apply transition-colors duration-300;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    overflow-x: hidden;
+  }
 }
 
-.dark body {
-  background-color: #111827;
-  color: #f9fafb;
+@layer components {
+  .glass-panel {
+    @apply backdrop-blur-xl border shadow-2xl transition-all duration-300;
+    background-color: var(--glass-bg);
+    border-color: var(--border-main);
+    color: var(--text-primary);
+  }
+
+  .glass-card {
+    @apply backdrop-blur-lg border rounded-2xl transition-all duration-300;
+    background-color: var(--surface-glass);
+    border-color: var(--border-main);
+  }
+
+  .glass-card:hover {
+    @apply border-opacity-20 translate-y-[-2px];
+    border-color: var(--primary-neon);
+    background-color: var(--primary-glow);
+  }
+
+  .neon-glow-primary {
+    box-shadow: 0 0 25px var(--primary-glow);
+  }
+
+  .text-heading {
+    @apply font-extrabold tracking-tight;
+    color: var(--text-primary);
+  }
+
+  .text-desc {
+    @apply text-sm leading-relaxed;
+    color: var(--text-secondary);
+  }
+}
+
+/* Leaflet Popup Theme Fix */
+.leaflet-popup-content-wrapper {
+  background-color: var(--surface-main) !important;
+  color: var(--text-primary) !important;
+  border-radius: 12px !important;
+}
+
+.leaflet-popup-tip {
+  background-color: var(--surface-main) !important;
+}
+
+.dark .leaflet-popup-content-wrapper {
+  background-color: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .leaflet-popup-tip {
+  background-color: #0f172a !important;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 12px 16px !important;
+}
+
+.custom-popup h3 {
+  color: var(--text-primary) !important;
+}
+
+.custom-popup p {
+  color: var(--text-secondary) !important;
+}
+
+.custom-popup .bg-gray-50 {
+  background-color: var(--primary-glow) !important;
+  color: var(--text-secondary) !important;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  @apply rounded-full;
+  background-color: var(--primary-neon);
+  opacity: 0.2;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background-color: var(--primary-neon);
+  opacity: 0.5;
 }
