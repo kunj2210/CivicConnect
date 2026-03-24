@@ -58,8 +58,8 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         let user = await User.findByPk(userAuth.id);
         if (!user) {
             // Create user if they don't exist in our public table yet
-            user = await User.create({ 
-                id: userAuth.id, 
+            user = await User.create({
+                id: userAuth.id,
                 phone: userAuth.phone || null,
                 email: userAuth.email || null
             });
@@ -73,7 +73,7 @@ export const createReport = async (req: AuthRequest, res: Response) => {
 
         if (!ward_id) {
             console.error(`[DEBUG] REJECTED: Location [${longitude}, ${latitude}] outside of served wards`);
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'Location outside of served wards',
                 received_coords: { longitude, latitude },
                 hint: 'Ensure your test location is within Mumbai, Delhi, or Ranchi coordinates.'
@@ -103,7 +103,7 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         // Note: For now, we use user-provided description; real-time Whisper transcription can be added here
         let textTop3 = [];
         try {
-            textTop3 = await AIService.standardizeContent(description || '', ''); 
+            textTop3 = await AIService.standardizeContent(description || '', '');
         } catch (textError) {
             console.error('Text Standardization error:', textError);
         }
@@ -114,15 +114,15 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         // 4.1.5 SPATIAL DEDUPLICATION (Pillar 2)
         // Check if an issue of the same category exists within its dynamic radius
         const duplicate = await SpatialService.findDuplicateIssue(
-            parseFloat(latitude), 
-            parseFloat(longitude), 
+            parseFloat(latitude),
+            parseFloat(longitude),
             fusionResult.finalCategory
         );
 
         if (duplicate) {
             console.log(`[DEDUPLICATION] Matched existing issue ${duplicate.id}. Merging...`);
             await SpatialService.handleDuplicate(duplicate, user.id, imageUrl, audioUrl);
-            
+
             // Log as UPDATE
             await AuditLog.create({
                 actor_id: user.id,
@@ -247,7 +247,7 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
         const transformedIssues = issues.map(issue => {
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
             const report = issue.get();
-            
+
             if (isSensitive && !isPrivileged) {
                 const [lon, lat] = obfuscateLocation(report.location.coordinates[0], report.location.coordinates[1]);
                 report.location = { ...report.location, coordinates: [lon, lat] };
@@ -279,13 +279,31 @@ export const getReportStats = async (req: AuthRequest, res: Response) => {
         const total = await Issue.count({ where });
         const pending = await Issue.count({ where: { ...where, status: 'Pending' } });
         const resolved = await Issue.count({ where: { ...where, status: 'Resolved' } });
+        const inProgress = await Issue.count({ where: { ...where, status: 'In Progress' } });
+
+        // Get category distribution
+        const categoryCounts = await Issue.findAll({
+            where,
+            attributes: [
+                'category',
+                [sequelize.fn('COUNT', sequelize.col('category')), 'count']
+            ],
+            group: ['category']
+        });
+
+        const categoryData = categoryCounts.map((c: any) => ({
+            name: c.category,
+            value: parseInt(c.get('count'))
+        }));
 
         res.json({
             summary: [
-                { title: 'Total Issues', value: total, color: 'blue' },
-                { title: 'Resolved', value: resolved, color: 'green' },
-                { title: 'Pending', value: pending, color: 'red' },
+                { title: 'Total Issues', value: total, trend: 12 },
+                { title: 'Resolved', value: resolved, trend: 8 },
+                { title: 'Pending', value: pending, trend: -5 },
+                { title: 'In Progress', value: inProgress, trend: 2 },
             ],
+            categoryData,
             total,
             resolved,
             green_credits,
@@ -354,11 +372,53 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
 
 export const deleteReport = async (req: AuthRequest, res: Response) => {
     try {
-        const { id } = req.params;
-        const deleted = await Issue.destroy({ where: { id } });
-        if (deleted === 0) return res.status(404).json({ error: 'Issue not found' });
-        res.json({ success: true, message: 'Issue deleted successfully' });
+        const issueId = req.params.id as string;
+
+        // 1. Fetch the issue to retrieve associated media URLs before deletion
+        const issue = await Issue.findByPk(issueId);
+        if (!issue) {
+            return res.status(404).json({ error: 'Issue not found' });
+        }
+
+        // 2. Perform MinIO Storage Cleanup
+        const bucketName = StorageService.getBucketName();
+        const mediaUrls = [
+            ...(issue.minio_image_urls || []),
+            ...(issue.minio_audio_urls || [])
+        ];
+
+        console.log(`[CLEANUP] Initiating storage purge for Issue ${issueId}. Found ${mediaUrls.length} media items.`);
+
+        for (const url of mediaUrls) {
+            try {
+                // The URL structure is: protocol://host:port/bucketName/objectKey
+                const urlParts = url.split(`${bucketName}/`);
+                if (urlParts.length > 1) {
+                    const objectKey = urlParts[1] as string;
+                    console.log(`[CLEANUP] Purging MinIO object: ${objectKey}`);
+                    await StorageService.deleteFile(objectKey);
+                }
+            } catch (storageErr) {
+                console.error(`[CLEANUP] Non-fatal: Failed to delete media [${url}] from MinIO:`, storageErr);
+            }
+        }
+
+        // 3. Destroy the Database Record
+        await issue.destroy();
+
+        // 4. Log the Deletion Activity
+        await AuditLog.create({
+            actor_id: (req as any).user?.id || 'SYSTEM',
+            event_type: 'ISSUE_DELETED',
+            payload: { issue_id: issueId, category: issue.category },
+        });
+
+        res.json({
+            success: true,
+            message: 'Issue and associated media purged successfully'
+        });
     } catch (error: any) {
+        console.error('CRITICAL ERROR in deleteReport:', error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -443,7 +503,7 @@ export const confirmResolution = async (req: AuthRequest, res: Response): Promis
                 { where: { id: { [Op.in]: reporterIds } } }
             );
             console.log(`[CREDITS] Awarded ${creditAmount} credits to ${reporterIds.length} reporters.`);
-            
+
             // Check Gamification Milestones for all reporters
             for (const rId of reporterIds) {
                 const rUser = await User.findByPk(rId);
@@ -517,11 +577,11 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
         const features = issues.map((issue: any) => {
             let geometry = JSON.parse(issue.location_geojson);
             let coords = geometry.coordinates;
-            
+
             // Apply privacy obfuscation for sensitive categories in public view
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
             const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
-            
+
             if (isSensitive && !isPrivileged) {
                 coords = obfuscateLocation(coords[0], coords[1]);
                 geometry.coordinates = coords;
@@ -530,7 +590,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
             // Remove the raw geojson string and add the processed geometry
             const properties = { ...issue };
             delete properties.location_geojson;
-            
+
             return {
                 type: 'Feature',
                 geometry: geometry,
@@ -571,7 +631,7 @@ export const getRetrainingQueue = async (req: AuthRequest, res: Response): Promi
     try {
         const userRole = (req.user?.role || 'citizen').toLowerCase();
         const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff' || userRole === 'super_admin';
-        
+
         if (!isPrivileged) return res.status(403).json({ error: 'Access denied. You must be an admin or staff member.' });
 
         const queue = await AIFeedback.findAll({
