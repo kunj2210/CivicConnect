@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import 'modules/auth/screens/login_screen.dart';
 import 'modules/auth/screens/signup_screen.dart';
 import 'modules/reports/models/report_draft.dart';
@@ -10,14 +13,10 @@ import 'main_navigation.dart';
 import 'modules/reports/screens/report_form_screen.dart';
 import 'modules/reports/screens/nearby_issues_screen.dart';
 import 'modules/reports/screens/notification_list_screen.dart';
-
-import 'package:provider/provider.dart';
 import 'shared/providers/theme_provider.dart';
 import 'shared/providers/navigation_provider.dart';
 import 'modules/reports/services/notification_service.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
-
+import 'modules/auth/screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,12 +28,10 @@ void main() async {
 
   SyncService.initialize();
 
-  // Initialize Supabase
   await Supabase.initialize(
     url: dotenv.get('SUPABASE_URL'),
     anonKey: dotenv.get('SUPABASE_ANON_KEY'),
   );
-
 
   runApp(
     MultiProvider(
@@ -60,7 +57,6 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // Delay initialization until context is available or use a key
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _notificationService.initialize(context);
@@ -70,72 +66,148 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
+    final themeProvider = context.watch<ThemeProvider>();
 
     return MaterialApp(
       title: 'CivicConnect',
       debugShowCheckedModeBanner: false,
       themeMode: themeProvider.themeMode,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0052CC),
-          primary: const Color(0xFF0052CC),
-          secondary: const Color(0xFF00B8D9),
-          brightness: Brightness.light,
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC), // Platinum White
+        primaryColor: const Color(0xFF8B5CF6), // Violet
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF8B5CF6),
+          secondary: Color(0xFF10B981), // Emerald
+          surface: Colors.white,
+          surfaceContainer: Color(0xFFF1F5F9),
+          onSurface: Color(0xFF0F172A),
+          error: Color(0xFFF43F5E),
         ),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
+        textTheme: GoogleFonts.outfitTextTheme(ThemeData.light().textTheme).copyWith(
+          displayLarge: GoogleFonts.outfit(fontWeight: FontWeight.w900, letterSpacing: -1.5, color: const Color(0xFF0F172A)),
+          headlineMedium: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: -0.5, color: const Color(0xFF0F172A)),
+          titleLarge: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+          bodyMedium: GoogleFonts.outfit(fontWeight: FontWeight.w500, color: const Color(0xFF334155)),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+          titleTextStyle: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            color: const Color(0xFF0F172A),
+          ),
+        ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0052CC),
+            backgroundColor: const Color(0xFF8B5CF6),
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: 4,
+            shadowColor: const Color(0xFF8B5CF6).withOpacity(0.3),
+            textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: 0.5),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
-          fillColor: Colors.grey[50],
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.all(20),
+          hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: const BorderSide(color: Color(0xFFF1F5F9)),
+          ),
+          elevation: 2,
+          shadowColor: Colors.black.withOpacity(0.04),
         ),
       ),
       darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0052CC),
-          primary: const Color(0xFF0052CC),
-          secondary: const Color(0xFF00B8D9),
-          brightness: Brightness.dark,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF030304), // Ultra deep black
+        primaryColor: const Color(0xFF8B5CF6), // Violet
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF8B5CF6),
+          secondary: Color(0xFF10B981), // Emerald
+          surface: Color(0xFF121214), // Glass-like surface base
+          surfaceContainer: Color(0xFF1A1A1D),
+          onSurface: Colors.white,
+          error: Color(0xFFF43F5E), // Rose
         ),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
+        textTheme: GoogleFonts.outfitTextTheme(ThemeData.dark().textTheme).copyWith(
+          displayLarge: GoogleFonts.outfit(fontWeight: FontWeight.w900, letterSpacing: -1.5),
+          headlineMedium: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: -0.5),
+          titleLarge: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+          bodyMedium: GoogleFonts.outfit(fontWeight: FontWeight.w500),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            color: Colors.white,
+          ),
+        ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0052CC),
+            backgroundColor: const Color(0xFF8B5CF6),
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             elevation: 0,
+            textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: 0.5),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
-          fillColor: Colors.grey[900],
+          fillColor: Colors.white.withOpacity(0.04),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.all(20),
+          hintStyle: GoogleFonts.outfit(color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xFF121214),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: Colors.white.withOpacity(0.04)),
+          ),
+          elevation: 0,
         ),
       ),
-      home: StreamBuilder<AuthState>(
-        stream: Supabase.instance.client.auth.onAuthStateChange,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
-          }
-          final session = snapshot.data?.session;
-          if (session != null) {
-            return const MainNavigationScreen();
-          }
-          return const LoginScreen();
-        },
-      ),
-
+      home: const SplashScreen(),
       routes: {
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignUpScreen(),
