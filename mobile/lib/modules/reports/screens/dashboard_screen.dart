@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shimmer/shimmer.dart';
-
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../../../config/api_config.dart';
 
@@ -17,7 +18,7 @@ class DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic> _stats = {
     'summary': [
       {'title': 'Total Issues', 'value': 0},
-      {'title': 'Resolved', 'value': 0},
+      {'value': 0, 'title': 'Resolved'},
     ]
   };
   bool _isLoading = true;
@@ -31,7 +32,6 @@ class DashboardScreenState extends State<DashboardScreen> {
   void refreshStats() => _fetchStats();
 
   Future<void> _fetchStats() async {
-
     if (!mounted) return;
     setState(() => _isLoading = true);
 
@@ -54,172 +54,197 @@ class DashboardScreenState extends State<DashboardScreen> {
           _stats = json.decode(response.body);
           _isLoading = false;
         });
-
       } else {
         if (!mounted) return;
         setState(() => _isLoading = false);
-
       }
     } catch (e) {
-      debugPrint('Error fetching stats: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
-
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final totalIssues = _stats['summary'].firstWhere((s) => s['title'] == 'Total Issues', orElse: () => {'value': 0})['value'].toString();
-    final resolvedIssues = _stats['summary'].firstWhere((s) => s['title'] == 'Resolved', orElse: () => {'value': 0})['value'].toString();
+    final isDark = theme.brightness == Brightness.dark;
+    final summary = _stats['summary'] as List;
+    final total = summary.firstWhere((s) => s['title'] == 'Total Issues', orElse: () => {'value': 0})['value'].toString();
+    final resolved = summary.firstWhere((s) => s['title'] == 'Resolved', orElse: () => {'value': 0})['value'].toString();
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _fetchStats,
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              expandedHeight: 120.0,
-              floating: false,
-              pinned: true,
-              flexibleSpace: FlexibleSpaceBar(
-                title: Text('CivicConnect', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: Stack(
+        children: [
+          // Background Glows
+          Positioned(
+            top: -100,
+            right: -50,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF8B5CF6).withOpacity(isDark ? 0.08 : 0.05),
               ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                  onPressed: () => Navigator.pushNamed(context, '/notifications'),
-                ),
-              ],
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Welcome back, Citizen!',
-                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Help us keep the city clean and safe.',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
-                    ),
-                    const SizedBox(height: 24),
-                    _isLoading
-                        ? _buildSkeletonRow(theme)
-                        : Row(
+            ).animate().fadeIn(duration: 2.seconds).scale(begin: const Offset(0.8, 0.8)),
+          ),
+          
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _fetchStats,
+              color: const Color(0xFF8B5CF6),
+              backgroundColor: theme.cardTheme.color,
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  // Custom Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Expanded(
-                                child: _StatsCard(
-                                  title: 'Reports',
-                                  value: totalIssues,
-                                  color: theme.colorScheme.primary,
-                                  icon: Icons.assignment_outlined,
-                                ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'CIVIC CONNECT',
+                                    style: GoogleFonts.outfit(
+                                      textStyle: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 4,
+                                        color: const Color(0xFF8B5CF6),
+                                      ),
+                                    ),
+                                  ).animate().fadeIn(duration: 800.ms).slideX(begin: -0.2),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'City Overview',
+                                    style: theme.textTheme.headlineMedium?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ).animate().fadeIn(delay: 200.ms, duration: 800.ms).slideX(begin: -0.1),
+                                ],
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _StatsCard(
-                                  title: 'Resolved',
-                                  value: resolvedIssues,
-                                  color: Colors.green,
-                                  icon: Icons.check_circle_outline,
-                                ),
-                              ),
+                              _CircularAction(
+                                icon: Icons.notifications_none_rounded,
+                                onTap: () => Navigator.pushNamed(context, '/notifications'),
+                              ).animate().fadeIn(delay: 400.ms).scale(),
                             ],
                           ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Quick Actions',
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    _ActionCard(
-                      title: 'Report New Issue',
-                      subtitle: 'Snap a photo and describe the problem',
-                      icon: Icons.camera_alt,
-                      onTap: () => Navigator.pushNamed(context, '/report'),
+                  ),
+
+                  // Bento Grid
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 0.85,
+                      ),
+                      delegate: SliverChildListDelegate([
+                        // Large Report Card
+                        _BentoCard(
+                          title: 'Submit\nReport',
+                          subtitle: 'AI Sync Assist',
+                          icon: Icons.add_rounded,
+                          color: const Color(0xFF8B5CF6),
+                          isLarge: true,
+                          onTap: () => Navigator.pushNamed(context, '/report'),
+                        ).animate().fadeIn(delay: 500.ms).scale(begin: const Offset(0.9, 0.9)),
+
+                        // Stats Card 1
+                        _StatBento(
+                          label: 'Active Logs',
+                          value: total,
+                          icon: Icons.analytics_outlined,
+                          color: const Color(0xFF8B5CF6),
+                        ).animate().fadeIn(delay: 600.ms).moveX(begin: 20),
+
+                        // Stats Card 2
+                        _StatBento(
+                          label: 'Resolved',
+                          value: resolved,
+                          icon: Icons.verified_rounded,
+                          color: const Color(0xFF10B981),
+                        ).animate().fadeIn(delay: 700.ms).moveY(begin: 20),
+                        
+                        // Nearby Card
+                        _BentoCard(
+                          title: 'Nearby',
+                          subtitle: 'GIS Mapping',
+                          icon: Icons.map_rounded,
+                          color: const Color(0xFF3B82F6),
+                          onTap: () => Navigator.pushNamed(context, '/nearby-issues'),
+                        ).animate().fadeIn(delay: 800.ms).scale(begin: const Offset(0.9, 0.9)),
+                      ]),
                     ),
-                    const SizedBox(height: 12),
-                    _ActionCard(
-                      title: 'View Nearby Issues',
-                      subtitle: 'See what\'s happening in your area',
-                      icon: Icons.map_outlined,
-                      onTap: () => Navigator.pushNamed(context, '/nearby-issues'),
+                  ),
+
+                  // Feed Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 40, 24, 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'RECENT PULSE',
+                            style: GoogleFonts.outfit(
+                              textStyle: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 2,
+                                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.4),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'VIEW ALL',
+                            style: GoogleFonts.outfit(
+                              textStyle: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF8B5CF6),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ).animate().fadeIn(delay: 1.seconds),
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Recent List
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => _LogItem(
+                          title: index == 0 ? 'Pothole Detected' : 'Illegal Dumping',
+                          status: index == 0 ? 'In Progress' : 'Pending',
+                          time: '${(index + 1) * 2}h ago',
+                          icon: index == 0 ? Icons.engineering_rounded : Icons.warning_amber_rounded,
+                        ).animate().fadeIn(delay: (1000 + (index * 100)).ms).slideX(begin: 0.1),
+                        childCount: 3,
+                      ),
+                    ),
+                  ),
+                  
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSkeletonRow(ThemeData theme) {
-    return Shimmer.fromColors(
-      baseColor: theme.brightness == Brightness.dark ? Colors.grey[800]! : Colors.grey[300]!,
-      highlightColor: theme.brightness == Brightness.dark ? Colors.grey[700]! : Colors.grey[100]!,
-      child: Row(
-        children: [
-          Expanded(child: Container(height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)))),
-          const SizedBox(width: 16),
-          Expanded(child: Container(height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)))),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatsCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final Color color;
-  final IconData icon;
-
-  const _StatsCard({
-    required this.title,
-    required this.value,
-    required this.color,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color),
-          ),
-          Text(
-            title,
-            style: TextStyle(color: color.withValues(alpha: 0.8), fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -227,70 +252,282 @@ class _StatsCard extends StatelessWidget {
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
+class _CircularAction extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _ActionCard({
+  const _CircularAction({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(50),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+          border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05)),
+        ),
+        child: Icon(icon, color: isDark ? Colors.white : const Color(0xFF0F172A), size: 22),
+      ),
+    );
+  }
+}
+
+class _BentoCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final bool isLarge;
+  final VoidCallback onTap;
+
+  const _BentoCard({
     required this.title,
     required this.subtitle,
     required this.icon,
+    required this.color,
+    this.isLarge = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: theme.brightness == Brightness.dark ? [] : [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: theme.brightness == Brightness.dark ? Border.all(color: theme.dividerColor) : null,
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(28),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isLarge 
+                ? (isDark ? color.withOpacity(0.8) : color)
+                : (isDark ? Colors.white.withOpacity(0.04) : Colors.white),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: isLarge 
+                  ? color.withOpacity(0.2) 
+                  : (isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9)),
+                width: 1.5,
               ),
-              child: Icon(icon, color: theme.colorScheme.primary),
+              boxShadow: isLarge && !isDark ? [
+                BoxShadow(
+                  color: color.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                )
+              ] : null,
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isLarge 
+                      ? Colors.white.withOpacity(0.2) 
+                      : color.withOpacity(0.1),
                   ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(color: theme.hintColor, fontSize: 13),
+                  child: Icon(
+                    icon, 
+                    color: isLarge ? Colors.white : color, 
+                    size: 24
                   ),
-                ],
-              ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        textStyle: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          height: 1.1,
+                          color: isLarge ? Colors.white : theme.textTheme.titleLarge?.color,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.outfit(
+                        textStyle: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: isLarge 
+                            ? Colors.white.withOpacity(0.7) 
+                            : theme.textTheme.bodyMedium?.color?.withOpacity(0.5),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            Icon(Icons.chevron_right, color: theme.hintColor),
-          ],
+          ),
         ),
       ),
     );
   }
 }
+
+class _StatBento extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _StatBento({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF121214) : Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.03) : const Color(0xFFF1F5F9),
+        ),
+        boxShadow: !isDark ? [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ] : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color.withOpacity(isDark ? 0.4 : 0.6), size: 20),
+          const Spacer(),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              textStyle: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: theme.textTheme.titleLarge?.color,
+                letterSpacing: -1,
+              ),
+            ),
+          ),
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.outfit(
+              textStyle: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.4),
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LogItem extends StatelessWidget {
+  final String title;
+  final String status;
+  final String time;
+  final IconData icon;
+
+  const _LogItem({
+    required this.title,
+    required this.status,
+    required this.time,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF121214) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.03) : const Color(0xFFF1F5F9),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withOpacity(0.05),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: const Color(0xFF8B5CF6).withOpacity(0.8), size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800, 
+                    color: theme.textTheme.titleLarge?.color, 
+                    fontSize: 13
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  status.toUpperCase(),
+                  style: GoogleFonts.outfit(
+                    textStyle: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      color: status == 'Resolved' ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            time,
+            style: TextStyle(
+              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3), 
+              fontSize: 10, 
+              fontWeight: FontWeight.w700
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
