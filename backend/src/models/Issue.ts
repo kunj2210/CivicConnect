@@ -22,6 +22,7 @@ export class Issue extends Model {
     declare fusion_final_category: string | null;
     declare fusion_confidence_score: number | null;
     declare needs_human_review: boolean;
+    declare assigned_department_id: string | null;
     declare assigned_staff_id: string | null;
 }
 
@@ -114,6 +115,14 @@ Issue.init({
     needs_human_review: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
+    },
+    assigned_department_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'departments',
+            key: 'id',
+        },
     },
     assigned_staff_id: {
         type: DataTypes.UUID,

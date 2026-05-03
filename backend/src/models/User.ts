@@ -8,7 +8,7 @@ export class User extends Model {
     declare green_credits: number;
     declare ward_id: string | null;
     declare role: string;
-    declare department_id: number | null;
+    declare department_id: string | null;
     declare is_active: boolean;
     declare home_location: any;
     declare alert_radius_meters: number;
@@ -53,8 +53,12 @@ User.init({
         type: DataTypes.ENUM('citizen', 'staff', 'authority', 'admin', 'super_admin'),
         defaultValue: 'citizen',
     },
+    designation: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
     department_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true,
         references: {
             model: 'departments',

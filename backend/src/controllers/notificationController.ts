@@ -1,12 +1,13 @@
-import type { Request, Response } from 'express';
-import { Notification } from '../models/Notification.js';
+import type { Response } from 'express';
+import { Notification as NotificationDb } from '../config/db.js';
 
-export const getNotifications = async (req: Request, res: Response) => {
+export const getNotifications = async (req: any, res: Response): Promise<any> => {
     try {
-        const { user_id } = req.query;
-        const query = user_id ? { where: { user_id } } : {};
-        const notifications = await Notification.findAll({
-            ...query,
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const notifications = await NotificationDb.findAll({
+            where: { user_id: userId },
             order: [['createdAt', 'DESC']]
         });
         res.json(notifications);
@@ -15,25 +16,23 @@ export const getNotifications = async (req: Request, res: Response) => {
     }
 };
 
-export const createNotification = async (req: Request, res: Response) => {
+export const createNotification = async (req: any, res: Response): Promise<any> => {
     try {
         const { user_id, title, body, data } = req.body;
-        const notification = await Notification.create({ user_id, title, body, data });
+        const notification = await NotificationDb.create({ user_id, title, body, data });
         res.status(201).json(notification);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 };
 
-
-export const markAsRead = async (req: Request, res: Response) => {
+export const markAsRead = async (req: any, res: Response): Promise<any> => {
     try {
         const { id } = req.params;
-        const notification = await Notification.findByPk(id as any);
+        const notification = await NotificationDb.findByPk(id as string);
         if (!notification) return res.status(404).json({ error: 'Notification not found' });
 
-        notification.is_read = true;
-        await notification.save();
+        await notification.update({ is_read: true });
         res.json(notification);
     } catch (error: any) {
         res.status(500).json({ error: error.message });

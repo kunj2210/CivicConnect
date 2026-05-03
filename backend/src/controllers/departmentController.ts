@@ -1,9 +1,23 @@
 import type { Request, Response } from 'express';
-import { Department } from '../config/db.js';
+import { Department, User, sequelize } from '../config/db.js';
 
 export const getDepartments = async (_req: Request, res: Response) => {
     try {
-        const depts = await Department.findAll();
+        const depts = await Department.findAll({
+            attributes: {
+                include: [
+                    [
+                        sequelize.literal(`(
+                            SELECT COUNT(*)
+                            FROM users
+                            WHERE users.department_id = "Department".id
+                            AND users.role = 'staff'
+                        )`),
+                        'staff_count'
+                    ]
+                ]
+            }
+        });
         res.json(depts);
     } catch (error: any) {
         res.status(500).json({ error: error.message });

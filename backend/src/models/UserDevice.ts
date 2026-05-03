@@ -14,7 +14,7 @@ UserDevice.init({
         primaryKey: true,
     },
     user_id: {
-        type: DataTypes.STRING,
+        type: DataTypes.UUID,
         allowNull: false,
     },
     fcm_token: {

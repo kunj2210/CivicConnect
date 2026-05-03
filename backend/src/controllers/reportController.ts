@@ -11,10 +11,11 @@ import { StorageService } from '../services/storageService.js';
 import { PriorityService } from '../services/priorityService.js';
 import { findWardId } from '../utils/spatialUtils.js';
 import { GamificationService, BADGES } from '../services/gamificationService.js';
+import { TriageService } from '../services/triageService.js';
 
 
+import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
-
 
 import { fileURLToPath } from 'url';
 
@@ -138,6 +139,10 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        // 4.1.8 Auto-Routing Triage (NEW)
+        const assignedDeptId = await TriageService.getDepartmentIdForCategory(fusionResult.finalCategory);
+        const assignedStaffId = await TriageService.findBestStaff(assignedDeptId, ward_id);
+
         // 4.2 Dynamic Priority Calculation (FR 4)
         const priorityScore = await PriorityService.calculatePriority(
             user.id,
@@ -168,7 +173,9 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             ai_text_top3: textTop3,
             fusion_final_category: fusionResult.finalCategory,
             fusion_confidence_score: fusionResult.fusionScore,
-            needs_human_review: fusionResult.needsHumanReview
+            needs_human_review: fusionResult.needsHumanReview,
+            assigned_department_id: assignedDeptId,
+            assigned_staff_id: assignedStaffId
         });
 
 
@@ -196,13 +203,25 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             parseFloat(longitude),
             user.id
         ).catch(err => console.error('[GeoIntelligence] Proactive Alert Failed:', err));
+        
+        // 5.6 Notify Assigned Staff (NEW)
+        if (assignedStaffId) {
+            sendNotificationToUser(
+                assignedStaffId,
+                'New Task Assigned',
+                `You have been assigned a new ${issue.category} report in ${issue.ward_id || 'your ward'}.`,
+                { issue_id: issue.id, type: 'TASK_ASSIGNED' }
+            ).catch(err => console.error('[Triage] Staff Notification Failed:', err));
+        }
 
 
-        // 7. Notify User
+        const priorityLevel = issue.priority_score > 70 ? 'High' : (issue.priority_score > 40 ? 'Medium' : 'Low');
+        const confidence = (issue.fusion_confidence_score! * 100).toFixed(0);
+
         await sendNotificationToUser(
             user.id,
-            'Issue Reported Successfully',
-            `Your report for ${issue.category} has been received.`,
+            `Issue Verified: ${issue.category}`,
+            `AI verified your report with ${confidence}% confidence. Priority set to ${priorityLevel}.`,
             { issue_id: issue.id }
         );
 
@@ -451,20 +470,23 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
         const { id } = req.params;
         const file = req.files?.['image']?.[0] || req.files?.[0];
         const phone = req.userIdentifier;
+        const user = await User.findOne({ where: { phone } });
+        if (!user || (user.role !== 'staff' && user.role !== 'admin' && user.role !== 'super_admin')) {
+            return res.status(403).json({ error: 'Access denied. Only assigned staff can propose resolution.' });
+        }
 
         if (!file) return res.status(400).json({ error: 'Resolution image required' });
 
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
+        // Ensure the staff member is the one assigned (unless admin)
+        if (user.role === 'staff' && issue.assigned_staff_id !== user.id) {
+            return res.status(403).json({ error: 'Access denied. You are not assigned to this issue.' });
+        }
+
         const imageUrl = await StorageService.uploadFile(file, 'repairs') || '';
 
-
-        const user = await User.findOne({ where: { phone } });
-        if (!user) return res.status(401).json({ error: 'User profile missing' });
-
-        issue.status = 'Pending Confirmation';
-        await issue.save();
 
         await Repair.create({
             issue_id: issue.id,
@@ -472,7 +494,29 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
             minio_post_key: imageUrl,
         });
 
-        res.json({ success: true, message: 'Resolution proposed', imageUrl });
+        // 3. Update Issue Status to Pending Confirmation
+        issue.status = 'Pending Confirmation';
+        await issue.save();
+
+        // 4. Log the submission
+        await AuditLog.create({
+            actor_id: user.id,
+            event_type: 'RESOLUTION_SUBMITTED',
+            payload: { issue_id: issue.id, repair_image: imageUrl },
+        });
+
+        // 5. Notify Authorities (Wait, we can add this for better UX)
+        // For now, we'll notify the reporter that work is done and pending approval
+        if (issue.reporter_id) {
+            sendNotificationToUser(
+                issue.reporter_id,
+                'Resolution Proposed',
+                `Staff has submitted a resolution for your issue ${issue.id.slice(0, 8)}. It is now awaiting final approval.`,
+                { issue_id: issue.id, type: 'RESOLUTION_PROPOSED' }
+            ).catch(err => console.error('[Notification] Proposal notify failed:', err));
+        }
+
+        res.json({ success: true, message: 'Resolution proposed and awaiting authority approval', imageUrl });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -481,7 +525,12 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
 export const confirmResolution = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { id } = req.params;
-        const phone = req.userIdentifier;
+        const userAuth = (req as any).user;
+
+        // 1. Role Check: Only Authority or Admin can confirm
+        if (!userAuth || !['authority', 'admin', 'super_admin'].includes(userAuth.role)) {
+            return res.status(403).json({ error: 'Access denied. Only authorities can approve resolutions.' });
+        }
 
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
@@ -490,10 +539,18 @@ export const confirmResolution = async (req: AuthRequest, res: Response): Promis
             return res.status(400).json({ error: 'Issue is not awaiting confirmation' });
         }
 
+        // 2. Finalize Issue
         issue.status = 'Resolved';
         await issue.save();
 
-        // Award Green Credits to ALL citizens who reported this issue (Pillar 2)
+        // 3. Mark Repair as closed if exists
+        const repair = await Repair.findOne({ where: { issue_id: issue.id }, order: [['createdAt', 'DESC']] });
+        if (repair) {
+            repair.closed_at = new Date();
+            await repair.save();
+        }
+
+        // 4. Award Green Credits to ALL citizens who reported this issue (Pillar 2)
         const reporterIds = issue.reporter_ids || [issue.reporter_id];
         const creditAmount = Math.round((issue.priority_score || 0) * 10);
 
@@ -514,9 +571,69 @@ export const confirmResolution = async (req: AuthRequest, res: Response): Promis
             }
         }
 
+        // 6. Log Approval
+        await AuditLog.create({
+            actor_id: userAuth.id,
+            event_type: 'RESOLUTION_APPROVED',
+            payload: { issue_id: issue.id },
+        });
 
+        // 7. Notify ALL Reporters
+        for (const rId of reporterIds) {
+            sendNotificationToUser(
+                rId as string,
+                'Issue Resolved! 🎉',
+                `Your reported issue ${issue.id.slice(0, 8)} has been confirmed as resolved. You've earned ${creditAmount} Green Credits!`,
+                { issue_id: issue.id, type: 'ISSUE_RESOLVED', credits: creditAmount }
+            ).catch(err => console.error('[Notification] Resolution notify failed:', err));
+        }
 
         res.json({ success: true, message: 'Resolution confirmed and credits awarded' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const rejectResolution = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const userAuth = (req as any).user;
+
+        // 1. Role Check: Only Authority or Admin can reject
+        if (!userAuth || !['authority', 'admin', 'super_admin'].includes(userAuth.role)) {
+            return res.status(403).json({ error: 'Access denied. Only authorities can reject resolutions.' });
+        }
+
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
+
+        if (issue.status !== 'Pending Confirmation') {
+            return res.status(400).json({ error: 'Issue is not awaiting confirmation' });
+        }
+
+        // 2. Revert to In Progress
+        issue.status = 'In Progress';
+        await issue.save();
+
+        // 3. Log Rejection
+        await AuditLog.create({
+            actor_id: userAuth.id,
+            event_type: 'RESOLUTION_REJECTED',
+            payload: { issue_id: issue.id, reason: reason || 'Quality of work not satisfactory' },
+        });
+
+        // 4. Notify Staff
+        if (issue.assigned_staff_id) {
+            sendNotificationToUser(
+                issue.assigned_staff_id,
+                'Resolution Rejected',
+                `Your resolution for issue ${issue.id.slice(0, 8)} was rejected. Reason: ${reason || 'Needs more work.'}`,
+                { issue_id: issue.id, type: 'TASK_REJECTED' }
+            ).catch(err => console.error('[Notification] Rejection notify failed:', err));
+        }
+
+        res.json({ success: true, message: 'Resolution rejected, issue returned to staff' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -638,6 +755,36 @@ export const getRetrainingQueue = async (req: AuthRequest, res: Response): Promi
             order: [['createdAt', 'DESC']],
         });
         res.json(queue);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const updateFeedbackStatus = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+
+        if (!isAdmin) return res.status(403).json({ error: 'Access denied. Only administrators can update retraining status.' });
+
+        const { id } = req.params;
+        const { status } = req.body; // 'Processed' or 'Dismissed'
+
+        const feedback = await AIFeedback.findByPk(id as string);
+        if (!feedback) return res.status(404).json({ error: 'Feedback entry not found' });
+
+        await feedback.update({ status: status || 'Processed' });
+        
+        // Log the administrative action
+        await AuditLog.create({
+            id: uuidv4(),
+            issue_id: feedback.issue_id,
+            action: `AI_FEEDBACK_${(status || 'PROCESSED').toUpperCase()}`,
+            actor_id: req.user?.id,
+            details: { feedback_id: id, new_status: status }
+        });
+
+        res.json({ message: `Feedback status updated to ${status}` });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

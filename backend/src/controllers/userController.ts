@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { User, Department, Ward } from '../config/db.js';
+import { User, Department, Ward, UserDevice } from '../config/db.js';
 import { findWardId } from '../utils/spatialUtils.js';
 import { GamificationService } from '../services/gamificationService.js';
 import { Op } from 'sequelize';
@@ -135,6 +135,43 @@ export const getMyProfile = async (req: AuthRequest, res: Response) => {
         
         if (!user) return res.status(404).json({ error: 'Profile not found' });
         res.json(user);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * Registers or updates a device's FCM token for push notifications.
+ */
+export const updateDeviceToken = async (req: AuthRequest, res: Response) => {
+    try {
+        const { fcm_token } = req.body;
+        const userAuth = (req as any).user;
+
+        if (!userAuth || !userAuth.id) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        if (!fcm_token) {
+            return res.status(400).json({ error: 'fcm_token is required' });
+        }
+
+        // Upsert device token
+        const [device, created] = await UserDevice.findOrCreate({
+            where: { fcm_token },
+            defaults: {
+                user_id: userAuth.id,
+                fcm_token
+            }
+        });
+
+        if (!created && device.user_id !== userAuth.id) {
+            // Token belongs to someone else now, update owner
+            device.user_id = userAuth.id;
+            await device.save();
+        }
+
+        res.json({ success: true, message: 'Device token updated' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
