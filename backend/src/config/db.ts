@@ -8,6 +8,7 @@ import { Repair } from '../models/Repair.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { Notification } from '../models/Notification.js';
 import { AIFeedback } from '../models/AIFeedback.js';
+import { UserDevice } from '../models/UserDevice.js';
 
 // Define Associations
 User.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
@@ -25,6 +26,9 @@ Issue.belongsTo(Ward, { foreignKey: 'ward_id', as: 'ward' });
 
 Repair.belongsTo(Issue, { foreignKey: 'issue_id', as: 'issue' });
 Repair.belongsTo(User, { foreignKey: 'worker_id', as: 'worker' });
+
+User.hasMany(UserDevice, { foreignKey: 'user_id', as: 'devices' });
+UserDevice.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 dotenv.config();
 
@@ -57,6 +61,18 @@ export const connectPostgres = async () => {
             console.warn('ENUM update warning (some may already exist):', (enumErr as any).message);
         }
 
+        // Targeted migration for assigned_department_id if missing
+        try {
+            await sequelize.query(`
+                ALTER TABLE "issues" 
+                ADD COLUMN IF NOT EXISTS "assigned_department_id" UUID 
+                REFERENCES "departments" ("id") ON DELETE SET NULL;
+            `);
+            console.log('Verified assigned_department_id column in issues table');
+        } catch (colError) {
+            console.error('Error ensuring assigned_department_id exists:', colError);
+        }
+
         // Targeted migration for assigned_staff_id if missing
         try {
             await sequelize.query(`
@@ -76,5 +92,5 @@ export const connectPostgres = async () => {
     }
 };
 
-export { User, Department, Ward, Issue, Repair, AuditLog, Notification, AIFeedback };
+export { User, Department, Ward, Issue, Repair, AuditLog, Notification, AIFeedback, UserDevice };
 
