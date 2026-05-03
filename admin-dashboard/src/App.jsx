@@ -3,6 +3,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Departments from './pages/Departments';
 import AuthorityDashboard from './pages/AuthorityDashboard';
+import StaffDashboard from './pages/StaffDashboard';
+import CommissionerDashboard from './pages/CommissionerDashboard';
 
 // Admin specific pages
 import AdminIssueList from './pages/AdminIssueList';
@@ -34,7 +36,7 @@ function App() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute allowedRole="Admin">
+              <ProtectedRoute allowedRoles={['Admin', 'super_admin']}>
                 <DashboardLayout />
               </ProtectedRoute>
             }
@@ -49,14 +51,29 @@ function App() {
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="ai-retraining" element={<AIRetraining />} />
             <Route path="settings" element={<AdminSettings />} />
+          </Route>
 
+          {/* Staff (Junior Engineer) Routes */}
+          <Route
+            path="/staff"
+            element={
+              <ProtectedRoute allowedRoles={['staff', 'Admin', 'super_admin']}>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<StaffDashboard />} />
+            <Route path="issues" element={<AdminIssueList />} />
+            <Route path="issues/:id" element={<AdminIssueDetails />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           {/* Authority Routes */}
           <Route
             path="/authority"
             element={
-              <ProtectedRoute allowedRole="Authority">
+              <ProtectedRoute allowedRoles={['Authority', 'super_admin']}>
                 <DashboardLayout />
               </ProtectedRoute>
             }
@@ -68,7 +85,23 @@ function App() {
             <Route path="map" element={<AuthorityMapView />} />
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="settings" element={<AuthoritySettings />} />
+          </Route>
 
+          {/* Super Admin (Municipal Commissioner) Routes */}
+          <Route
+            path="/superadmin"
+            element={
+              <ProtectedRoute allowedRoles="super_admin">
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<CommissionerDashboard />} />
+            <Route path="map" element={<AdminMapView />} />
+            <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           {/* Fallback */}

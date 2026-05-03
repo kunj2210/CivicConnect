@@ -1,20 +1,20 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children, allowedRole }) => {
+const ProtectedRoute = ({ children, allowedRoles }) => {
     const { user, loading } = useAuth();
 
-    if (loading) {
-        return null; // Don't redirect while AuthContext is still verifying
-    }
+    if (loading) return null;
 
-    if (!user) {
-        // Redirect to login if not authenticated
-        return <Navigate to="/login" replace />;
-    }
+    if (!user) return <Navigate to="/login" replace />;
 
-    if (allowedRole && user.role !== allowedRole) {
-        // Redirect to login if user role doesn't match
+    const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+    const userRole = (user.role || '').toLowerCase();
+    
+    const hasAccess = roles.some(role => role.toLowerCase() === userRole);
+
+    if (allowedRoles && !hasAccess) {
+        console.warn(`[ProtectedRoute] Access Denied. User role: ${userRole}, Required: ${roles}`);
         return <Navigate to="/login" replace />;
     }
 

@@ -206,7 +206,7 @@ const Departments = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {[
                     { title: 'Total Depts', value: depts.length, icon: Building2, color: 'blue' },
-                    { title: 'Active Staff', value: depts.reduce((acc, curr) => acc + curr.staff_count, 0), icon: Users, color: 'green' },
+                    { title: 'Active Staff', value: depts.reduce((acc, curr) => acc + (parseInt(curr.staff_count) || 0), 0), icon: Users, color: 'green' },
                     { title: 'Operational', value: '98%', icon: CheckCircle2, color: 'purple' },
                 ].map((stat, i) => (
                     <div key={i} className={`p-8 rounded-3xl shadow-xl border-none transition-all hover:translate-y-[-4px] ${darkMode ? 'bg-gray-800/50 backdrop-blur-xl border-white/5' : 'bg-white shadow-gray-200/50'}`}>

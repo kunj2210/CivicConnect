@@ -63,15 +63,19 @@ const Login = () => {
             }
 
             console.log('[Dashboard Login] Success:', user.email || user.phone);
-            const role = user.user_metadata?.role || (user.email === 'mgkuvadiya28@gmail.com' || user.phone ? 'Admin' : null);
+            const userRole = (user.user_metadata?.role || user.role || 'citizen').toLowerCase();
 
-            if (role === 'Admin') {
+            if (userRole === 'super_admin') {
+                navigate('/superadmin/dashboard');
+            } else if (userRole === 'admin') {
                 navigate('/admin/dashboard');
-            } else if (role === 'Authority') {
+            } else if (userRole === 'authority') {
                 navigate('/authority/dashboard');
+            } else if (userRole === 'staff') {
+                navigate('/staff/dashboard');
             } else {
-                console.error('[Dashboard Login] Access Denied: No authorized role found in user metadata');
-                setError('Access denied: Unauthorized role.');
+                console.error('[Dashboard Login] Access Denied: Role is', userRole);
+                setError('Access denied: Citizens must use the mobile app.');
                 setIsLoading(false);
             }
         } catch (error) {

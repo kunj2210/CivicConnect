@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { ArrowLeft, Trash2, CheckCircle, Clock, AlertCircle, MapPin, User, Calendar, Tag, FileText, Mic, Globe, Zap } from 'lucide-react';
 import { api } from '../utils/api';
+import { supabase } from '../config/supabase';
 
 
 const AdminIssueDetails = () => {
@@ -18,19 +19,29 @@ const AdminIssueDetails = () => {
     const [auditLogs, setAuditLogs] = useState([]);
     const [staffMembers, setStaffMembers] = useState([]);
     const [loadingStaff, setLoadingStaff] = useState(false);
+    const [currentUser, setCurrentUser] = useState(null);
+    const [repairData, setRepairData] = useState(null);
+    const [isSubmittingProof, setIsSubmittingProof] = useState(false);
+    const [proofFile, setProofFile] = useState(null);
+    const [isRejecting, setIsRejecting] = useState(false);
+    const [rejectionReason, setRejectionReason] = useState('');
 
 
     useEffect(() => {
         fetchReport();
         fetchDepartments();
         fetchAuditLogs();
+        fetchCurrentUser();
     }, [id]);
 
     useEffect(() => {
         if (report?.ward_id) {
             fetchStaff(report.ward_id, report.assigned_department_id);
         }
-    }, [report?.ward_id, report?.assigned_department_id]);
+        if (report?.status === 'Pending Confirmation' || report?.status === 'Resolved') {
+            fetchRepairData();
+        }
+    }, [report?.ward_id, report?.assigned_department_id, report?.status]);
 
 
     const fetchDepartments = async () => {
@@ -53,16 +64,39 @@ const AdminIssueDetails = () => {
     };
 
     const fetchStaff = async (wardId, deptId) => {
+        setLoadingStaff(true);
         try {
-            setLoadingStaff(true);
-            const data = await api.get('/users/staff', { 
-                params: { ward_id: wardId, department_id: deptId } 
-            });
+            const data = await api.get(`/users?ward_id=${wardId}&department_id=${deptId}&role=staff`);
             setStaffMembers(data);
         } catch (err) {
             console.error('Failed to fetch staff:', err);
         } finally {
             setLoadingStaff(false);
+        }
+    };
+
+    const fetchCurrentUser = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                // Fetch the full profile from our DB to get the role
+                const profile = await api.get('/users/me');
+                setCurrentUser(profile);
+            }
+        } catch (err) {
+            console.error('Failed to fetch current user:', err);
+        }
+    };
+
+    const fetchRepairData = async () => {
+        try {
+            const logs = await api.get(`/reports/${id}/audit`);
+            const resolutionLog = logs.find(log => log.event_type === 'RESOLUTION_SUBMITTED');
+            if (resolutionLog) {
+                setRepairData(resolutionLog.payload);
+            }
+        } catch (err) {
+            console.error('Failed to fetch repair data:', err);
         }
     };
 
@@ -132,6 +166,45 @@ const AdminIssueDetails = () => {
 
 
 
+    const handleStatusAction = async (action) => {
+        try {
+            if (action === 'start_work') {
+                await api.patch(`/reports/${id}`, { status: 'In Progress' });
+            } else if (action === 'approve') {
+                await api.post(`/reports/${id}/confirm-resolution`);
+            } else if (action === 'reject') {
+                await api.post(`/reports/${id}/reject-resolution`, { reason: rejectionReason });
+                setIsRejecting(false);
+            }
+            fetchReport();
+            fetchAuditLogs();
+        } catch (err) {
+            alert('Action failed: ' + err.message);
+        }
+    };
+
+    const handleSubmitProof = async (e) => {
+        e.preventDefault();
+        if (!proofFile) return alert('Please select a photo');
+
+        try {
+            setIsSubmittingProof(true);
+            const formData = new FormData();
+            formData.append('image', proofFile);
+            
+            await api.post(`/reports/${id}/propose-resolution`, formData);
+            
+            setProofFile(null);
+            setIsSubmittingProof(false);
+            fetchReport();
+            fetchAuditLogs();
+        } catch (err) {
+            alert('Submission failed: ' + err.message);
+            setIsSubmittingProof(false);
+        }
+    };
+
+
     const handleDelete = async () => {
         if (!window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) return;
         try {
@@ -148,6 +221,34 @@ const AdminIssueDetails = () => {
     if (!report) return <div className={`p-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Issue not found.</div>;
 
     const coords = report.location?.coordinates || [0, 0];
+
+    /**
+     * Helper to extract Top-3 predictions from various legacy/nested formats
+     * found in the database (top_3, predictions, issues, category arrays, etc.)
+     */
+    const extractPredictions = (data) => {
+        if (!data) return [];
+        
+        // Fix for arrays containing a single object with a nested array
+        let raw = Array.isArray(data) ? (data.length === 1 ? data[0] : data) : data;
+        
+        // 1. Look for explicit children keys
+        let list = raw.top_3 || raw.predictions || raw.issues || (Array.isArray(raw) ? raw : null);
+        
+        // 2. Handle citizen_requests -> category (nested case)
+        if (!list && raw.citizen_requests && Array.isArray(raw.citizen_requests)) {
+            list = raw.citizen_requests[0]?.category;
+        }
+
+        // 3. Fallback to just the object itself as a single item list
+        if (!list) list = [raw];
+
+        // 4. Ensure it's an array and normalize keys (class/category, confidence/score)
+        return Array.isArray(list) ? list.map(item => ({
+            label: item.class || item.category || item.label || item.name || 'Unknown',
+            score: Number(item.confidence || item.score || item.probability || 0)
+        })) : [];
+    };
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -176,23 +277,44 @@ const AdminIssueDetails = () => {
                         <div className={`p-4 border-b flex items-center justify-between ${darkMode ? 'bg-white/5 border-white/5' : 'bg-gray-50'}`}>
                             <h2 className={`font-bold flex items-center ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                                 <FileText className="w-5 h-5 mr-2 text-blue-500" />
-                                Evidence & Visuals
+                                {report.status === 'Pending Confirmation' || report.status === 'Resolved' ? 'Audit: Before vs After' : 'Evidence & Visuals'}
                             </h2>
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${report.status === 'Resolved' ? 'bg-green-100 text-green-700' :
-                                report.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
-                                    'bg-red-100 text-red-700'
-                                }`}>
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                                report.status === 'Resolved' ? 'bg-green-100 text-green-700' :
+                                report.status === 'Pending Confirmation' ? 'bg-amber-100 text-amber-700' :
+                                report.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                'bg-red-100 text-red-700'
+                            }`}>
                                 {report.status}
                             </span>
                         </div>
-                        <div className={`p-1 min-h-[300px] flex items-center justify-center rounded-xl ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
-                            <img
-                                src={report.minio_pre_key || 'https://via.placeholder.com/800x600'}
-                                alt="Report Evidence"
-                                className="w-full aspect-video object-cover rounded-xl shadow-inner"
-                            />
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1 p-1">
+                            <div className="relative group">
+                                <img
+                                    src={report.minio_pre_key || 'https://via.placeholder.com/800x600'}
+                                    alt="Before"
+                                    className="w-full aspect-video object-cover rounded-l-xl"
+                                />
+                                <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 text-white text-[10px] font-bold rounded uppercase">Before</div>
+                            </div>
+                            
+                            {(report.status === 'Pending Confirmation' || report.status === 'Resolved') ? (
+                                <div className="relative group">
+                                    <img
+                                        src={repairData?.repair_image || 'https://via.placeholder.com/800x600?text=Resolving...'}
+                                        alt="After"
+                                        className="w-full aspect-video object-cover rounded-r-xl"
+                                    />
+                                    <div className="absolute top-2 left-2 px-2 py-1 bg-emerald-600/80 text-white text-[10px] font-bold rounded uppercase">After</div>
+                                </div>
+                            ) : (
+                                <div className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-r-xl ${darkMode ? 'bg-black/20 border-white/5 text-gray-600' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                                    <Clock size={40} className="mb-2 opacity-20" />
+                                    <p className="text-xs font-bold uppercase tracking-widest opacity-50">Awaiting Fix</p>
+                                </div>
+                            )}
                         </div>
-
                     </div>
 
                     {(report.status === 'Pending Confirmation' || report.status === 'Resolved') && report.metadata?.resolution_image_url && (
@@ -285,17 +407,19 @@ const AdminIssueDetails = () => {
                                     <FileText className="w-3 h-3 mr-1 text-blue-500" /> Image Preds (50% Weight)
                                 </div>
                                 <div className="space-y-3">
-                                    {(report.ai_image_top3 || []).map((p, i) => (
+                                    {extractPredictions(report.ai_image_top3).length > 0 ? (extractPredictions(report.ai_image_top3).map((p, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category || p.label || p.name || 'Unknown'}</span>
-                                                <span className="text-blue-500">{((Number(p.confidence || p.score || p.probability) || 0) * 100).toFixed(0)}%</span>
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-blue-500">{(p.score * 100).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-blue-500/50 h-full" style={{ width: `${(Number(p.confidence) || 0) * 100}%` }} />
+                                                <div className="bg-blue-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
                                             </div>
                                         </div>
-                                    ))}
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No image data processed</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -305,17 +429,19 @@ const AdminIssueDetails = () => {
                                     <Mic className="w-3 h-3 mr-1 text-emerald-500" /> Text Analysis (20% Weight)
                                 </div>
                                 <div className="space-y-3">
-                                    {(report.ai_text_top3 || []).map((p, i) => (
+                                    {extractPredictions(report.ai_text_top3).length > 0 ? (extractPredictions(report.ai_text_top3).map((p, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category || p.label || p.name || 'Unknown'}</span>
-                                                <span className="text-emerald-500">{((Number(p.confidence || p.score || p.probability) || 0) * 100).toFixed(0)}%</span>
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-emerald-500">{(p.score * 100).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${(Number(p.confidence) || 0) * 100}%` }} />
+                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
                                             </div>
                                         </div>
-                                    ))}
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No text data processed</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -325,14 +451,14 @@ const AdminIssueDetails = () => {
                                     <Mic className="w-3 h-3 mr-1 text-purple-500" /> Audio Mood (30% Weight)
                                 </div>
                                 <div className="space-y-3">
-                                    {(report.ai_audio_top3 || []).length > 0 ? (report.ai_audio_top3.map((p, i) => (
+                                    {extractPredictions(report.ai_audio_top3).length > 0 ? (extractPredictions(report.ai_audio_top3).map((p, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category || p.label || p.name || 'Unknown'}</span>
-                                                <span className="text-purple-500">{((Number(p.confidence || p.score || p.probability) || 0) * 100).toFixed(0)}%</span>
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-purple-500">{(p.score * 100).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-purple-500/50 h-full" style={{ width: `${(Number(p.confidence) || 0) * 100}%` }} />
+                                                <div className="bg-purple-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
                                             </div>
                                         </div>
                                     ))) : (
@@ -375,39 +501,113 @@ const AdminIssueDetails = () => {
 
                 <div className="space-y-6">
                     <div className={`rounded-2xl shadow-sm border p-6 space-y-6 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
-                        <h2 className={`font-bold border-b pb-4 ${darkMode ? 'text-gray-200 border-white/5' : 'text-gray-800'}`}>Triage Actions</h2>
-                        <div className="space-y-3">
-                            <button
-                                onClick={() => handleUpdateStatus('Pending')}
-                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${report.status === 'Pending' ? 'bg-red-500/10 border-red-500/30 text-red-500' : darkMode ? 'hover:bg-white/5 border-white/5 text-gray-400' : 'hover:bg-gray-50 border-gray-100'}`}
-                            >
-                                <div className="flex items-center">
-                                    <AlertCircle className="w-5 h-5 mr-3" />
-                                    <span className="font-medium">Mark as Pending</span>
-                                </div>
-                                {report.status === 'Pending' && <CheckCircle className="w-4 h-4" />}
-                            </button>
-                            <button
-                                onClick={() => handleUpdateStatus('In Progress')}
-                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${report.status === 'In Progress' ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500' : darkMode ? 'hover:bg-white/5 border-white/5 text-gray-400' : 'hover:bg-gray-50 border-gray-100'}`}
-                            >
-                                <div className="flex items-center">
-                                    <Clock className="w-5 h-5 mr-3" />
-                                    <span className="font-medium">Move to In-Progress</span>
-                                </div>
-                                {report.status === 'In Progress' && <CheckCircle className="w-4 h-4" />}
-                            </button>
-                            <button
-                                onClick={() => handleUpdateStatus('Resolved')}
-                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${report.status === 'Resolved' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : darkMode ? 'hover:bg-white/5 border-white/5 text-gray-400' : 'hover:bg-gray-50 border-gray-100'}`}
-                            >
-                                <div className="flex items-center">
-                                    <CheckCircle className="w-5 h-5 mr-3" />
-                                    <span className="font-medium">Sign-off Resolved</span>
-                                </div>
-                                {report.status === 'Resolved' && <CheckCircle className="w-4 h-4" />}
-                            </button>
-                        </div>
+                        <h2 className={`font-bold border-b pb-4 ${darkMode ? 'text-gray-200 border-white/5' : 'text-gray-800'}`}>Workflow Actions</h2>
+                        
+                        {/* Staff Specific Actions */}
+                        {currentUser?.role === 'staff' && report.assigned_staff_id === currentUser.id && (
+                            <div className="space-y-4">
+                                {report.status === 'Pending' && (
+                                    <button
+                                        onClick={() => handleStatusAction('start_work')}
+                                        className="w-full flex items-center justify-center p-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 hover:scale-[1.02] active:scale-95 transition-all"
+                                    >
+                                        <Zap className="w-5 h-5 mr-3" />
+                                        Start Resolution
+                                    </button>
+                                )}
+
+                                {report.status === 'In Progress' && (
+                                    <form onSubmit={handleSubmitProof} className="space-y-4">
+                                        <div className={`p-4 rounded-xl border-2 border-dashed ${darkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
+                                            <p className="text-[10px] font-black uppercase text-gray-500 mb-3 tracking-widest text-center">Attach Proof of Work</p>
+                                            <input 
+                                                type="file" 
+                                                accept="image/*"
+                                                capture="environment"
+                                                onChange={(e) => setProofFile(e.target.files[0])}
+                                                className="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-500/10 file:text-blue-500 hover:file:bg-blue-500/20"
+                                            />
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmittingProof}
+                                            className={`w-full flex items-center justify-center p-4 bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all ${isSubmittingProof ? 'opacity-50 pointer-events-none' : ''}`}
+                                        >
+                                            <CheckCircle className="w-5 h-5 mr-3" />
+                                            {isSubmittingProof ? 'Uploading...' : 'Submit Fix for Review'}
+                                        </button>
+                                    </form>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Authority Specific Actions */}
+                        {(currentUser?.role === 'authority' || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
+                            <div className="space-y-4">
+                                {report.status === 'Pending Confirmation' ? (
+                                    <div className="space-y-3">
+                                        <button
+                                            onClick={() => handleStatusAction('approve')}
+                                            className="w-full flex items-center justify-center p-4 bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all"
+                                        >
+                                            <CheckCircle className="w-5 h-5 mr-3" />
+                                            Approve & Close Case
+                                        </button>
+                                        
+                                        {!isRejecting ? (
+                                            <button
+                                                onClick={() => setIsRejecting(true)}
+                                                className={`w-full flex items-center justify-center p-4 border rounded-xl font-bold transition-all ${darkMode ? 'text-red-400 border-red-500/30' : 'text-red-600 border-red-200'}`}
+                                            >
+                                                <AlertCircle className="w-5 h-5 mr-3" />
+                                                Reject - Needs Rework
+                                            </button>
+                                        ) : (
+                                            <div className="space-y-3 p-4 rounded-xl bg-red-500/5 border border-red-500/20">
+                                                <textarea
+                                                    value={rejectionReason}
+                                                    onChange={(e) => setRejectionReason(e.target.value)}
+                                                    placeholder="Reason for rejection..."
+                                                    className={`w-full p-3 rounded-lg text-xs outline-none ring-1 ring-red-500/20 ${darkMode ? 'bg-black/40 text-white' : 'bg-white'}`}
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => handleStatusAction('reject')} className="flex-1 py-2 bg-red-600 text-white text-xs font-bold rounded-lg">Confirm Reject</button>
+                                                    <button onClick={() => setIsRejecting(false)} className="px-4 py-2 text-xs font-bold text-gray-500">Cancel</button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-gray-500 mb-4 tracking-widest border-b pb-2">Status Management</p>
+                                        <button
+                                            onClick={() => handleUpdateStatus('Pending')}
+                                            className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${report.status === 'Pending' ? 'bg-red-500/10 border-red-500/30 text-red-500' : darkMode ? 'hover:bg-white/5 border-white/5 text-gray-400' : 'hover:bg-gray-50 border-gray-100'}`}
+                                        >
+                                            <div className="flex items-center">
+                                                <AlertCircle className="w-5 h-5 mr-3" />
+                                                <span className="font-medium">Force Pending</span>
+                                            </div>
+                                            {report.status === 'Pending' && <CheckCircle className="w-4 h-4" />}
+                                        </button>
+                                        <button
+                                            onClick={() => handleUpdateStatus('In Progress')}
+                                            className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${report.status === 'In Progress' ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : darkMode ? 'hover:bg-white/5 border-white/5 text-gray-400' : 'hover:bg-gray-50 border-gray-100'}`}
+                                        >
+                                            <div className="flex items-center">
+                                                <Clock className="w-5 h-5 mr-3" />
+                                                <span className="font-medium">Force In-Progress</span>
+                                            </div>
+                                            {report.status === 'In Progress' && <CheckCircle className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <p className={`text-[10px] italic text-center ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                            {currentUser?.role === 'staff' ? 'Authorized as Field Staff' : 'Authorized as Municipal Authority'}
+                        </p>
                     </div>
 
                     <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>

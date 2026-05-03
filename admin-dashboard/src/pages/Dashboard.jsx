@@ -129,30 +129,34 @@ const Dashboard = () => {
                         <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal /></button>
                     </div>
                     <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                            <BarChart data={stats.categoryData} barSize={40}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#374151' : '#E5E7EB'} />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} dy={10} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
-                                <Tooltip
-                                    cursor={{ fill: darkMode ? '#1F2937' : '#F9FAFB' }}
-                                    contentStyle={{
-                                        borderRadius: '8px',
-                                        border: darkMode ? '1px solid #374151' : '1px solid #E5E7EB',
-                                        boxShadow: 'none',
-                                        backgroundColor: darkMode ? '#111827' : '#FFFFFF',
-                                        color: darkMode ? '#FFFFFF' : '#111827',
-                                        fontSize: '12px',
-                                        fontWeight: '600'
-                                    }}
-                                />
-                                <Bar dataKey="value" fill="#3B82F6" radius={[6, 6, 0, 0]}>
-                                    {(stats.categoryData || []).map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
+                        {stats.categoryData && stats.categoryData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.categoryData} barSize={40}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#374151' : '#E5E7EB'} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
+                                    <Tooltip
+                                        cursor={{ fill: darkMode ? '#1F2937' : '#F9FAFB' }}
+                                        contentStyle={{
+                                            borderRadius: '8px',
+                                            border: darkMode ? '1px solid #374151' : '1px solid #E5E7EB',
+                                            boxShadow: 'none',
+                                            backgroundColor: darkMode ? '#111827' : '#FFFFFF',
+                                            color: darkMode ? '#FFFFFF' : '#111827',
+                                            fontSize: '12px',
+                                            fontWeight: '600'
+                                        }}
+                                    />
+                                    <Bar dataKey="value" fill="#3B82F6" radius={[6, 6, 0, 0]}>
+                                        {(stats.categoryData || []).map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-gray-500 italic text-sm">Synchronizing data streams...</div>
+                        )}
                     </div>
                 </div>
 
@@ -160,36 +164,42 @@ const Dashboard = () => {
                 <div className={`p-8 rounded-2xl border flex flex-col justify-between ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                     <h2 className={`mb-6 text-lg font-bold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Resolution Status</h2>
                     <div className="h-64 flex justify-center relative">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                            <PieChart>
-                                <Pie
-                                    data={stats.categoryData || []}
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {(stats.categoryData || []).map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{
-                                        borderRadius: '8px',
-                                        backgroundColor: darkMode ? '#111827' : '#FFFFFF',
-                                        border: darkMode ? '1px solid #374151' : '1px solid #E5E7EB',
-                                        boxShadow: 'none',
-                                        fontSize: '12px',
-                                        fontWeight: '600'
-                                    }}
-                                />
-                                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ color: '#9CA3AF' }} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[60%] text-center pointer-events-none">
-                            <span className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{stats.summary && stats.summary[0] ? stats.summary[0].value : 0}</span>
-                            <p className="text-xs text-gray-500">Total</p>
-                        </div>
+                        {stats.categoryData && stats.categoryData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={stats.categoryData || []}
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {(stats.categoryData || []).map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{
+                                            borderRadius: '8px',
+                                            backgroundColor: darkMode ? '#111827' : '#FFFFFF',
+                                            border: darkMode ? '1px solid #374151' : '1px solid #E5E7EB',
+                                            boxShadow: 'none',
+                                            fontSize: '12px',
+                                            fontWeight: '600'
+                                        }}
+                                    />
+                                    <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ color: '#9CA3AF' }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                             <div className="h-full flex items-center justify-center text-gray-500 italic text-sm">Mapping resolution metrics...</div>
+                        )}
+                        {stats.summary && stats.summary[0] && (
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[60%] text-center pointer-events-none">
+                                <span className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{stats.summary[0].value}</span>
+                                <p className="text-xs text-gray-500">Total</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
