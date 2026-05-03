@@ -30,9 +30,9 @@ export class AIService {
             Tasks:
             1. Translate everything to English if not already.
             2. Identify the most likely municipal issue category (Categories: Pothole, Street Light, Waste Management, Water Leakage, Drainage, Encroachment, Other).
-            3. Return a JSON array of the TOP 3 most likely categories with confidence scores summing to 1.0.
+            3. Return a JSON object with a "predictions" key containing the TOP 3 most likely categories with confidence scores summing to 1.0.
             
-            Format strictly as: [{"category": "...", "confidence": 0.XX}, ...]
+            Format strictly as: {"predictions": [{"category": "...", "confidence": 0.XX}, ...]}
         `;
 
         try {
@@ -42,10 +42,11 @@ export class AIService {
                 response_format: { type: 'json_object' }
             });
 
-            const rawJson = response.choices?.[0]?.message?.content || '[]';
-            // Some models return the array inside a root object or as a raw array
+            const rawJson = response.choices?.[0]?.message?.content || '{}';
             const parsed = JSON.parse(rawJson);
-            return Array.isArray(parsed) ? parsed : (parsed.predictions || parsed.results || parsed.categories || [parsed]);
+            
+            // Extract array from standard possible keys, prioritizing 'predictions'
+            return parsed.predictions || parsed.results || parsed.categories || (Array.isArray(parsed) ? parsed : [parsed]);
         } catch (error) {
             console.error('LLM Standardization failed:', error);
             return [{ category: 'Other', confidence: 1.0 }];
@@ -99,8 +100,8 @@ export class AIService {
             const response = await axios.post('http://localhost:8000/classify', formData, {
                 headers: formData.getHeaders(),
             });
-            // Expecting array from python service
-            return Array.isArray(response.data) ? response.data : [response.data];
+            // Extract top_3 from the python response object
+            return response.data?.top_3 || (Array.isArray(response.data) ? response.data : [response.data]);
         } catch (error) {
             console.error('AI Classification failed:', error);
             return [];
