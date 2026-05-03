@@ -91,7 +91,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Widget _buildLeaderboardTile(int rank, dynamic entry, bool isMe, ThemeData theme) {
     final credits = entry['green_credits'] ?? 0;
     final achievements = entry['achievements'] as List?;
-    final topBadge = achievements != null && achievements.isNotEmpty ? achievements.last['icon'] : '👤';
+    final topBadge = (achievements != null && achievements.isNotEmpty ? (achievements.last['icon'] as String?) : null) ?? '👤';
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

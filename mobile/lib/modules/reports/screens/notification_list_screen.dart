@@ -50,7 +50,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                   separatorBuilder: (context, index) => const Divider(),
                   itemBuilder: (context, index) {
                     final notification = _notifications[index];
-                    final isRead = notification['read_status'] ?? false;
+                    final isRead = notification['is_read'] ?? false;
 
                     return ListTile(
                       leading: CircleAvatar(
@@ -69,7 +69,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(notification['message'] ?? ''),
+                          Text(notification['body'] ?? ''),
                           const SizedBox(height: 4),
                           Text(
                             notification['createdAt'] != null ? notification['createdAt'].toString().substring(0, 10) : '',

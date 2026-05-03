@@ -6,6 +6,7 @@ import 'modules/reports/screens/history_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'modules/auth/screens/profile_screen.dart';
 import 'modules/reports/screens/staff_dashboard_screen.dart';
+import 'modules/notifications/screens/notification_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -27,6 +28,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _screens = [
       role == 'staff' ? const StaffDashboardScreen() : DashboardScreen(key: _dashboardKey),
       const HistoryScreen(),
+      const NotificationScreen(),
       const ProfileScreen(),
     ];
   }
@@ -58,6 +60,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'My Reports'),
+          BottomNavigationBarItem(icon: Icon(Icons.notifications_outlined), label: 'Alerts'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
       ),

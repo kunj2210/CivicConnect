@@ -62,7 +62,7 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
           '&longitude=${_currentLocation!.longitude}'
           '&radius=10000'); // 10km radius
 
-      final response = await http.get(url);
+      final response = await http.get(url, headers: ApiConfig.getHeaders());
       debugPrint('Nearby API Status: ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> reports = json.decode(response.body);

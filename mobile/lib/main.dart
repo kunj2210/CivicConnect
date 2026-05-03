@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'modules/auth/screens/login_screen.dart';
 import 'modules/auth/screens/signup_screen.dart';
@@ -20,6 +21,7 @@ import 'modules/auth/screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   await dotenv.load(fileName: ".env");
   await Hive.initFlutter();
   Hive.registerAdapter(ReportDraftAdapter());

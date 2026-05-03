@@ -229,6 +229,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final description = _report!['description'] ?? 'No description provided.';
     final reportedAt = _report!['reported_at'] ?? DateTime.now().toIso8601String();
     final metadata = _report!['metadata'] ?? {};
+    final resolutionImageUrl = metadata['resolution_image_url'] ?? _report!['resolution_image_url'];
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -318,6 +319,35 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   ),
 
                   const Divider(height: 48),
+
+                  if (status == 'Pending Confirmation' || status == 'Resolved') ...[
+                    const _SectionHeader(icon: Icons.check_circle_outline, title: 'Resolution Evidence'),
+                    const SizedBox(height: 12),
+                    if (resolutionImageUrl != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          resolutionImageUrl,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            height: 200,
+                            color: Colors.grey.withValues(alpha: 0.1),
+                            child: const Center(child: Icon(Icons.image_not_supported_outlined)),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Center(child: Text('Evidence image pending sync...')),
+                      ),
+                    const SizedBox(height: 24),
+                  ],
 
                   Builder(builder: (context) {
                     final user = Supabase.instance.client.auth.currentUser;
@@ -459,7 +489,8 @@ class _StatusBadge extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     Color color = colorScheme.primary;
     if (status == 'Resolved') color = Colors.green;
-    if (status == 'In Progress') color = Colors.orange;
+    if (status == 'In Progress') color = Colors.blue;
+    if (status == 'Pending Confirmation') color = Colors.orange;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

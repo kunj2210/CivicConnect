@@ -48,7 +48,7 @@ class ReportService {
     );
     
     // Combine standard headers with MultiPart requirements
-    final authHeaders = await ApiConfig.getHeaders(includeContentType: false);
+    final authHeaders = ApiConfig.getHeaders(includeContentType: false);
     request.headers.addAll(authHeaders);
 
     request.files.add(

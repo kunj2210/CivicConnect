@@ -21,7 +21,33 @@ class DashboardScreenState extends State<DashboardScreen> {
       {'value': 0, 'title': 'Resolved'},
     ]
   };
+  List<dynamic> _recentReports = [];
   bool _isLoading = true;
+
+  String _getRelativeTime(String? dateStr) {
+    if (dateStr == null) return 'recently';
+    try {
+      final date = DateTime.parse(dateStr);
+      final diff = DateTime.now().difference(date);
+      if (diff.inSeconds < 60) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
+      return '${(diff.inDays / 7).floor()}w ago';
+    } catch (_) {
+      return 'recently';
+    }
+  }
+
+  IconData _getCategoryIcon(String category) {
+    category = category.toLowerCase();
+    if (category.contains('pothole') || category.contains('road')) return Icons.engineering_rounded;
+    if (category.contains('garbage') || category.contains('waste')) return Icons.delete_outline_rounded;
+    if (category.contains('light')) return Icons.lightbulb_outline_rounded;
+    if (category.contains('water')) return Icons.water_drop_outlined;
+    if (category.contains('noise')) return Icons.volume_up_outlined;
+    return Icons.warning_amber_rounded;
+  }
 
   @override
   void initState() {
@@ -48,10 +74,19 @@ class DashboardScreenState extends State<DashboardScreen> {
         headers: ApiConfig.getHeaders(),
       );
 
+      final reportsResponse = await http.get(
+        Uri.parse(ApiConfig.reportsUrl),
+        headers: ApiConfig.getHeaders(),
+      );
+
       if (response.statusCode == 200) {
         if (!mounted) return;
         setState(() {
           _stats = json.decode(response.body);
+          if (reportsResponse.statusCode == 200) {
+            final List<dynamic> allReports = json.decode(reportsResponse.body);
+            _recentReports = allReports.take(5).toList();
+          }
           _isLoading = false;
         });
       } else {
@@ -228,17 +263,32 @@ class DashboardScreenState extends State<DashboardScreen> {
                   // Recent List
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => _LogItem(
-                          title: index == 0 ? 'Pothole Detected' : 'Illegal Dumping',
-                          status: index == 0 ? 'In Progress' : 'Pending',
-                          time: '${(index + 1) * 2}h ago',
-                          icon: index == 0 ? Icons.engineering_rounded : Icons.warning_amber_rounded,
-                        ).animate().fadeIn(delay: (1000 + (index * 100)).ms).slideX(begin: 0.1),
-                        childCount: 3,
-                      ),
-                    ),
+                    sliver: _recentReports.isEmpty 
+                      ? SliverToBoxAdapter(
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(32.0),
+                              child: Text(
+                                'No recent reports found.',
+                                style: TextStyle(color: theme.hintColor.withOpacity(0.5)),
+                              ),
+                            ),
+                          ),
+                        )
+                      : SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final report = _recentReports[index];
+                              return _LogItem(
+                                title: report['category'] ?? 'New Issue',
+                                status: report['status'] ?? 'Pending',
+                                time: _getRelativeTime(report['createdAt']),
+                                icon: _getCategoryIcon(report['category'] ?? ''),
+                              ).animate().fadeIn(delay: (1000 + (index * 100)).ms).slideX(begin: 0.1);
+                            },
+                            childCount: _recentReports.length,
+                          ),
+                        ),
                   ),
                   
                   const SliverToBoxAdapter(child: SizedBox(height: 100)),
