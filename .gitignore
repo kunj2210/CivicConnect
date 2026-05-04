@@ -1,28 +1,44 @@
-# Compiled files
-backend/src/**/*.js
-backend/src/**/*.js.map
-backend/src/**/*.d.ts
-backend/src/**/*.d.ts.map
-
 # Node Modules
 node_modules/
 backend/node_modules/
 admin-dashboard/node_modules/
+mobile/.dart_tool/
+mobile/.pub/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
 
 # Environment
 .env
-backend/.env
+**/.env
+**/*.env.*local
 
 # Build outputs
 dist/
 build/
 admin-dashboard/dist/
+mobile/build/
 
-# Logs
-*.log
-npm-debug.log*
+# IDE files
+.vscode/
+mobile/.idea/
+mobile/*.iml
+mobile/android/.gradle/
+mobile/android/local.properties
 
 # OS files
 .DS_Store
 Thumbs.db
-civicconnect-7c316-firebase-adminsdk-fbsvc-ef6ad24d2e.json
+
+# Sensitive Keys & Logs
+*.log
+npm-debug.log*
+**/*firebase-adminsdk*.json
+**/*google-services.json
+**/key.jks
+**/key.properties
+
+# Compiled files
+backend/src/**/*.js
+backend/src/**/*.js.map
+backend/src/**/*.d.ts
+backend/src/**/*.d.ts.map

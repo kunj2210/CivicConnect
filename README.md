@@ -130,8 +130,18 @@ flutter run
 
 ---
 
-## 🧪 4. Final Sanity Check
-- Verify that `check_db.js` returns valid Supabase users.
-- Ensure the **Supabase RLS Policies** are active in the database.
+## 🛠️ Stability & Performance Fixes (May 2026)
+
+- **Standardized Geolocation**: Migrated the mobile app to `geolocator` for robust cross-platform location fetching (Web + Android).
+- **Gradle Stabilization**: Optimized for **AGP 8.2.1**, **Kotlin 1.9.22**, and **Gradle 8.7** to resolve cryptic build failures.
+- **Enhanced Error Handling**: Improved startup reliability with global `try-catch` blocks and web-specific guards.
+
+## ❓ Troubleshooting
+
+- **Android "26" Error**: Run `flutter clean` and ensure `minSdkVersion=21` in `local.properties`.
+- **Chrome Exit**: Verify `.env` credentials; mobile notifications are now gated for web.
+- **Symlink Error**: Move project to the same drive as Flutter SDK or run as Admin.
+
+---
 
 **Project is now ready for launch!** 🚀
