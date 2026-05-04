@@ -24,6 +24,7 @@ export class Issue extends Model {
     declare needs_human_review: boolean;
     declare assigned_department_id: string | null;
     declare assigned_staff_id: string | null;
+    declare audio_text: string | null;
 }
 
 
@@ -131,6 +132,10 @@ Issue.init({
             model: 'users',
             key: 'id',
         },
+    },
+    audio_text: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
 
 

@@ -29,15 +29,37 @@ export class StorageService {
                 { 'Content-Type': file.mimetype }
             );
 
-            // Construct Public URL (Assumes bucket policy is public-read)
-            const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
-            const host = process.env.MINIO_ENDPOINT || 'localhost';
-            const port = process.env.MINIO_PORT || '9000';
-
-            return `${protocol}://${host}:${port}/${this.bucketName}/${fileName}`;
+            // Construct Presigned URL (Valid for 24 hours)
+            const presignedUrl = await minioClient.presignedGetObject(this.bucketName, fileName, 24 * 60 * 60);
+            
+            return presignedUrl;
         } catch (error) {
             console.error('MinIO Storage Service Error:', error);
             return null;
+        }
+    }
+
+    static async getPresignedUrl(urlOrKey: string): Promise<string> {
+        try {
+            if (!urlOrKey) return '';
+            
+            // If it's already a presigned URL (contains X-Amz-Signature), return it
+            if (urlOrKey.includes('X-Amz-Signature')) return urlOrKey;
+
+            // Extract the key from the full URL if necessary
+            let objectKey = urlOrKey;
+            if (urlOrKey.includes(this.bucketName)) {
+                const parts = urlOrKey.split(`${this.bucketName}/`);
+                if (parts.length > 1) {
+                    objectKey = parts[1];
+                }
+            }
+
+            // Generate a fresh presigned URL valid for 1 hour
+            return await minioClient.presignedGetObject(this.bucketName, objectKey, 60 * 60);
+        } catch (error) {
+            console.error('Error generating presigned URL:', error);
+            return urlOrKey; // Fallback to original
         }
     }
 

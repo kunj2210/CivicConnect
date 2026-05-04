@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User, Bell, Shield, Globe, Save, CheckCircle2, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
 
 const AuthoritySettings = () => {
     const { darkMode } = useOutletContext();
@@ -40,13 +41,9 @@ const AuthoritySettings = () => {
         setSaving(true);
         try {
             if (activeSection === 'profile') {
-                const response = await fetch(`http://localhost:5000/api/auth/update-profile/${user.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: profile.name }),
+                const updatedUserData = await api.patch(`/auth/update-profile/${user.id}`, {
+                    name: profile.name
                 });
-                if (!response.ok) throw new Error('Failed to update profile');
-                const updatedUserData = await response.json();
                 updateUser(updatedUserData);
             } else if (activeSection === 'security' && security.newPassword) {
                 if (security.newPassword !== security.confirmPassword) {
@@ -54,18 +51,10 @@ const AuthoritySettings = () => {
                     setSaving(false);
                     return;
                 }
-                const response = await fetch(`http://localhost:5000/api/auth/update-password/${user.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        currentPassword: security.currentPassword,
-                        newPassword: security.newPassword
-                    }),
+                await api.patch(`/auth/update-password/${user.id}`, {
+                    currentPassword: security.currentPassword,
+                    newPassword: security.newPassword
                 });
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.message || 'Failed to update password');
-                }
                 setSecurity({ currentPassword: '', newPassword: '', confirmPassword: '' });
             }
 

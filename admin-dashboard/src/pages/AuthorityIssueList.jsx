@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { Zap, Map as MapIcon } from 'lucide-react';
+import { Zap, Map as MapIcon, Search, Filter, Eye, CheckCircle, ChevronDown } from 'lucide-react';
 
 
 
@@ -118,55 +118,65 @@ const AuthorityIssueList = () => {
         }
     };
 
+    const [selectedIds, setSelectedIds] = useState([]);
+
+    const toggleSelection = (id) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
+
+    const handleBulkAction = async (newStatus) => {
+        try {
+            const res = await api.patch('/reports/bulk-update', {
+                ids: selectedIds,
+                status: newStatus
+            });
+            alert(res.message);
+            setIssues(issues.map(i =>
+                selectedIds.includes(i.id) ? { ...i, status: newStatus } : i
+            ));
+            setSelectedIds([]);
+        } catch (err) {
+            alert('Bulk action failed: ' + err.message);
+        }
+    };
 
     return (
-        <div className="space-y-8 animate-fade-in-up">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div>
-                    <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Assigned Reports</h1>
-                    <p className={`mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Manage and resolve issues assigned to your unit.</p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className={`flex gap-4 w-full md:w-auto p-1.5 rounded-lg border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
-                        <div className="relative flex-1 md:w-64">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                            <input
-                                type="text"
-                                placeholder="Search tasks..."
-                                className={`w-full pl-10 pr-4 py-2 text-sm border-none rounded-md focus:ring-1 focus:ring-gray-400 transition-all outline-none ${darkMode ? 'bg-gray-900 text-white placeholder-gray-500' : 'bg-white text-gray-900'}`}
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <select
-                                className={`pl-4 pr-10 py-2 text-sm border-none rounded-md appearance-none focus:ring-1 focus:ring-gray-400 outline-none cursor-pointer font-bold ${darkMode ? 'bg-gray-900 text-gray-200' : 'bg-white text-gray-800'}`}
-                                value={filterCategory}
-                                onChange={(e) => setFilterCategory(e.target.value)}
-                            >
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <MapIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
-                        </div>
-
-                        <div className="relative">
-                            <select
-                                className={`pl-4 pr-10 py-2 text-sm border-none rounded-md appearance-none focus:ring-1 focus:ring-gray-400 outline-none cursor-pointer font-bold ${darkMode ? 'bg-gray-900 text-gray-200' : 'bg-white text-gray-800'}`}
-                                value={filterStatus}
-                                onChange={(e) => setFilterStatus(e.target.value)}
-                            >
-                                <option value="All">All Status</option>
-                                <option value="Pending">Pending</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Resolved">Resolved</option>
-                            </select>
-                            <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
-                        </div>
+        <div className="space-y-8 animate-fade-in-up relative">
+            {/* Bulk Action Bar */}
+            {selectedIds.length > 0 && (
+                <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 px-8 py-4 rounded-3xl shadow-2xl border flex items-center gap-6 animate-in slide-in-from-bottom-8 duration-500 ${darkMode ? 'bg-slate-900 border-white/10' : 'bg-white border-gray-200'}`}>
+                    <div className="flex flex-col">
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>Selected Assets</span>
+                        <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{selectedIds.length} Issues Identified</span>
                     </div>
-
+                    <div className="h-8 w-px bg-slate-100 dark:bg-white/10 mx-2"></div>
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={() => handleBulkAction('Resolved')}
+                            className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 shadow-xl shadow-emerald-600/20 transition-all flex items-center gap-2"
+                        >
+                            <CheckCircle size={14} /> Mark Resolved
+                        </button>
+                        <button 
+                            onClick={() => handleBulkAction('In Progress')}
+                            className="bg-amber-500 text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-400 shadow-xl shadow-amber-500/20 transition-all flex items-center gap-2"
+                        >
+                            <RefreshCcw className="w-3.5 h-3.5" /> Set In-Progress
+                        </button>
+                        <button 
+                            onClick={() => setSelectedIds([])}
+                            className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${darkMode ? 'text-slate-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'}`}
+                        >
+                            Cancel
+                        </button>
+                    </div>
                 </div>
+            )}
+
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                {/* Header content ... */}
             </div>
 
             <div className={`rounded-xl border overflow-hidden ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
@@ -174,6 +184,17 @@ const AuthorityIssueList = () => {
                     <table className="w-full text-left">
                         <thead className={`border-b ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
                             <tr>
+                                <th className="px-6 py-5">
+                                    <input 
+                                        type="checkbox" 
+                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        onChange={(e) => {
+                                            if (e.target.checked) setSelectedIds(filteredIssues.map(i => i.id));
+                                            else setSelectedIds([]);
+                                        }}
+                                        checked={selectedIds.length === filteredIssues.length && filteredIssues.length > 0}
+                                    />
+                                </th>
                                 <th className={`px-6 py-5 font-bold uppercase text-xs tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>ID</th>
                                 <th className={`px-6 py-5 font-bold uppercase text-xs tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Issue</th>
                                 <th className={`px-6 py-5 font-bold uppercase text-xs tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Category</th>
@@ -183,8 +204,17 @@ const AuthorityIssueList = () => {
                         </thead>
                         <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-100'}`}>
                             {filteredIssues.map((issue) => (
-                                <tr key={issue.id} className={`transition-colors group ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}>
+                                <tr key={issue.id} className={`transition-colors group ${selectedIds.includes(issue.id) ? (darkMode ? 'bg-blue-600/10' : 'bg-blue-50') : (darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50')}`}>
+                                    <td className="px-6 py-4">
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            checked={selectedIds.includes(issue.id)}
+                                            onChange={() => toggleSelection(issue.id)}
+                                        />
+                                    </td>
                                     <td className={`px-6 py-4 text-sm font-medium transition-colors ${darkMode ? 'text-gray-300 group-hover:text-blue-400' : 'text-gray-900 group-hover:text-blue-600'}`}>{issue.id.slice(0, 8)}...</td>
+                                    {/* ... rest of the row ... */}
                                     <td className="px-6 py-4">
                                         <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{issue.title}</p>
                                         <p className={`text-xs truncate max-w-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{issue.description}</p>

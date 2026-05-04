@@ -19,7 +19,7 @@ import {
   Activity,
   Search
 } from 'lucide-react';
-import axios from 'axios';
+import { api } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 const AIRetraining = () => {
@@ -39,10 +39,8 @@ const AIRetraining = () => {
   const fetchQueue = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/reports/retraining-queue`, {
-        headers: { Authorization: `Bearer ${session?.access_token}` }
-      });
-      setFeedbackQueue(response.data);
+      const data = await api.get('/reports/retraining-queue');
+      setFeedbackQueue(data);
       setLoading(false);
     } catch (err) {
       setError('Failed to sync with neural feedback queue');
@@ -53,10 +51,7 @@ const AIRetraining = () => {
   const handleAction = async (id, status) => {
     try {
       setProcessingId(id);
-      await axios.patch(`${import.meta.env.VITE_API_BASE_URL}/reports/retraining-queue/${id}`, 
-        { status },
-        { headers: { Authorization: `Bearer ${session?.access_token}` } }
-      );
+      await api.patch(`/reports/retraining-queue/${id}`, { status });
       
       // Update local state
       setFeedbackQueue(prev => prev.map(item => 
@@ -113,6 +108,13 @@ const AIRetraining = () => {
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Awaiting Human Audit</div>
           </div>
         </div>
+        <button 
+          onClick={() => window.open(`${api.defaults.baseURL}/reports/retraining-queue/export`, '_blank')}
+          className="flex items-center gap-3 px-6 py-4 bg-violet-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-2xl shadow-violet-600/40 hover:bg-violet-500 transition-all active:scale-95"
+        >
+          <Database size={16} />
+          Export Dataset
+        </button>
       </div>
 
       {/* Main Panel */}

@@ -36,6 +36,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       );
 
       if (response.statusCode == 200) {
+        if (!mounted) return;
         setState(() {
           _reports = json.decode(response.body);
           _isLoading = false;
@@ -43,6 +44,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       }
     } catch (e) {
       debugPrint('Error fetching reports: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }

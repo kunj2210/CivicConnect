@@ -41,49 +41,34 @@ export const connectPostgres = async () => {
         await sequelize.authenticate();
         console.log('PostgreSQL connected successfully (Sequelize)');
 
-        // Ensure PostGIS is enabled
+        // Ensure PostGIS & Vector extensions are enabled
         await sequelize.query('CREATE EXTENSION IF NOT EXISTS postgis;');
-        console.log('PostGIS extension verified');
+        await sequelize.query('CREATE EXTENSION IF NOT EXISTS vector;');
+        console.log('PostGIS & Vector extensions verified');
 
         // Note: Models are already initialized in their own files
         // Sync models (Safe mode)
         await sequelize.sync();
         console.log('Database tables in sync (Default mode)');
 
-        // Targeted migration for ENUM roles (Sequelize sync doesn't handle ENUM updates)
+        try {
+            await sequelize.query(`
+                ALTER TABLE "issues" ADD COLUMN IF NOT EXISTS "embedding" vector(1536);
+                ALTER TABLE "issues" ADD COLUMN IF NOT EXISTS "audio_text" TEXT;
+                ALTER TABLE "issues" ADD COLUMN IF NOT EXISTS "assigned_department_id" UUID REFERENCES "departments" ("id") ON DELETE SET NULL;
+                ALTER TABLE "issues" ADD COLUMN IF NOT EXISTS "assigned_staff_id" UUID REFERENCES "users" ("id") ON DELETE SET NULL;
+            `);
+            console.log('Targeted migrations (vector, audio_text & foreign keys) executed successfully');
+        } catch (migErr) {
+            console.warn('Migration warning:', (migErr as any).message);
+        }
+
+        // Targeted migration for ENUM roles
         try {
             await sequelize.query(`
                 ALTER TYPE "enum_users_role" ADD VALUE IF NOT EXISTS 'admin';
-                ALTER TYPE "user_role" ADD VALUE IF NOT EXISTS 'admin';
             `);
-            console.log('Verified "admin" role in all possible enum types');
-        } catch (enumErr) {
-            console.warn('ENUM update warning (some may already exist):', (enumErr as any).message);
-        }
-
-        // Targeted migration for assigned_department_id if missing
-        try {
-            await sequelize.query(`
-                ALTER TABLE "issues" 
-                ADD COLUMN IF NOT EXISTS "assigned_department_id" UUID 
-                REFERENCES "departments" ("id") ON DELETE SET NULL;
-            `);
-            console.log('Verified assigned_department_id column in issues table');
-        } catch (colError) {
-            console.error('Error ensuring assigned_department_id exists:', colError);
-        }
-
-        // Targeted migration for assigned_staff_id if missing
-        try {
-            await sequelize.query(`
-                ALTER TABLE "issues" 
-                ADD COLUMN IF NOT EXISTS "assigned_staff_id" UUID 
-                REFERENCES "users" ("id") ON DELETE SET NULL;
-            `);
-            console.log('Verified assigned_staff_id column in issues table');
-        } catch (colError) {
-            console.error('Error ensuring assigned_staff_id exists:', colError);
-        }
+        } catch (enumErr) {}
 
 
     } catch (error) {

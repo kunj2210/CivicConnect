@@ -6,7 +6,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed:users": "tsx src/seedUsers.ts"
+    "seed:users": "tsx src/seedUsers.ts",
+    "seed:database": "tsx src/seedAll.ts",
+    "fix:security": "tsx src/fixSecurity.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.994.0",

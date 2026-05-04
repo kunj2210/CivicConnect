@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, FileText, Map, Users,
     Settings, LogOut, Trophy, BrainCircuit,
-    UserCog, ChevronRight, HelpCircle
+    UserCog, ChevronRight, HelpCircle, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -12,14 +12,16 @@ const Sidebar = ({ darkMode }) => {
     const { user, logout } = useAuth();
     const isActive = (path) => location.pathname === path;
 
-    const isAdmin = user?.role === 'Admin';
-    const prefix = isAdmin ? '/admin' : '/authority';
+    const isAdmin = user?.role === 'Admin' || user?.role === 'super_admin';
+    const isSuperAdmin = user?.role === 'super_admin';
+    const prefix = isSuperAdmin ? '/superadmin' : (isAdmin ? '/admin' : '/authority');
 
     const navItems = [
         { path: `${prefix}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
         { path: `${prefix}/issues`, label: 'Issues', icon: FileText },
         { path: `${prefix}/map`, label: 'Live Map', icon: Map },
         { path: `${prefix}/leaderboard`, label: 'Leaderboard', icon: Trophy },
+        ...(isAdmin ? [{ path: `${prefix}/analytics`, label: 'Executive AI', icon: Sparkles }] : []),
         ...(isAdmin ? [{ path: '/admin/ai-retraining', label: 'AI Retraining', icon: BrainCircuit }] : []),
         ...(isAdmin ? [{ path: '/admin/departments', label: 'Departments', icon: Users }] : []),
         ...(isAdmin ? [{ path: '/admin/users', label: 'Users', icon: UserCog }] : []),

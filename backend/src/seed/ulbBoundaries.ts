@@ -9,8 +9,11 @@ export const seedUlbBoundaries = async () => {
 
         // 1. Ensure a default Department exists
         const [defaultDept] = await Department.findOrCreate({
-            where: { name: 'Public Works Department' },
-            defaults: { contact_email: 'pwd@city.gov' }
+            where: { id: '24ba1d92-f1be-4180-94c3-fe5f181afe51' },
+            defaults: { 
+                name: 'Public Works Department',
+                contact_email: 'pwd@civicconnect.gov' 
+            }
         });
 
         // 2. Define Boundaries

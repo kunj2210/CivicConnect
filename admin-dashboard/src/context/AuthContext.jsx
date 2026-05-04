@@ -18,18 +18,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     useEffect(() => {
-        // 1. Session Refresh Logic (Clear on Server Restart)
-        const restartId = import.meta.env.VITE_RESTART_ID;
-        const storedRestartId = localStorage.getItem('civic_restart_id');
-
-        if (storedRestartId && storedRestartId !== restartId) {
-            // New server start detected, flush previous session
-            supabase.auth.signOut();
-            localStorage.clear();
-        }
-        localStorage.setItem('civic_restart_id', restartId);
-
-        // 2. Initial Session Check
+        // 1. Initial Session Check
         supabase.auth.getSession().then(({ data, error }) => {
             if (error) {
                 setLoading(false);

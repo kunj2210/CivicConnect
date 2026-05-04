@@ -4,19 +4,11 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Eye } from 'lucide-react';
+import { api } from '../utils/api';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
 
 const AuthorityMapView = () => {
     const { darkMode } = useOutletContext();
@@ -26,17 +18,18 @@ const AuthorityMapView = () => {
     const [center, setCenter] = useState([22.5540, 72.9299]);
 
     useEffect(() => {
-        fetch('http://localhost:5000/api/reports')
-            .then(res => res.json())
+        api.get('/reports')
             .then(data => {
-                setIssues(data);
-                if (data.length > 0 && data[0].location) {
-                    setCenter([data[0].location.coordinates[1], data[0].location.coordinates[0]]);
+                const issuesArray = Array.isArray(data) ? data : [];
+                setIssues(issuesArray);
+                if (issuesArray.length > 0 && issuesArray[0].location) {
+                    setCenter([issuesArray[0].location.coordinates[1], issuesArray[0].location.coordinates[0]]);
                 }
                 setLoading(false);
             })
             .catch(err => {
                 console.error('Authority map error:', err);
+                setIssues([]);
                 setLoading(false);
             });
     }, []);

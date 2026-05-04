@@ -41,6 +41,30 @@ class ReportService {
     }
   }
 
+  Future<void> citizenConfirm(String reportId, int rating) async {
+    final response = await http.post(
+      Uri.parse('${ApiConfig.reportsUrl}/$reportId/citizen-confirm'),
+      headers: ApiConfig.getHeaders(),
+      body: json.encode({'feedback_rating': rating}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to verify resolution');
+    }
+  }
+
+  Future<void> citizenDispute(String reportId, String reason) async {
+    final response = await http.post(
+      Uri.parse('${ApiConfig.reportsUrl}/$reportId/citizen-dispute'),
+      headers: ApiConfig.getHeaders(),
+      body: json.encode({'reason': reason}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to dispute resolution');
+    }
+  }
+
   Future<void> proposeResolution(String reportId, List<int> imageBytes, String filename) async {
     var request = http.MultipartRequest(
       'POST',

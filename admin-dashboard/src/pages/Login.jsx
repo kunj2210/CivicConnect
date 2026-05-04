@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Hexagon, Mail, Lock, Phone, MessageSquare } from 'lucide-react';
+import { ArrowRight, Hexagon, Mail, Lock, Phone, MessageSquare, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
@@ -12,6 +12,7 @@ const Login = () => {
     const [otpSent, setOtpSent] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isShaking, setIsShaking] = useState(false);
 
     useEffect(() => {
         const isDark = localStorage.getItem('theme') === 'dark';
@@ -23,6 +24,8 @@ const Login = () => {
     }, []);
 
     const handleChange = (e) => {
+        setError('');
+        setIsShaking(false);
         if (loginMethod === 'email') {
             setCredentials({ ...credentials, [e.target.name]: e.target.value });
         } else {
@@ -76,11 +79,13 @@ const Login = () => {
             } else {
                 console.error('[Dashboard Login] Access Denied: Role is', userRole);
                 setError('Access denied: Citizens must use the mobile app.');
+                setIsShaking(true);
                 setIsLoading(false);
             }
         } catch (error) {
             console.error('[Dashboard Login] General Authentication Error:', error);
             setError(error.message || 'Authentication failed.');
+            setIsShaking(true);
             setIsLoading(false);
         }
     };
@@ -115,29 +120,34 @@ const Login = () => {
 
             {/* Right Side - Login Form */}
             <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-16 relative">
-                <div className="w-full max-w-md space-y-8">
+                <div className={`w-full max-w-md space-y-8 transition-all duration-500 ${isShaking ? 'animate-shake' : ''}`}>
                     <div className="text-center lg:text-left">
-                        <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sign In</h2>
-                        <div className="mt-4 flex p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+                        <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Access Portal</h2>
+                        <p className="mt-2 text-gray-500 dark:text-gray-400 font-medium">Municipal Administrative & Field Control</p>
+                        <div className="mt-8 flex p-1.5 bg-gray-100 dark:bg-gray-800/80 rounded-2xl backdrop-blur-sm border border-gray-200/50 dark:border-white/5">
                             <button
-                                onClick={() => { setLoginMethod('email'); setError(''); setOtpSent(false); }}
-                                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${loginMethod === 'email' ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500'}`}
+                                onClick={() => { setLoginMethod('email'); setError(''); setOtpSent(false); setIsShaking(false); }}
+                                className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${loginMethod === 'email' ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                             >
-                                Email
+                                Admin ID
                             </button>
                             <button
-                                onClick={() => { setLoginMethod('phone'); setError(''); }}
-                                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500'}`}
+                                onClick={() => { setLoginMethod('phone'); setError(''); setIsShaking(false); }}
+                                className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                             >
-                                Phone
+                                Field Mobile
                             </button>
                         </div>
                     </div>
 
                     <form onSubmit={handleSubmit} className="mt-8 space-y-6">
                         {error && (
-                            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-500 flex items-center">
-                                <span className="mr-2">⚠️</span> {error}
+                            <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-sm text-red-500 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300 backdrop-blur-md">
+                                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-bold">Entry Restricted</p>
+                                    <p className="opacity-90 mt-0.5 text-xs font-medium">{error}</p>
+                                </div>
                             </div>
                         )}
 
@@ -227,17 +237,25 @@ const Login = () => {
                                 type="button"
                                 onClick={handleSendOtp}
                                 disabled={isLoading || !phoneData.phone}
-                                className="w-full flex items-center justify-center px-4 py-3.5 border border-transparent text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-lg transition-all"
+                                className="w-full flex items-center justify-center px-4 py-4 border border-transparent text-sm font-black uppercase tracking-widest rounded-2xl text-white bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-50"
                             >
-                                {isLoading ? 'Sending...' : 'Send OTP'}
+                                {isLoading ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    'Initialize Secure Link'
+                                )}
                             </button>
                         ) : (
                             <button
                                 type="submit"
                                 disabled={isLoading}
-                                className="w-full flex items-center justify-center px-4 py-3.5 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg transition-all transform hover:-translate-y-0.5"
+                                className="w-full flex items-center justify-center px-4 py-4 border border-transparent text-sm font-black uppercase tracking-widest rounded-2xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-xl shadow-blue-600/30 transition-all active:scale-95 disabled:opacity-50"
                             >
-                                {isLoading ? 'Verifying...' : loginMethod === 'email' ? 'Sign In' : 'Verify & Sign In'}
+                                {isLoading ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    loginMethod === 'email' ? 'Authorize Access' : 'Confirm Identity'
+                                )}
                             </button>
                         )}
 

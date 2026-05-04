@@ -149,9 +149,15 @@ const AuthorityIssueDetails = () => {
                         </div>
                         <div className={`p-1 min-h-[300px] flex items-center justify-center rounded-xl ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
                             <img
-                                src={report.minio_pre_key || 'https://via.placeholder.com/800x600'}
+                                src={report.minio_pre_key || (report.minio_image_urls && report.minio_image_urls[0]) || 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop'}
                                 alt="Report Evidence"
                                 className="w-full aspect-video object-cover rounded-xl shadow-inner"
+                                onError={(e) => {
+                                    const currentSrc = e.target.src;
+                                    if (currentSrc.includes('192.168.1.20')) {
+                                        e.target.src = currentSrc.replace('192.168.1.20', 'localhost');
+                                    }
+                                }}
                             />
                         </div>
 

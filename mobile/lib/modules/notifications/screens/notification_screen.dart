@@ -24,6 +24,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<void> _loadNotifications() async {
     setState(() => _isLoading = true);
     final data = await _notificationService.getNotifications();
+    if (!mounted) return;
     setState(() {
       _notifications = data.map((n) => NotificationModel.fromJson(n)).toList();
       _isLoading = false;
@@ -32,6 +33,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Future<void> _markAsRead(String id) async {
     await _notificationService.markAsRead(id);
+    if (!mounted) return;
     setState(() {
       final index = _notifications.indexWhere((n) => n.id == id);
       if (index != -1) {

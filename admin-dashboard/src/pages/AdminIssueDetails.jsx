@@ -292,9 +292,15 @@ const AdminIssueDetails = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-1 p-1">
                             <div className="relative group">
                                 <img
-                                    src={report.minio_pre_key || 'https://via.placeholder.com/800x600'}
+                                    src={report.minio_pre_key || (report.minio_image_urls && report.minio_image_urls[0]) || 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop'}
                                     alt="Before"
                                     className="w-full aspect-video object-cover rounded-l-xl"
+                                    onError={(e) => {
+                                        const currentSrc = e.target.src;
+                                        if (currentSrc.includes('192.168.1.20')) {
+                                            e.target.src = currentSrc.replace('192.168.1.20', 'localhost');
+                                        }
+                                    }}
                                 />
                                 <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 text-white text-[10px] font-bold rounded uppercase">Before</div>
                             </div>
@@ -302,7 +308,7 @@ const AdminIssueDetails = () => {
                             {(report.status === 'Pending Confirmation' || report.status === 'Resolved') ? (
                                 <div className="relative group">
                                     <img
-                                        src={repairData?.repair_image || 'https://via.placeholder.com/800x600?text=Resolving...'}
+                                        src={repairData?.repair_image || 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=2070&auto=format&fit=crop'}
                                         alt="After"
                                         className="w-full aspect-video object-cover rounded-r-xl"
                                     />

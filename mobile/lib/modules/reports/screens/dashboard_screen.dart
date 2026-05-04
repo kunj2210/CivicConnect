@@ -106,6 +106,7 @@ class DashboardScreenState extends State<DashboardScreen> {
     final summary = _stats['summary'] as List;
     final total = summary.firstWhere((s) => s['title'] == 'Total Issues', orElse: () => {'value': 0})['value'].toString();
     final resolved = summary.firstWhere((s) => s['title'] == 'Resolved', orElse: () => {'value': 0})['value'].toString();
+    final credits = _stats['green_credits']?.toString() ?? '0';
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -199,20 +200,20 @@ class DashboardScreenState extends State<DashboardScreen> {
                           onTap: () => Navigator.pushNamed(context, '/report'),
                         ).animate().fadeIn(delay: 500.ms).scale(begin: const Offset(0.9, 0.9)),
 
-                        // Stats Card 1
+                        // Green Credits Card (Primary Focus)
                         _StatBento(
-                          label: 'Active Logs',
+                          label: 'Green Credits',
+                          value: credits,
+                          icon: Icons.eco_rounded,
+                          color: const Color(0xFF10B981),
+                        ).animate().fadeIn(delay: 600.ms).moveX(begin: 20),
+
+                        // Stats Card
+                        _StatBento(
+                          label: 'My Logs',
                           value: total,
                           icon: Icons.analytics_outlined,
                           color: const Color(0xFF8B5CF6),
-                        ).animate().fadeIn(delay: 600.ms).moveX(begin: 20),
-
-                        // Stats Card 2
-                        _StatBento(
-                          label: 'Resolved',
-                          value: resolved,
-                          icon: Icons.verified_rounded,
-                          color: const Color(0xFF10B981),
                         ).animate().fadeIn(delay: 700.ms).moveY(begin: 20),
                         
                         // Nearby Card

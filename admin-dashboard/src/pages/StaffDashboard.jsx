@@ -17,11 +17,8 @@ const StaffDashboard = () => {
     const fetchMyTasks = async () => {
         try {
             setLoading(true);
-            // Fetch issues assigned to me
-            const data = await api.get('/reports'); 
-            // Filtering on frontend for now, in a real city we'd use /reports/my-tasks
-            const me = await api.get('/users/me');
-            const myTasks = data.filter(task => task.assigned_staff_id === me.id);
+            // Efficiently fetch only issues assigned to me using backend filtering
+            const myTasks = await api.get('/reports?assigned_staff_id=me');
             
             setTasks(myTasks);
             setStats({

@@ -14,6 +14,7 @@ import AdminSettings from './pages/AdminSettings';
 import Leaderboard from './pages/Leaderboard';
 import AIRetraining from './pages/AIRetraining';
 import AdminUsers from './pages/AdminUsers';
+import ExecutiveAnalytics from './pages/ExecutiveAnalytics';
 
 // Authority specific pages
 import AuthorityIssueList from './pages/AuthorityIssueList';
@@ -49,6 +50,7 @@ function App() {
             <Route path="departments" element={<Departments />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="analytics" element={<ExecutiveAnalytics />} />
             <Route path="ai-retraining" element={<AIRetraining />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
@@ -101,6 +103,7 @@ function App() {
             <Route path="map" element={<AdminMapView />} />
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="analytics" element={<ExecutiveAnalytics />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 

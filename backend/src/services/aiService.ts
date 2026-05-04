@@ -12,7 +12,7 @@ const MODALITY_WEIGHTS = {
 
 // Open Source focus: Defaulting to Groq (Llama 3) which is OpenAI-compatible
 const openai = new OpenAI({
-    apiKey: process.env.OPEN_SOURCE_LLM_KEY || 'your-groq-api-key',
+    apiKey: process.env.OPEN_SOURCE_LLM_KEY || '',
     baseURL: process.env.OPEN_SOURCE_LLM_URL || 'https://api.groq.com/openai/v1'
 });
 
@@ -22,17 +22,38 @@ export class AIService {
      */
     static async standardizeContent(userInput: string, audioTranscription: string): Promise<any[]> {
         const prompt = `
-            You are a civic infrastructure expert for the "Civic Connect" platform.
-            Analyze the following two inputs from a citizen:
+            You are a civic infrastructure expert for "Civic Connect". 
+            Analyze these two inputs from a citizen:
             1. User Description: "${userInput}"
             2. Voice Transcription: "${audioTranscription}"
 
-            Tasks:
-            1. Translate everything to English if not already.
-            2. Identify the most likely municipal issue category (Categories: Pothole, Street Light, Waste Management, Water Leakage, Drainage, Encroachment, Other).
-            3. Return a JSON object with a "predictions" key containing the TOP 3 most likely categories with confidence scores summing to 1.0.
+            PRIMARY CLASSIFICATION CLASSES (Choose only from these 14):
+            - construction_waste
+            - damaged_sidewalk
+            - damaged_sign
+            - dead_animal
+            - flooding_waterlogging
+            - garbage_overflow_west_container
+            - good_road
+            - illegal_construction
+            - illegal_parking
+            - open_manhole
+            - pothole_road_crack
+            - powerline_damage
+            - streetlight_damage
+            - traffic_light
+
+            CONVINCING CONTEXT:
+            Citizens often use voice recording while walking or driving. Transcription errors are common.
+            - "Portal" or "Bottle" in the road usually means "pothole_road_crack".
+            - "Leak" or "Pipe" usually means "flooding_waterlogging" or "open_manhole".
+            - "Darkness" or "Bulb" usually means "streetlight_damage".
             
-            Format strictly as: {"predictions": [{"category": "...", "confidence": 0.XX}, ...]}
+            Tasks:
+            1. Select the Top 3 most likely classes from the list above.
+            2. Return a JSON object with "predictions" containing these classes with confidence scores (must sum to 1.0).
+            
+            Format strictly as: {"predictions": [{"category": "class_name", "confidence": 0.XX}, ...]}
         `;
 
         try {
@@ -58,13 +79,15 @@ export class AIService {
      */
     static calculateAdvancedFusion(imageTop3: any[], audioTop3: any[], textTop3: any[]): any {
         const scoreMap: Record<string, number> = {};
+        let totalWeightUsed = 0;
 
         const processModality = (top3Array: any[], weight: number) => {
-            if (!top3Array || !Array.isArray(top3Array)) return;
+            if (!top3Array || !Array.isArray(top3Array) || top3Array.length === 0) return;
+            totalWeightUsed += weight;
             top3Array.forEach(p => {
-                const category = this.getAppCategory(p.category || p.class || p.label);
-                if (!scoreMap[category]) scoreMap[category] = 0;
-                scoreMap[category] += ((p.confidence || 0) * weight);
+                const rawClass = p.category || p.class || p.label || 'Other';
+                if (!scoreMap[rawClass]) scoreMap[rawClass] = 0;
+                scoreMap[rawClass] += ((p.confidence || 0) * weight);
             });
         };
 
@@ -73,19 +96,45 @@ export class AIService {
         processModality(textTop3, MODALITY_WEIGHTS.TEXT);
 
         const sorted = Object.entries(scoreMap)
-            .map(([category, score]) => ({ category, score }))
+            .map(([category, score]) => ({ 
+                category, 
+                score, 
+                // Normalize score based on available modalities
+                normalizedScore: totalWeightUsed > 0 ? (score / totalWeightUsed) : 0 
+            }))
             .sort((a, b) => b.score - a.score);
 
-        const winner = sorted[0] || { category: 'Other', score: 0 };
-        const runnerUp = sorted[1] || { category: 'Other', score: 0 };
-        const marginOfVictory = winner.score - (runnerUp ? runnerUp.score : 0);
+        const winner = sorted[0] || { category: 'Other', score: 0, normalizedScore: 0 };
+        const runnerUp = sorted[1] || { category: 'Other', score: 0, normalizedScore: 0 };
+        const marginOfVictory = winner.normalizedScore - runnerUp.normalizedScore;
 
         return {
             finalCategory: winner.category,
-            fusionScore: winner.score,
+            fusionScore: winner.normalizedScore, // Return normalized score for UI (0.0 to 1.0)
             marginOfVictory,
-            needsHumanReview: marginOfVictory < 0.15 && winner.score < 0.8
+            needsHumanReview: marginOfVictory < 0.15 && winner.normalizedScore < 0.7
         };
+    }
+
+    /**
+     * Transcribes audio using Groq's Whisper-large-v3 (Open Source).
+     */
+    static async transcribeAudio(audioBuffer: Buffer, fileName: string): Promise<string> {
+        try {
+            // Convert Buffer to a File object for the OpenAI client
+            // Node.js 18+ has Blob/File, but for older we can use a Stream or just a custom object
+            const file = new File([audioBuffer], fileName, { type: 'audio/mpeg' });
+
+            const transcription = await openai.audio.transcriptions.create({
+                file: file,
+                model: 'whisper-large-v3',
+            });
+
+            return transcription.text;
+        } catch (error) {
+            console.error('Audio Transcription failed:', error);
+            return '';
+        }
     }
 
     /**

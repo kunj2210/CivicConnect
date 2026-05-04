@@ -26,9 +26,8 @@ export const sendNotificationToUser = async (userId: string, title: string, body
         // 3. Send Push Notification via FCM
         const user = await User.findByPk(userId);
         if (user) {
-            const identifiers = [user.id, user.phone, user.email].filter(Boolean);
             const devices = await UserDevice.findAll({
-                where: { user_id: identifiers }
+                where: { user_id: user.id }
             });
 
             const tokens = devices.map(d => d.fcm_token);

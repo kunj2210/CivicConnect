@@ -12,6 +12,7 @@ import { PriorityService } from '../services/priorityService.js';
 import { findWardId } from '../utils/spatialUtils.js';
 import { GamificationService, BADGES } from '../services/gamificationService.js';
 import { TriageService } from '../services/triageService.js';
+import { RAGService } from '../services/ragService.js';
 
 
 import { v4 as uuidv4 } from 'uuid';
@@ -96,15 +97,21 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         }
 
         let audioUrl = '';
+        let audioText = '';
         if (audioFile) {
             audioUrl = await StorageService.uploadFile(audioFile, 'audio') || '';
+            try {
+                audioText = await AIService.transcribeAudio(audioFile.buffer, audioFile.originalname);
+                console.log(`[AUDIO] Transcribed: "${audioText}"`);
+            } catch (transError) {
+                console.error('Audio Transcription error:', transError);
+            }
         }
 
         // 4. LLM Standardization & Voice Translation (Open Source Llama 3)
-        // Note: For now, we use user-provided description; real-time Whisper transcription can be added here
         let textTop3 = [];
         try {
-            textTop3 = await AIService.standardizeContent(description || '', '');
+            textTop3 = await AIService.standardizeContent(description || '', audioText || '');
         } catch (textError) {
             console.error('Text Standardization error:', textError);
         }
@@ -155,11 +162,14 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         );
 
         // 5. Create Issue with Multimodal Evidence
+        const rawClass = fusionResult.finalCategory;
+        const mappedCategory = AIService.getAppCategory(rawClass);
+
         const issue = await Issue.create({
             reporter_id: user.id,
             ward_id: ward_id,
             location: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
-            category: fusionResult.finalCategory, // Fused winning category
+            category: mappedCategory, // User-friendly mapped category
             description: description || '',
             priority_score: priorityScore,
             status: 'Pending',
@@ -169,9 +179,9 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             minio_image_urls: imageUrl ? [imageUrl] : [],
             minio_audio_urls: audioUrl ? [audioUrl] : [],
             ai_image_top3: imageTop3,
-            ai_audio_top3: [], // Future: Placeholder for audio-specific top-3
             ai_text_top3: textTop3,
-            fusion_final_category: fusionResult.finalCategory,
+            audio_text: audioText,
+            fusion_final_category: rawClass, // Store raw AI class (e.g., construction_waste)
             fusion_confidence_score: fusionResult.fusionScore,
             needs_human_review: fusionResult.needsHumanReview,
             assigned_department_id: assignedDeptId,
@@ -226,10 +236,13 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         );
 
 
+        // 6. Trigger RAG Embedding (Background)
+        RAGService.updateIssueEmbedding(issue.id).catch(err => console.error('[RAG] Async update failed:', err));
+
         res.status(201).json({
             success: true,
             issue_id: issue.id,
-            ai_summary: `AI Analysis complete: Verified as ${issue.category} (${(issue.fusion_confidence_score! * 100).toFixed(1)}% confidence).`
+            ai_summary: `AI Analysis complete: Verified as ${issue.fusion_final_category} (${(issue.fusion_confidence_score! * 100).toFixed(1)}% confidence).`
         });
 
     } catch (error: any) {
@@ -242,16 +255,25 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
     try {
         const { ward_id, status, assigned_staff_id } = req.query;
         const whereClause: any = {};
+        const user = req.user;
+        const userRole = (user?.role || 'citizen').toLowerCase();
 
-        if (ward_id) whereClause.ward_id = ward_id;
-        if (status) whereClause.status = status;
-        if (assigned_staff_id) {
-            if (assigned_staff_id === 'me') {
-                whereClause.assigned_staff_id = req.user?.id;
-            } else {
-                whereClause.assigned_staff_id = assigned_staff_id;
-            }
+        // Server-Side RBAC Filtering
+        if (userRole === 'staff') {
+            // Staff only see their own assigned tasks
+            whereClause.assigned_staff_id = user?.id;
+        } else if (userRole === 'authority') {
+            // Authorities only see reports in their assigned ward AND department
+            if (user?.ward_id) whereClause.ward_id = user.ward_id;
+            if (user?.department_id) whereClause.assigned_department_id = user.department_id;
+        } else if (userRole === 'admin' || userRole === 'super_admin') {
+            // Admins can use query filters or see everything
+            if (ward_id) whereClause.ward_id = ward_id;
+            if (assigned_staff_id) whereClause.assigned_staff_id = assigned_staff_id;
         }
+        // Citizens see everything (handled by obfuscation below)
+
+        if (status) whereClause.status = status;
 
         const issues = await Issue.findAll({
             where: whereClause,
@@ -260,10 +282,9 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
 
 
 
-        const userRole = req.user?.role || 'citizen';
-        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+        const isPrivileged = ['admin', 'authority', 'staff', 'super_admin'].includes(userRole);
 
-        const transformedIssues = issues.map(issue => {
+        const transformedIssues = await Promise.all(issues.map(async (issue) => {
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
             const report = issue.get();
 
@@ -271,8 +292,14 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
                 const [lon, lat] = obfuscateLocation(report.location.coordinates[0], report.location.coordinates[1]);
                 report.location = { ...report.location, coordinates: [lon, lat] };
             }
+
+            // Generate Presigned URL for the list view
+            if (report.minio_pre_key) {
+                report.minio_pre_key = await StorageService.getPresignedUrl(report.minio_pre_key);
+            }
+
             return report;
-        });
+        }));
 
         return res.json(transformedIssues);
 
@@ -347,6 +374,18 @@ export const getReportById = async (req: AuthRequest, res: Response) => {
             issue.location.coordinates = [lon, lat];
         }
 
+        // 2. Generate Presigned URLs for all media
+        if (issue.minio_pre_key) issue.minio_pre_key = await StorageService.getPresignedUrl(issue.minio_pre_key);
+        if (issue.minio_audio_key) issue.minio_audio_key = await StorageService.getPresignedUrl(issue.minio_audio_key);
+        
+        if (issue.minio_image_urls && issue.minio_image_urls.length > 0) {
+            issue.minio_image_urls = await Promise.all(issue.minio_image_urls.map(url => StorageService.getPresignedUrl(url)));
+        }
+        
+        if (issue.minio_audio_urls && issue.minio_audio_urls.length > 0) {
+            issue.minio_audio_urls = await Promise.all(issue.minio_audio_urls.map(url => StorageService.getPresignedUrl(url)));
+        }
+
         res.json(issue);
 
     } catch (error: any) {
@@ -384,6 +423,64 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
         await issue.save();
 
         res.json({ success: true, issue });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const bulkUpdateReports = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { ids, status, category } = req.body;
+        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        
+        if (userRole !== 'admin' && userRole !== 'authority' && userRole !== 'super_admin') {
+            return res.status(403).json({ error: 'Access denied. Insufficient permissions for bulk actions.' });
+        }
+
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'No report IDs provided' });
+        }
+
+        const updateData: any = {};
+        if (status) updateData.status = status;
+        if (category) updateData.category = category;
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: 'No update data provided' });
+        }
+
+        const [count] = await Issue.update(updateData, {
+            where: {
+                id: ids
+            }
+        });
+
+        // Log the bulk activity
+        await AuditLog.create({
+            actor_id: req.user?.id,
+            event_type: 'BULK_UPDATE',
+            payload: { 
+                ids, 
+                updates: updateData,
+                count
+            },
+        });
+
+        res.json({ success: true, message: `Successfully updated ${count} reports`, count });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const askCivicAI = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { query } = req.query;
+        if (!query || typeof query !== 'string') {
+            return res.status(400).json({ error: 'Query parameter is required' });
+        }
+
+        const answer = await RAGService.generateExecutiveSummary(query);
+        res.json({ answer });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -505,13 +602,20 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
             payload: { issue_id: issue.id, repair_image: imageUrl },
         });
 
-        // 5. Notify Authorities (Wait, we can add this for better UX)
-        // For now, we'll notify the reporter that work is done and pending approval
+        // 5. Notify Authorities for approval
+        broadcastNotification(
+            `authority_${issue.assigned_department_id}`, 
+            'New Resolution to Approve',
+            `Staff ${user.phone || ''} has submitted work for issue ${issue.id.slice(0, 8)}.`,
+            { issue_id: issue.id, type: 'APPROVAL_REQUIRED' }
+        ).catch(err => console.error('[Notification] Authority notify failed:', err));
+
+        // 6. Notify the reporter
         if (issue.reporter_id) {
             sendNotificationToUser(
                 issue.reporter_id,
-                'Resolution Proposed',
-                `Staff has submitted a resolution for your issue ${issue.id.slice(0, 8)}. It is now awaiting final approval.`,
+                'Work in Progress',
+                `Staff has completed the work for issue ${issue.id.slice(0, 8)}. It is now being verified by authorities.`,
                 { issue_id: issue.id, type: 'RESOLUTION_PROPOSED' }
             ).catch(err => console.error('[Notification] Proposal notify failed:', err));
         }
@@ -539,56 +643,29 @@ export const confirmResolution = async (req: AuthRequest, res: Response): Promis
             return res.status(400).json({ error: 'Issue is not awaiting confirmation' });
         }
 
-        // 2. Finalize Issue
-        issue.status = 'Resolved';
+        // 2. Advance to Dual-Verification (Citizen's turn)
+        issue.status = 'Pending Citizen Confirmation';
         await issue.save();
 
-        // 3. Mark Repair as closed if exists
-        const repair = await Repair.findOne({ where: { issue_id: issue.id }, order: [['createdAt', 'DESC']] });
-        if (repair) {
-            repair.closed_at = new Date();
-            await repair.save();
-        }
-
-        // 4. Award Green Credits to ALL citizens who reported this issue (Pillar 2)
-        const reporterIds = issue.reporter_ids || [issue.reporter_id];
-        const creditAmount = Math.round((issue.priority_score || 0) * 10);
-
-        if (reporterIds.length > 0) {
-            await User.update(
-                { green_credits: sequelize.literal(`green_credits + ${creditAmount}`) },
-                { where: { id: { [Op.in]: reporterIds } } }
-            );
-            console.log(`[CREDITS] Awarded ${creditAmount} credits to ${reporterIds.length} reporters.`);
-
-            // Check Gamification Milestones for all reporters
-            for (const rId of reporterIds) {
-                const rUser = await User.findByPk(rId);
-                if (rUser) {
-                    const rReportCount = await Issue.count({ where: { reporter_id: rId as string } });
-                    GamificationService.checkMilestones(rId as string, rReportCount, rUser.green_credits);
-                }
-            }
-        }
-
-        // 6. Log Approval
+        // 3. Log Authority Approval
         await AuditLog.create({
             actor_id: userAuth.id,
-            event_type: 'RESOLUTION_APPROVED',
+            event_type: 'AUTHORITY_RESOLUTION_APPROVED',
             payload: { issue_id: issue.id },
         });
 
-        // 7. Notify ALL Reporters
+        // 4. Notify ALL Reporters to verify
+        const reporterIds = issue.reporter_ids || [issue.reporter_id];
         for (const rId of reporterIds) {
             sendNotificationToUser(
                 rId as string,
-                'Issue Resolved! 🎉',
-                `Your reported issue ${issue.id.slice(0, 8)} has been confirmed as resolved. You've earned ${creditAmount} Green Credits!`,
-                { issue_id: issue.id, type: 'ISSUE_RESOLVED', credits: creditAmount }
-            ).catch(err => console.error('[Notification] Resolution notify failed:', err));
+                'Verify Resolution',
+                `Authority has approved the work for issue ${issue.id.slice(0, 8)}. Please confirm if you are satisfied.`,
+                { issue_id: issue.id, type: 'VERIFICATION_REQUIRED' }
+            ).catch(err => console.error('[Notification] Verification notify failed:', err));
         }
 
-        res.json({ success: true, message: 'Resolution confirmed and credits awarded' });
+        res.json({ success: true, message: 'Resolution approved by authority. Now awaiting citizen confirmation.' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -634,6 +711,124 @@ export const rejectResolution = async (req: AuthRequest, res: Response): Promise
         }
 
         res.json({ success: true, message: 'Resolution rejected, issue returned to staff' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const citizenConfirmResolution = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { id } = req.params;
+        const userAuth = (req as any).user;
+
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
+
+        // 1. Verify this user is the reporter (or one of the reporters)
+        const reporterIds = issue.reporter_ids || [issue.reporter_id];
+        if (!userAuth || !reporterIds.includes(userAuth.id)) {
+            return res.status(403).json({ error: 'Access denied. Only the original reporter can verify the resolution.' });
+        }
+
+        if (issue.status !== 'Pending Citizen Confirmation') {
+            return res.status(400).json({ error: 'Issue is not awaiting citizen confirmation' });
+        }
+
+        // 2. Finalize Issue
+        issue.status = 'Resolved';
+        await issue.save();
+
+        // 3. Close the repair record
+        const repair = await Repair.findOne({ where: { issue_id: issue.id }, order: [['createdAt', 'DESC']] });
+        if (repair) {
+            repair.closed_at = new Date();
+            await repair.save();
+        }
+
+        // 4. Calculate & Award Credits
+        const baseCredits = GamificationService.calculateCredits(issue.priority_score, !!issue.minio_pre_key, !!issue.minio_audio_key);
+        const bonusCredits = 20; // Bonus for verifying
+        const totalAwarded = baseCredits + bonusCredits;
+
+        for (const rId of reporterIds) {
+            await GamificationService.addCredits(rId as string, totalAwarded, 'RESOLVED_AND_VERIFIED');
+            
+            // Check milestones
+            const rUser = await User.findByPk(rId);
+            const rReportCount = await Issue.count({ where: { reporter_id: rId as string } });
+            // For simplicity, we'll assume a verificationCount can be derived or tracked. 
+            // For now, let's just pass 0 or a fixed value.
+            if (rUser) {
+                GamificationService.checkMilestones(rId as string, rReportCount, rUser.green_credits, 1);
+            }
+        }
+
+        // 5. Log & Notify
+        await AuditLog.create({
+            actor_id: userAuth.id,
+            event_type: 'CITIZEN_RESOLUTION_VERIFIED',
+            payload: { issue_id: issue.id, credits: totalAwarded },
+        });
+
+        // 6. Notify Staff
+        if (issue.assigned_staff_id) {
+            sendNotificationToUser(
+                issue.assigned_staff_id,
+                'Great Job! 🌟',
+                `The reporter has verified your work for issue ${issue.id.slice(0, 8)}. Keep up the good work!`,
+                { issue_id: issue.id, type: 'WORK_VERIFIED' }
+            ).catch(err => console.error('[Notification] Staff verification notify failed:', err));
+        }
+
+        res.json({ success: true, message: 'Thank you for verifying! Credits have been awarded.', creditsAwarded: totalAwarded });
+
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const citizenDisputeResolution = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const userAuth = (req as any).user;
+
+        const issue = await Issue.findByPk(id as string);
+        if (!issue) return res.status(404).json({ error: 'Issue not found' });
+
+        const reporterIds = issue.reporter_ids || [issue.reporter_id];
+        if (!userAuth || !reporterIds.includes(userAuth.id)) {
+            return res.status(403).json({ error: 'Access denied.' });
+        }
+
+        issue.status = 'Disputed';
+        await issue.save();
+
+        await AuditLog.create({
+            actor_id: userAuth.id,
+            event_type: 'CITIZEN_RESOLUTION_DISPUTED',
+            payload: { issue_id: issue.id, reason },
+        });
+
+        // Notify Authority & Staff
+        if (issue.assigned_staff_id) {
+            sendNotificationToUser(
+                issue.assigned_staff_id,
+                'Resolution Disputed',
+                `The reporter was not satisfied with the work for issue ${issue.id.slice(0, 8)}. Reason: ${reason}`,
+                { issue_id: issue.id, type: 'WORK_DISPUTED' }
+            ).catch(err => console.error('[Notification] Staff dispute notify failed:', err));
+        }
+
+        broadcastNotification(
+            `authority_${issue.assigned_department_id}`,
+            'Citizen Dispute Raised',
+            `Issue ${issue.id.slice(0, 8)} has been disputed by the reporter. Manual review required.`,
+            { issue_id: issue.id, type: 'DISPUTE_RAISED' }
+        ).catch(err => console.error('[Notification] Authority dispute notify failed:', err));
+
+        res.json({ success: true, message: 'Dispute recorded. A municipal authority will review this shortly.' });
+
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -790,5 +985,50 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response): Pro
     }
 };
 
+export const exportRetrainingData = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        if (userRole !== 'admin' && userRole !== 'super_admin') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
 
+        const data = await AIFeedback.findAll({
+            where: { status: 'Processed' },
+            order: [['updatedAt', 'DESC']]
+        });
 
+        // Map to a format suitable for Python training scripts
+        const dataset = data.map(f => ({
+            id: f.id,
+            image_url: f.media_url,
+            original_prediction: f.original_category,
+            correct_label: f.corrected_category,
+            verified_at: f.updatedAt
+        }));
+
+        res.json({
+            count: dataset.length,
+            generated_at: new Date().toISOString(),
+            dataset
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+export const testAudioPrediction = async (req: AuthRequest, res: Response) => {
+    try {
+        const file = (req as any).file || (req as any).files?.['audio']?.[0] || (req as any).files?.[0];
+        if (!file) return res.status(400).json({ error: 'Audio file required' });
+
+        const transcription = await AIService.transcribeAudio(file.buffer, file.originalname);
+        const categories = await AIService.standardizeContent('', transcription);
+
+        res.json({
+            success: true,
+            transcription,
+            predicted_categories: categories
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};

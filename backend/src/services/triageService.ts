@@ -20,6 +20,12 @@ export class TriageService {
         if (cat.includes('water') || cat.includes('drainage') || cat.includes('sewage')) {
             return 'Water & Sewage Management';
         }
+        if (cat.includes('encroachment')) {
+            return 'Public Works Department';
+        }
+        if (cat.includes('criminal') || cat.includes('vandalism')) {
+            return 'Public Safety & Security';
+        }
         
         return 'Public Works Department';
     }
@@ -50,29 +56,49 @@ export class TriageService {
         if (!deptId) return null;
         
         try {
-            // 1. Precise Match (Hyper-Local)
-            if (wardId) {
-                const preciseStaff = await User.findOne({
-                    where: {
-                        role: 'staff',
-                        department_id: deptId,
-                        ward_id: wardId,
-                        is_active: true
-                    }
-                });
-                if (preciseStaff) return preciseStaff.id;
+            // Import Issue and sequelize here to avoid circular dependency if any
+            const { Issue } = await import('../models/Issue.js');
+            const { Op } = await import('sequelize');
+
+            // 1. Find all eligible staff in the department (optionally filtered by ward)
+            const staffFilter: any = {
+                role: 'staff',
+                department_id: deptId,
+                is_active: true
+            };
+            if (wardId) staffFilter.ward_id = wardId;
+
+            const eligibleStaff = await User.findAll({ where: staffFilter });
+            
+            if (eligibleStaff.length === 0) {
+                // If no staff in ward, broaden to entire department
+                if (wardId) {
+                    delete staffFilter.ward_id;
+                    const broadStaff = await User.findAll({ where: staffFilter });
+                    if (broadStaff.length === 0) return null;
+                    eligibleStaff.push(...broadStaff);
+                } else {
+                    return null;
+                }
             }
 
-            // 2. Broad Match (Departmental Fallback)
-            const fallbackStaff = await User.findOne({
-                where: {
-                    role: 'staff',
-                    department_id: deptId,
-                    is_active: true
-                }
-            });
+            // 2. Count active tasks for each staff member
+            const staffWithWorkloads = await Promise.all(eligibleStaff.map(async (staff) => {
+                const activeTaskCount = await Issue.count({
+                    where: {
+                        assigned_staff_id: staff.id,
+                        status: { [Op.notIn]: ['Resolved', 'Closed'] }
+                    }
+                });
+                return { id: staff.id, workload: activeTaskCount };
+            }));
+
+            // 3. Sort by workload (ascending) and return the best one
+            staffWithWorkloads.sort((a, b) => a.workload - b.workload);
             
-            return fallbackStaff ? fallbackStaff.id : null;
+            console.log(`[TriageService] Load Balancing: Selected Staff ${staffWithWorkloads[0].id} with workload ${staffWithWorkloads[0].workload}`);
+            
+            return staffWithWorkloads[0].id;
         } catch (error) {
             console.error('[TriageService] Staff Selection Error:', error);
             return null;
