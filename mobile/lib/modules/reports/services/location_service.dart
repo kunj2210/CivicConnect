@@ -1,44 +1,43 @@
-import 'package:location/location.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:exif/exif.dart';
 
 class LocationService {
-  final Location _location = Location();
-
-  Future<LocationData?> getCurrentLocation({int timeoutSeconds = 25}) async {
+  Future<Position?> getCurrentLocation({int timeoutSeconds = 25}) async {
     try {
-      if (!kIsWeb) {
-        bool serviceEnabled = await _location.serviceEnabled();
-        if (!serviceEnabled) {
-          serviceEnabled = await _location.requestService();
-          if (!serviceEnabled) return null;
-        }
+      bool serviceEnabled;
+      LocationPermission permission;
 
-        PermissionStatus permissionGranted = await _location.hasPermission();
-        if (permissionGranted == PermissionStatus.denied) {
-          permissionGranted = await _location.requestPermission();
-          if (permissionGranted != PermissionStatus.granted) return null;
-        }
+      // Check if location services are enabled.
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return null;
       }
 
-      // Phase 1 MVP: Accuracy Thresholding and Timeout
-      final locData = await _location.getLocation().timeout(Duration(seconds: timeoutSeconds));
-      if (kIsWeb || (locData.accuracy != null && locData.accuracy! <= 100.0)) {
-        return locData;
-      } else {
-        debugPrint("Location accuracy (${locData.accuracy}) exceeds 100m threshold. Rejecting.");
-        return null; // Triggers UI fallback
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return null;
+        }
       }
+      
+      if (permission == LocationPermission.deniedForever) {
+        return null;
+      } 
 
+      // Get current position
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: timeoutSeconds),
+      );
     } catch (e) {
-      debugPrint("Location acquisition timed out or failed: $e");
+      debugPrint("Location acquisition failed: $e");
       return null;
     }
   }
 
   /// Reads EXIF metadata from image bytes.
-  ///
-  /// This avoids using `dart:io` (File) on web, where dart:io file operations are unsupported.
   Future<Map<String, double>?> getExifLocation(Uint8List imageBytes) async {
     try {
       final data = await readExifFromBytes(imageBytes);
@@ -53,7 +52,7 @@ class LocationService {
       }
       return null;
     } catch (e) {
-      debugPrint("Error reading EXIF data (often fails on web): $e");
+      debugPrint("Error reading EXIF data: $e");
       return null;
     }
   }
@@ -63,7 +62,6 @@ class LocationService {
     final List<dynamic> values = tag.values.toList();
     if (values.length < 3) return null;
 
-    // Values are degrees, minutes, seconds as Rational objects
     double degrees = _toDouble(values[0]);
     double minutes = _toDouble(values[1]);
     double seconds = _toDouble(values[2]);
@@ -79,7 +77,6 @@ class LocationService {
     if (rational is double) return rational;
     if (rational is int) return rational.toDouble();
     try {
-      // exif package Rational objects have numerator and denominator
       return rational.numerator / rational.denominator;
     } catch (e) {
       return 0.0;

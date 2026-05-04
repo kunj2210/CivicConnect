@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:location/location.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../config/api_config.dart';
@@ -22,7 +22,7 @@ class _NearbyIssuesScreenState extends State<NearbyIssuesScreen> {
   bool _isLoading = true;
   bool _isMapView = false;
   final MapController _mapController = MapController();
-  LocationData? _currentLocation;
+  Position? _currentLocation;
   String? _error;
 
   @override

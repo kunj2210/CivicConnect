@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/report_service.dart';
+import '../services/location_service.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:location/location.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
 class ReportDetailScreen extends StatefulWidget {
@@ -21,8 +22,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final ReportService _reportService = ReportService();
   bool _isUpvoting = false;
   bool _isConfirming = false;
+  bool _isDisputing = false;
   bool _isUploadingResolution = false;
   final ImagePicker _picker = ImagePicker();
+  final LocationService _locationService = LocationService();
 
   @override
   void initState() {
@@ -86,23 +89,45 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     setState(() => _isConfirming = true);
 
     try {
-      await _reportService.confirmResolution(widget.reportId, rating);
+      await _reportService.citizenConfirm(widget.reportId, rating);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Resolution confirmed. Thank you!'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('Resolution verified! Green Credits awarded.'), backgroundColor: Colors.green),
       );
       _fetchReportDetails();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Confirmation failed: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Verification failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) {
         setState(() => _isConfirming = false);
       }
     }
+  }
 
+  Future<void> _handleDispute(String reason) async {
+    if (!mounted) return;
+    setState(() => _isDisputing = true);
+
+    try {
+      await _reportService.citizenDispute(widget.reportId, reason);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Dispute recorded. An authority will review.'), backgroundColor: Colors.orange),
+      );
+      _fetchReportDetails();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Dispute failed: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isDisputing = false);
+      }
+    }
   }
 
   Future<void> _handleProposeResolution() async {
@@ -113,27 +138,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     setState(() => _isUploadingResolution = true);
 
     try {
-      final location = Location();
-      bool serviceEnabled;
-      PermissionStatus permissionGranted;
-
-      serviceEnabled = await location.serviceEnabled();
-      if (!serviceEnabled) {
-        serviceEnabled = await location.requestService();
-        if (!serviceEnabled) {
-          throw Exception('Location services are disabled.');
-        }
+      final currentLocation = await _locationService.getCurrentLocation();
+      if (currentLocation == null) {
+        throw Exception('Could not get your current location. Please ensure location services are enabled.');
       }
 
-      permissionGranted = await location.hasPermission();
-      if (permissionGranted == PermissionStatus.denied) {
-        permissionGranted = await location.requestPermission();
-        if (permissionGranted != PermissionStatus.granted) {
-          throw Exception('Location permissions are denied.');
-        }
-      }
-
-      final currentLocation = await location.getLocation();
       final reportCoords = _report!['location']?['coordinates'] ?? [0.0, 0.0];
       
       final distance = const ll.Distance().as(
@@ -174,11 +183,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Rate Resolution'),
+          title: const Text('Verify Resolution'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('How satisfied are you with the work?'),
+              const Text('Are you satisfied with the fix? This will close the issue and award you Green Credits.'),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -194,7 +203,13 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _showDisputeDialog();
+              }, 
+              child: const Text('Dispute', style: TextStyle(color: Colors.red))
+            ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -204,6 +219,35 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDisputeDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dispute Resolution'),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'Explain why the work is unsatisfactory...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _handleDispute(controller.text);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Submit Dispute'),
+          ),
+        ],
       ),
     );
   }
@@ -224,7 +268,14 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     // Extract report data
     final status = _report!['status'] ?? 'Pending';
     final coords = _report!['location']?['coordinates'] ?? [0, 0];
-    final imageUrl = _report!['minio_pre_key'] ?? 'https://via.placeholder.com/400x300';
+    
+    // Use the first presigned URL from the array if available
+    String imageUrl = 'https://via.placeholder.com/400x300';
+    if (_report!['minio_image_urls'] != null && (_report!['minio_image_urls'] as List).isNotEmpty) {
+      imageUrl = _report!['minio_image_urls'][0];
+    } else if (_report!['minio_pre_key'] != null) {
+      imageUrl = _report!['minio_pre_key'];
+    }
     final category = _report!['category'] ?? 'General';
     final description = _report!['description'] ?? 'No description provided.';
     final reportedAt = _report!['reported_at'] ?? DateTime.now().toIso8601String();
@@ -234,6 +285,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+    
+    final user = Supabase.instance.client.auth.currentUser;
+    final isStaff = user?.userMetadata?['role'] == 'staff';
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -320,7 +374,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
                   const Divider(height: 48),
 
-                  if (status == 'Pending Confirmation' || status == 'Resolved') ...[
+                  if (status == 'Pending Confirmation' || status == 'Pending Citizen Confirmation' || status == 'Resolved') ...[
                     const _SectionHeader(icon: Icons.check_circle_outline, title: 'Resolution Evidence'),
                     const SizedBox(height: 12),
                     if (resolutionImageUrl != null)
@@ -349,33 +403,104 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     const SizedBox(height: 24),
                   ],
 
-                  Builder(builder: (context) {
-                    final user = Supabase.instance.client.auth.currentUser;
-                    final isStaff = user?.userMetadata?['role'] == 'staff';
-
-                    if (isStaff && status != 'Resolved' && status != 'Pending Confirmation') {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _SectionHeader(icon: Icons.camera_alt_outlined, title: 'Field Action'),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: _isUploadingResolution ? null : _handleProposeResolution,
-                            icon: _isUploadingResolution ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.camera_alt),
-                            label: const Text('Capture & Submit Resolution'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: colorScheme.secondary,
-                              foregroundColor: colorScheme.onSecondary,
-                              minimumSize: const Size(double.infinity, 50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    if (isStaff && status != 'Resolved' && status != 'Pending Confirmation' && status != 'Pending Citizen Confirmation')
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 24),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: colorScheme.secondaryContainer.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: colorScheme.secondary.withOpacity(0.2)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.secondary,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(Icons.engineering, color: colorScheme.onSecondary, size: 24),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Field Resolution',
+                                        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(
+                                        'Submit photo proof to close this issue',
+                                        style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSecondaryContainer),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: _isUploadingResolution ? null : _handleProposeResolution,
+                              icon: _isUploadingResolution 
+                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                                : const Icon(Icons.camera_enhance),
+                              label: Text(_isUploadingResolution ? 'Uploading Proof...' : 'Capture Completion Proof'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colorScheme.secondary,
+                                foregroundColor: colorScheme.onSecondary,
+                                minimumSize: const Size(double.infinity, 56),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 0,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Note: You must be within 100m of the issue location to submit resolution proof.',
+                              textAlign: TextAlign.center,
+                              style: textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                  if (status == 'Pending Citizen Confirmation') ...[
+                    const _SectionHeader(icon: Icons.rate_review_outlined, title: 'Verify Fix'),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'Municipal authorities have confirmed the resolution. Please verify if the issue is solved to earn your Green Credits.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: _isConfirming ? null : _showRatingDialog,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF8B5CF6),
+                              minimumSize: const Size(double.infinity, 48),
+                            ),
+                            child: _isConfirming 
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Text('Verify & Claim Credits'),
+                          ),
                         ],
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  }),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
 
                   if (status == 'Pending Confirmation') ...[
                     const _SectionHeader(icon: Icons.rate_review_outlined, title: 'Action Required'),
@@ -490,15 +615,15 @@ class _StatusBadge extends StatelessWidget {
     Color color = colorScheme.primary;
     if (status == 'Resolved') color = Colors.green;
     if (status == 'In Progress') color = Colors.blue;
-    if (status == 'Pending Confirmation') color = Colors.orange;
+    if (status == 'Pending Confirmation' || status == 'Pending Citizen Confirmation') color = Colors.orange;
+    if (status == 'Disputed') color = Colors.red;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-
+        border: Border.all(color: color.withOpacity(0.5)),
       ),
       child: Text(
         status.toUpperCase(),
