@@ -3,29 +3,35 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../../config/api_config.dart';
 
 class NotificationService {
   final SupabaseClient _client = Supabase.instance.client;
   final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  
+  FirebaseMessaging? get _fcm => kIsWeb ? null : FirebaseMessaging.instance;
   RealtimeChannel? _notificationChannel;
 
   Future<void> initialize(BuildContext context) async {
     // 1. Local Notifications Setup
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInit = DarwinInitializationSettings();
-    const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
-    
-    await _localNotificationsPlugin.initialize(initSettings);
-    
-    _localNotificationsPlugin
-      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-      ?.requestNotificationsPermission();
+    if (!kIsWeb) {
+      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosInit = DarwinInitializationSettings();
+      const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+      
+      await _localNotificationsPlugin.initialize(initSettings);
+      
+      _localNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+    }
 
     // 2. FCM Setup
-    await _setupFirebaseMessaging();
+    if (_fcm != null) {
+      await _setupFirebaseMessaging();
+    }
 
     // 3. Auth State Listener
     _client.auth.onAuthStateChange.listen((data) async {
@@ -33,7 +39,7 @@ class NotificationService {
       if (session != null) {
         final user = session.user;
         _setupRealtimeSubscription(user.id);
-        _registerDeviceToken(); // Register FCM token on login
+        if (_fcm != null) _registerDeviceToken(); // Register FCM token on login
       } else {
         _notificationChannel?.unsubscribe();
         _notificationChannel = null;
@@ -44,13 +50,13 @@ class NotificationService {
     final currentUser = _client.auth.currentUser;
     if (currentUser != null) {
       _setupRealtimeSubscription(currentUser.id);
-      _registerDeviceToken();
+      if (_fcm != null) _registerDeviceToken();
     }
   }
 
   Future<void> _setupFirebaseMessaging() async {
     // Request permission (iOS/Android 13+)
-    await _fcm.requestPermission(
+    await _fcm?.requestPermission(
       alert: true,
       badge: true,
       sound: true,
@@ -75,7 +81,7 @@ class NotificationService {
 
   Future<void> _registerDeviceToken() async {
     try {
-      final token = await _fcm.getToken();
+      final token = await _fcm?.getToken();
       if (token != null) {
         debugPrint('[FCM] Device Token: $token');
         await http.post(
@@ -106,6 +112,11 @@ class NotificationService {
   }
 
   Future<void> _showLocalNotification(String title, String body, {Map<String, dynamic>? data}) async {
+    if (kIsWeb) {
+      debugPrint('[Web Notification] $title: $body');
+      return;
+    }
+    
     const androidDetails = AndroidNotificationDetails(
       'civic_updates', 
       'Civic Updates',

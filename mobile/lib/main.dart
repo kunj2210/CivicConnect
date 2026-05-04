@@ -4,7 +4,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 import 'modules/auth/screens/login_screen.dart';
 import 'modules/auth/screens/signup_screen.dart';
@@ -20,30 +22,47 @@ import 'modules/reports/services/notification_service.dart';
 import 'modules/auth/screens/splash_screen.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  await dotenv.load(fileName: ".env");
-  await Hive.initFlutter();
-  Hive.registerAdapter(ReportDraftAdapter());
-  await Hive.openBox<ReportDraft>('report_drafts');
-  await Hive.openBox('settings');
+  try {
+    print("RUNNING MAIN WITH FIREBASE WEB FIX");
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    try {
+      print("Initializing Firebase with Default Options...");
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (e) {
+      debugPrint("Firebase initialization failed: $e");
+    }
+    
+    await dotenv.load(fileName: ".env");
+    await Hive.initFlutter();
+    Hive.registerAdapter(ReportDraftAdapter());
+    await Hive.openBox<ReportDraft>('report_drafts');
+    await Hive.openBox('settings');
 
-  SyncService.initialize();
+    SyncService.initialize();
 
-  await Supabase.initialize(
-    url: dotenv.get('SUPABASE_URL'),
-    anonKey: dotenv.get('SUPABASE_ANON_KEY'),
-  );
+    await Supabase.initialize(
+      url: dotenv.get('SUPABASE_URL'),
+      anonKey: dotenv.get('SUPABASE_ANON_KEY'),
+    );
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => NavigationProvider()),
-      ],
-      child: const MyApp(),
-    ),
-  );
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => NavigationProvider()),
+        ],
+        child: const MyApp(),
+      ),
+    );
+  } catch (e, stack) {
+    debugPrint("CRITICAL STARTUP ERROR: $e");
+    debugPrint("STACK TRACE: $stack");
+    // Show a minimal error app if initialization fails
+    runApp(MaterialApp(home: Scaffold(body: Center(child: Text("App failed to start: $e")))));
+  }
 }
 
 class MyApp extends StatefulWidget {
