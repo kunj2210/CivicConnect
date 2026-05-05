@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.civicconnect.civic_connect_mobile"
-    compileSdk = 33
+    compileSdk = 36
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -21,7 +21,7 @@ android {
     defaultConfig {
         applicationId = "com.civicconnect.civic_connect_mobile"
         minSdk = flutter.minSdkVersion
-        targetSdk = 33
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -38,5 +38,5 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

@@ -310,17 +310,26 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
 
 export const getReportStats = async (req: AuthRequest, res: Response) => {
     try {
-        const phone = req.userIdentifier;
+        const user = req.user;
+        const userRole = (user?.role || 'citizen').toLowerCase();
         let where: any = {};
         let green_credits = 0;
 
-        if (phone) {
-            const user = await User.findOne({ where: { phone } });
-            if (user) {
-                where = { reporter_id: user.id };
-                green_credits = user.green_credits;
+        // RBAC: Citizens only see their own stats, others see global/departmental
+        if (userRole === 'citizen') {
+            where = { reporter_id: user?.id };
+            // Fetch citizen-specific info like green credits
+            const dbUser = await User.findByPk(user?.id);
+            if (dbUser) green_credits = dbUser.green_credits;
+        } else if (userRole === 'authority') {
+            // Authorities see stats for their ward/department
+            const dbUser = await User.findByPk(user?.id);
+            if (dbUser) {
+                if (dbUser.ward_id) where.ward_id = dbUser.ward_id;
+                if (dbUser.department_id) where.assigned_department_id = dbUser.department_id;
             }
         }
+        // Admins and Super Admins keep where = {} for global stats
 
         const total = await Issue.count({ where });
         const pending = await Issue.count({ where: { ...where, status: 'Pending' } });
@@ -344,10 +353,10 @@ export const getReportStats = async (req: AuthRequest, res: Response) => {
 
         res.json({
             summary: [
-                { title: 'Total Issues', value: total, trend: 12 },
-                { title: 'Resolved', value: resolved, trend: 8 },
-                { title: 'Pending', value: pending, trend: -5 },
-                { title: 'In Progress', value: inProgress, trend: 2 },
+                { title: 'Total Issues', value: total, trend: 12, color: 'blue' },
+                { title: 'Resolved', value: resolved, trend: 8, color: 'emerald' },
+                { title: 'Pending', value: pending, trend: -5, color: 'rose' },
+                { title: 'In Progress', value: inProgress, trend: 2, color: 'amber' },
             ],
             categoryData,
             total,
@@ -355,6 +364,7 @@ export const getReportStats = async (req: AuthRequest, res: Response) => {
             green_credits,
         });
     } catch (error: any) {
+        console.error('Error in getReportStats:', error);
         res.status(500).json({ error: error.message });
     }
 };

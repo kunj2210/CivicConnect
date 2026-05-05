@@ -51,7 +51,7 @@ const AuthoritySettings = () => {
                     setSaving(false);
                     return;
                 }
-                await api.patch(`/auth/update-password/${user.id}`, {
+                await api.post('/auth/change-password', {
                     currentPassword: security.currentPassword,
                     newPassword: security.newPassword
                 });

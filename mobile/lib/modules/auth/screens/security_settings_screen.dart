@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../../config/api_config.dart';
 
 
 class SecuritySettingsScreen extends StatefulWidget {
@@ -110,21 +113,34 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 }
                 setDialogState(() => isLoading = true);
                 try {
-                  final client = Supabase.instance.client;
-                  await client.auth.updateUser(
-                    UserAttributes(password: newPasswordController.text),
+                  final response = await http.post(
+                    Uri.parse('${ApiConfig.baseUrl}/auth/change-password'),
+                    headers: ApiConfig.getHeaders(),
+                    body: json.encode({
+                      'currentPassword': oldPasswordController.text,
+                      'newPassword': newPasswordController.text,
+                    }),
                   );
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Password changed successfully')),
-                    );
+
+                  if (response.statusCode == 200) {
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password changed successfully')),
+                      );
+                    }
+                  } else {
+                    final errorData = json.decode(response.body);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(errorData['message'] ?? 'Failed to change password')),
+                      );
+                    }
                   }
                 } catch (e) {
-
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to change password: $e')),
+                      SnackBar(content: Text('Error: $e')),
                     );
                   }
                 } finally {

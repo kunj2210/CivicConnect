@@ -146,7 +146,8 @@ export class AIService {
         formData.append('file', imageBuffer, { filename: fileName });
 
         try {
-            const response = await axios.post('http://localhost:8000/classify', formData, {
+            const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8005';
+            const response = await axios.post(`${aiUrl}/classify`, formData, {
                 headers: formData.getHeaders(),
             });
             // Extract top_3 from the python response object

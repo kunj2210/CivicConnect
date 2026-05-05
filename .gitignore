@@ -42,3 +42,5 @@ backend/src/**/*.js
 backend/src/**/*.js.map
 backend/src/**/*.d.ts
 backend/src/**/*.d.ts.map
+
+civicconnect-7c316-firebase-adminsdk-fbsvc-ef6ad24d2e.json

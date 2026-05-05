@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { User } from '../config/db.js';
-import { supabase } from '../config/supabase.js';
+import { supabase, supabaseAdmin } from '../config/supabase.js';
 
 export const login = async (req: Request, res: Response) => {
     try {
@@ -95,6 +95,50 @@ export const updateProfile = async (req: Request, res: Response) => {
         await user.save();
 
         res.status(200).json(user);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+    console.log(`[DEBUG] changePassword controller reached for user: ${(req as any).user.id}`);
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const user = (req as any).user;
+
+        if (!newPassword) {
+            return res.status(400).json({ message: 'newPassword is required' });
+        }
+
+        // 1. Verify current password
+        // Use the email or phone from the authenticated user to verify
+        const identifier = user.email || user.phone;
+        if (!identifier) {
+            return res.status(400).json({ message: 'User identifier (email/phone) not found' });
+        }
+
+        const signInParams: any = { password: currentPassword };
+        if (user.email) signInParams.email = user.email;
+        else signInParams.phone = user.phone;
+
+        const { error: signInError } = await supabase.auth.signInWithPassword(signInParams);
+
+        if (signInError) {
+            console.error('[Auth] Password verification failed:', signInError.message);
+            return res.status(401).json({ message: 'Invalid current password' });
+        }
+
+        // 2. Update to new password using Service Role (Admin)
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+            user.id,
+            { password: newPassword }
+        );
+
+        if (updateError) {
+            return res.status(400).json({ message: updateError.message });
+        }
+
+        res.status(200).json({ message: 'Password updated successfully' });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }

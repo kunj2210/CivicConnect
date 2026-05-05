@@ -1,11 +1,13 @@
 import express from 'express';
-import { login, register, updateProfile } from '../controllers/authController.js';
+import { login, register, updateProfile, changePassword } from '../controllers/authController.js';
+import { verifySupabaseToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 router.post('/login', login);
 router.post('/register', register);
 router.patch('/update-profile/:id', updateProfile);
+router.post('/change-password', verifySupabaseToken, changePassword);
 
 // Supabase Email Verification Redirect Landing Page
 router.get('/verify-success', (req, res) => {

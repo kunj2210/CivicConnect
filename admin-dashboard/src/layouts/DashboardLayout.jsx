@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
-import { Bell, Search, Moon, Sun } from 'lucide-react';
+import { Bell, Search, Moon, Sun, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../config/supabase';
 
@@ -11,7 +11,7 @@ const DashboardLayout = () => {
     const [darkMode, setDarkMode] = useState(() => {
         return localStorage.getItem('theme') === 'dark';
     });
-    // ... rest of state
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -20,9 +20,6 @@ const DashboardLayout = () => {
         if (!name) return 'U';
         return name.split(/[\s@]/).map(n => n[0]).join('').toUpperCase().slice(0, 2);
     };
-
-    // ... useEffects and handlers
-
 
     useEffect(() => {
         if (darkMode) {
@@ -56,7 +53,6 @@ const DashboardLayout = () => {
 
         fetchNotifications();
 
-        // Subscribe to Custom Broadcast Notifications (matching User's SQL trigger)
         const channelName = `user:${user.id}:notifications`;
         const subscription = supabase
             .channel(channelName, {
@@ -66,14 +62,8 @@ const DashboardLayout = () => {
                 }
             })
             .on('broadcast', { event: 'INSERT' }, (payload) => {
-                console.log('[Realtime] New Broadcast Payload:', payload);
-
-                // Flexible extraction
                 const record = payload.new || payload.record || payload.payload?.record || payload;
-                console.log('[Realtime] Extracted Record:', record);
-
                 if (record) {
-                    // Normalize fields if needed (handle potential case differences)
                     const normalizedNotif = {
                         id: record.id || record.ID,
                         title: record.title || record.Title || record.event_type || 'New Notification',
@@ -81,60 +71,60 @@ const DashboardLayout = () => {
                         createdAt: record.createdAt || record.created_at || record.timestamp || new Date().toISOString(),
                         is_read: record.is_read || false
                     };
-
-                    console.log('[Realtime] Normalized Notification:', normalizedNotif);
-
                     setNotifications(prev => [normalizedNotif, ...prev]);
                     setUnreadCount(prev => prev + 1);
                 }
             })
-
-
-            .subscribe(async (status) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`[Realtime] Subscribed to ${channelName}`);
-                }
-            });
+            .subscribe();
 
         return () => {
             subscription.unsubscribe();
         };
     }, [user]);
 
-
-
     const markAllAsRead = async () => {
-        // Implementation for marking all as read (could be an API call)
-        setNotifications(notifications.map(n => ({ ...n, read: true })));
+        setNotifications(notifications.map(n => ({ ...n, is_read: true })));
         setUnreadCount(0);
     };
 
     return (
         <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-300 ${darkMode ? 'dark bg-gray-950 text-gray-100' : 'bg-white text-gray-900'}`}>
-            <Sidebar darkMode={darkMode} />
-            <div className="flex-1 flex flex-col overflow-hidden relative">
+            
+            {/* Sidebar with mobile state */}
+            <Sidebar darkMode={darkMode} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 
-                <header className={`flex justify-between items-center py-4 px-8 border-b z-10 sticky top-0 transition-colors duration-300 ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-white border-gray-200'}`}>
-                    <div className="flex items-center w-96">
-                        <div className="relative w-full hidden md:block">
+            {/* Mobile Backdrop */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm animate-fade-in"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+                <header className={`flex justify-between items-center py-4 px-4 md:px-8 border-b z-30 sticky top-0 transition-colors duration-300 ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-white border-gray-200'}`}>
+                    <div className="flex items-center gap-4">
+                        <button 
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="p-2 md:hidden hover:bg-gray-500/10 rounded-lg transition-colors"
+                        >
+                            <Menu size={24} className={darkMode ? 'text-gray-400' : 'text-gray-600'} />
+                        </button>
+                        
+                        <div className="relative w-64 lg:w-96 hidden md:block">
                             <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
                             <input
                                 type="text"
                                 placeholder="Search system..."
-                                className={`w-full pl-10 pr-4 py-2 border rounded-none text-sm focus:ring-1 focus:ring-gray-400 outline-none transition-all ${darkMode ? 'bg-gray-900 border-gray-800 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
+                                className={`w-full pl-10 pr-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all ${darkMode ? 'bg-gray-900 border-gray-800 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
                             />
                         </div>
-                        <button className="text-gray-500 focus:outline-none md:hidden p-2">
-                            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M4 6H20M4 12H20M4 18H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                        </button>
                     </div>
 
-                    <div className={`flex items-center gap-4 pl-6 border-l ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+                    <div className="flex items-center gap-2 md:gap-4">
                         <button
                             onClick={() => setDarkMode(!darkMode)}
-                            className={`p-2 transition-colors ${darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+                            className={`p-2 transition-colors rounded-lg hover:bg-gray-500/10 ${darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
                             title="Toggle Theme"
                         >
                             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -143,7 +133,7 @@ const DashboardLayout = () => {
                         <div className="relative">
                             <button
                                 onClick={() => setShowNotifications(!showNotifications)}
-                                className="relative text-gray-500 hover:text-blue-600 transition-colors p-2"
+                                className="relative text-gray-500 hover:text-blue-600 transition-colors p-2 rounded-lg hover:bg-gray-500/10"
                             >
                                 <Bell className="w-5 h-5" />
                                 {unreadCount > 0 && (
@@ -152,12 +142,12 @@ const DashboardLayout = () => {
                             </button>
 
                             {showNotifications && (
-                                <div className={`absolute right-0 mt-4 w-80 border overflow-hidden shadow-2xl ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                                <div className={`absolute right-0 mt-4 w-72 md:w-80 border overflow-hidden shadow-2xl rounded-2xl z-50 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                                     <div className={`p-4 border-b flex justify-between items-center ${darkMode ? 'border-gray-800 bg-gray-950' : 'border-gray-200 bg-gray-50'}`}>
                                         <h3 className="font-bold text-sm">Notifications</h3>
                                         <button
                                             onClick={markAllAsRead}
-                                            className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">Mark all as read</button>
+                                            className="text-xs text-blue-500 font-bold hover:underline">Mark all as read</button>
                                     </div>
                                     <div className="max-h-96 overflow-y-auto">
                                         {notifications.length > 0 ? (
@@ -185,17 +175,17 @@ const DashboardLayout = () => {
                             )}
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 pl-2 border-l border-gray-200 dark:border-gray-800">
                             <div className="text-right hidden sm:block">
                                 <p className={`text-sm font-bold leading-none ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user?.name || user?.email?.split('@')[0] || 'User'}</p>
-                                <div className="flex justify-end mt-1.5">
-                                    <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 border ${darkMode ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-600 border-gray-200'
+                                <div className="flex justify-end mt-1">
+                                    <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${darkMode ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-600 border-gray-200'
                                         }`}>
                                         {user?.role || 'Observer'}
                                     </span>
                                 </div>
                             </div>
-                            <div className={`h-10 w-10 flex items-center justify-center text-sm font-bold border transition-colors cursor-pointer ${darkMode ? 'bg-gray-900 text-white border-gray-700 hover:border-gray-600' : 'bg-gray-50 text-gray-900 border-gray-300 hover:border-gray-400'
+                            <div className={`h-9 w-9 flex items-center justify-center text-xs font-bold rounded-xl border transition-all cursor-pointer ${darkMode ? 'bg-gray-900 text-white border-gray-700 hover:border-gray-600' : 'bg-gray-50 text-gray-900 border-gray-300 hover:border-gray-400'
                                 }`}>
                                 {getInitials(user?.name || user?.email)}
                             </div>

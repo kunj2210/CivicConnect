@@ -280,8 +280,8 @@ const AdminIssueList = () => {
             </div>
 
             <div className={`rounded-xl border overflow-hidden ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-                <div className="overflow-x-visible">
-                    <table className="w-full text-left">
+                <div className="overflow-x-auto scrollbar-hide">
+                    <table className="w-full text-left min-w-[800px]">
                         <thead className={`border-b ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
                             <tr>
                                 <th className="px-6 py-5">

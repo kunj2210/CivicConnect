@@ -21,7 +21,7 @@ class NotificationService {
       const iosInit = DarwinInitializationSettings();
       const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
       
-      await _localNotificationsPlugin.initialize(initSettings);
+      await (_localNotificationsPlugin as dynamic).initialize(initSettings);
       
       _localNotificationsPlugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
@@ -127,7 +127,7 @@ class NotificationService {
     );
     const notificationDetails = NotificationDetails(android: androidDetails, iOS: DarwinNotificationDetails());
     
-    await _localNotificationsPlugin.show(
+    await (_localNotificationsPlugin as dynamic).show(
       DateTime.now().millisecond,
       title,
       body,

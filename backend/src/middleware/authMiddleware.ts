@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase.js';
 
 export const verifySupabaseToken = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    console.log(`[DEBUG] verifySupabaseToken reached for path: ${req.path}`);
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
