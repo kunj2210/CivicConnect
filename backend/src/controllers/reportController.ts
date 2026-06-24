@@ -576,8 +576,8 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
         }
 
         const user = await User.findByPk(userAuth.id);
-        if (!user || (user.role !== 'staff' && user.role !== 'admin' && user.role !== 'super_admin')) {
-            return res.status(403).json({ error: 'Access denied. Only assigned staff can propose resolution.' });
+        if (!user || (user.role !== 'staff' && user.role !== 'authority' && user.role !== 'admin' && user.role !== 'super_admin')) {
+            return res.status(403).json({ error: 'Access denied. Only assigned staff or authorities can propose resolution.' });
         }
 
         if (!file) return res.status(400).json({ error: 'Resolution image required' });
@@ -585,9 +585,14 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
-        // Ensure the staff member is the one assigned (unless admin)
+        // Ensure the staff member is the one assigned
         if (user.role === 'staff' && issue.assigned_staff_id !== user.id) {
             return res.status(403).json({ error: 'Access denied. You are not assigned to this issue.' });
+        }
+
+        // Ensure the authority belongs to the same department (if they have one assigned)
+        if (user.role === 'authority' && user.department_id && issue.assigned_department_id !== user.department_id) {
+            return res.status(403).json({ error: 'Access denied. You do not belong to the department assigned to this issue.' });
         }
 
         const imageUrl = await StorageService.uploadFile(file, 'repairs') || '';
