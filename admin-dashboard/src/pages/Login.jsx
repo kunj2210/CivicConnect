@@ -7,7 +7,7 @@ import logo from '../assets/logo.png';
 
 const Login = () => {
     const navigate = useNavigate();
-    const { login, signInWithPhone, verifyPhoneOtp } = useAuth();
+    const { user, loading, login, signInWithPhone, verifyPhoneOtp, logout } = useAuth();
     const [loginMethod, setLoginMethod] = useState('email'); // 'email' or 'phone'
     const [credentials, setCredentials] = useState({ email: '', password: '' });
     const [phoneData, setPhoneData] = useState({ phone: '', otp: '' });
@@ -24,6 +24,29 @@ const Login = () => {
             document.documentElement.classList.remove('dark');
         }
     }, []);
+
+    // Redirect reactively once user and role are fully verified and loaded
+    useEffect(() => {
+        if (user && !loading) {
+            const userRole = (user.role || '').toLowerCase();
+            console.log('[Dashboard Login] User detected with role:', userRole);
+            if (userRole === 'super_admin') {
+                navigate('/superadmin/dashboard');
+            } else if (userRole === 'admin') {
+                navigate('/admin/dashboard');
+            } else if (userRole === 'authority') {
+                navigate('/authority/dashboard');
+            } else if (userRole === 'staff') {
+                navigate('/staff/dashboard');
+            } else {
+                console.error('[Dashboard Login] Access Denied: Role is', userRole);
+                setError('Access denied: Citizens must use the mobile app.');
+                setIsShaking(true);
+                setIsLoading(false);
+                logout();
+            }
+        }
+    }, [user, loading, navigate, logout]);
 
     const handleChange = (e) => {
         setError('');
@@ -56,42 +79,14 @@ const Login = () => {
         setIsLoading(true);
 
         try {
-            let user;
             if (loginMethod === 'email') {
                 console.log('--- Initiating Email Sign-in ---');
-                const data = await login(credentials.email, credentials.password);
-                user = data.user;
+                await login(credentials.email, credentials.password);
             } else {
                 console.log('--- Initiating Phone OTP Verification ---');
-                const data = await verifyPhoneOtp(phoneData.phone, phoneData.otp);
-                user = data.user;
+                await verifyPhoneOtp(phoneData.phone, phoneData.otp);
             }
-
-            console.log('[Dashboard Login] Success:', user.email || user.phone);
-            
-            let userRole = 'citizen';
-            try {
-                const profile = await api.get('/users/me');
-                userRole = (profile.role || user.user_metadata?.role || user.role || 'citizen').toLowerCase();
-            } catch (profileErr) {
-                console.warn('[Dashboard Login] Could not fetch profile, falling back to metadata:', profileErr);
-                userRole = (user.user_metadata?.role || user.role || 'citizen').toLowerCase();
-            }
-
-            if (userRole === 'super_admin') {
-                navigate('/superadmin/dashboard');
-            } else if (userRole === 'admin') {
-                navigate('/admin/dashboard');
-            } else if (userRole === 'authority') {
-                navigate('/authority/dashboard');
-            } else if (userRole === 'staff') {
-                navigate('/staff/dashboard');
-            } else {
-                console.error('[Dashboard Login] Access Denied: Role is', userRole);
-                setError('Access denied: Citizens must use the mobile app.');
-                setIsShaking(true);
-                setIsLoading(false);
-            }
+            // Redirection is handled by the useEffect above once auth state updates
         } catch (error) {
             console.error('[Dashboard Login] General Authentication Error:', error);
             setError(error.message || 'Authentication failed.');
