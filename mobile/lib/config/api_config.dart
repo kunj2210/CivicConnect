@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class ApiConfig {
   // Read primary and local fallback URLs
   static final String primaryBaseUrl = dotenv.get('API_BASE_URL', fallback: 'http://10.0.2.2:5000/api');
-  static final String localBaseUrl = 'http://10.0.2.2:5000/api'; // standard Android emulator loopback to localhost:5000
+  static final String localBaseUrl = dotenv.get('LOCAL_API_BASE_URL', fallback: 'http://10.0.2.2:5000/api');
 
   // Track if we shifted to local
   static bool useLocalFallback = false;
