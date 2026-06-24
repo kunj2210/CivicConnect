@@ -32,6 +32,7 @@ Future<http.Response> _requestWithFallback(
 
   try {
     final response = await execute(url);
+    print("[API Client] ${method} ${url} -> ${response.statusCode}");
     if (response.statusCode >= 502 && response.statusCode <= 504) {
       throw http.ClientException("Server proxy error: ${response.statusCode}", url);
     }
@@ -42,7 +43,9 @@ Future<http.Response> _requestWithFallback(
     final fallbackUrl = Uri.parse(url.toString().replaceFirst(ApiConfig.primaryBaseUrl, ApiConfig.localBaseUrl));
     print("[API Fallback] Retrying request with local URL: $fallbackUrl");
     try {
-      return await execute(fallbackUrl);
+      final response = await execute(fallbackUrl);
+      print("[API Fallback Client] ${method} ${fallbackUrl} -> ${response.statusCode}");
+      return response;
     } catch (fallbackErr) {
       print("[API Fallback] Local fallback also failed: $fallbackErr");
       rethrow;
