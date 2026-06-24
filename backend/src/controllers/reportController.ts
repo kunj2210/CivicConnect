@@ -17,6 +17,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 interface AuthRequest extends Request {
     userIdentifier?: string;
+    file?: any;
     files?: any;
     user?: any;
 }
@@ -39,7 +40,7 @@ function obfuscateLocation(lon: number, lat: number) {
 export const createReport = async (req: AuthRequest, res: Response) => {
     console.log('--- Incoming AI-Enhanced Issue Request ---');
     const files = req.files;
-    const imageFile = files?.['image']?.[0];
+    const imageFile = files?.['image']?.[0] || req.file;
     const audioFile = files?.['audio']?.[0];
 
     try {
@@ -567,9 +568,14 @@ export const getNearbyReports = async (req: AuthRequest, res: Response) => {
 export const proposeResolution = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { id } = req.params;
-        const file = req.files?.['image']?.[0] || req.files?.[0];
-        const phone = req.userIdentifier;
-        const user = await User.findOne({ where: { phone } });
+        const file = req.file || req.files?.['image']?.[0] || req.files?.[0];
+        const userAuth = (req as any).user;
+        
+        if (!userAuth) {
+            return res.status(401).json({ error: 'User unauthorized' });
+        }
+
+        const user = await User.findByPk(userAuth.id);
         if (!user || (user.role !== 'staff' && user.role !== 'admin' && user.role !== 'super_admin')) {
             return res.status(403).json({ error: 'Access denied. Only assigned staff can propose resolution.' });
         }
