@@ -79,8 +79,10 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     final XFile? photo = await _picker.pickImage(source: source);
+    if (!mounted) return;
     if (photo != null) {
       final bytes = await photo.readAsBytes();
+      if (!mounted) return;
 
       setState(() {
         _pickedImage = photo;
@@ -95,10 +97,12 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
 
       try {
         final exifLoc = await _locationService.getExifLocation(bytes);
+        if (!mounted) return;
         if (exifLoc != null) {
           setState(() => _location = exifLoc);
         } else {
           final gpsLoc = await _locationService.getCurrentLocation();
+          if (!mounted) return;
           if (gpsLoc != null) {
             setState(
               () => _location = {
@@ -118,7 +122,9 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
           }
         }
       } finally {
-        setState(() => _isLocating = false);
+        if (mounted) {
+          setState(() => _isLocating = false);
+        }
       }
     }
   }
@@ -351,6 +357,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
             const SizedBox(height: 12),
             AudioRecordingWidget(
               onRecordingComplete: (path, transcription) {
+                if (!mounted) return;
                 setState(() => _audioPath = path);
                 if (transcription != null && transcription.isNotEmpty) {
                   _descriptionController.text = transcription;
@@ -449,6 +456,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
                 ),
               );
               if (result != null) {
+                if (!mounted) return;
                 setState(() {
                   _location = {
                     'latitude': result.latitude,
