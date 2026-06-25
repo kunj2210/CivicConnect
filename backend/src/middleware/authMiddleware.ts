@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { supabase } from '../config/supabase.js';
+import { supabase, supabaseAdmin } from '../config/supabase.js';
 
 export const verifySupabaseToken = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     console.log(`[DEBUG] verifySupabaseToken reached for path: ${req.path}`);
@@ -79,6 +79,19 @@ export const verifySupabaseToken = async (req: Request, res: Response, next: Nex
         
         // Consistent identifier logic
         (req as any).userIdentifier = identifier || supId;
+
+        // If user exists in PG, check if Supabase metadata role is out of sync or missing
+        if (dbUser && dbUser.role !== user.user_metadata?.role) {
+            console.log(`[AuthMiddleware] Syncing PostgreSQL role '${dbUser.role}' to Supabase metadata for user ${supId}`);
+            supabaseAdmin.auth.admin.updateUserById(supId, {
+                user_metadata: {
+                    ...user.user_metadata,
+                    role: dbUser.role
+                }
+            }).catch(err => {
+                console.error(`[AuthMiddleware] Failed to sync role to Supabase: ${err.message}`);
+            });
+        }
 
         next();
     } catch (error: any) {

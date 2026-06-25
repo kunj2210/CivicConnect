@@ -8,6 +8,7 @@ import 'modules/auth/screens/profile_screen.dart';
 import 'modules/reports/screens/staff_dashboard_screen.dart';
 import 'modules/notifications/screens/notification_screen.dart';
 import 'shared/utils/responsive_helper.dart';
+import 'modules/auth/services/user_service.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -18,20 +19,40 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final GlobalKey<DashboardScreenState> _dashboardKey = GlobalKey<DashboardScreenState>();
-  late final List<Widget> _screens;
+  final UserService _userService = UserService();
+  late List<Widget> _screens;
+  String _currentRole = 'citizen';
 
   @override
   void initState() {
     super.initState();
     final user = Supabase.instance.client.auth.currentUser;
-    final role = user?.userMetadata?['role'] ?? 'citizen';
+    _currentRole = user?.userMetadata?['role'] ?? 'citizen';
+    _initScreens();
+    _fetchRealRole();
+  }
 
+  void _initScreens() {
     _screens = [
-      role == 'staff' ? const StaffDashboardScreen() : DashboardScreen(key: _dashboardKey),
+      _currentRole == 'staff' ? const StaffDashboardScreen() : DashboardScreen(key: _dashboardKey),
       const HistoryScreen(),
       const NotificationScreen(),
       const ProfileScreen(),
     ];
+  }
+
+  Future<void> _fetchRealRole() async {
+    final profile = await _userService.getProfile();
+    if (profile != null) {
+      final realRole = profile['role'] ?? 'citizen';
+      if (realRole != _currentRole) {
+        if (!mounted) return;
+        setState(() {
+          _currentRole = realRole;
+          _initScreens();
+        });
+      }
+    }
   }
 
   void _onTabTapped(BuildContext context, int index) {
