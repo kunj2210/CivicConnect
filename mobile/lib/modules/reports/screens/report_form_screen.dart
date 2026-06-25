@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -247,7 +248,15 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
           ),
         );
       } else {
-        throw Exception('Server returned ${response.statusCode}');
+        final resStr = await response.stream.bytesToString();
+        String errorMessage = 'Server returned ${response.statusCode}';
+        try {
+          final errJson = json.decode(resStr);
+          if (errJson['error'] != null) {
+            errorMessage = errJson['error'];
+          }
+        } catch (_) {}
+        throw Exception(errorMessage);
       }
     } catch (e) {
       // Offline / Error handling
