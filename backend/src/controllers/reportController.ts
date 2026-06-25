@@ -71,7 +71,7 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({
                 error: 'Location outside of served wards',
                 received_coords: { longitude, latitude },
-                hint: 'Ensure your test location is within Mumbai, Delhi, or Ranchi coordinates.'
+                hint: 'Ensure your test location is within Mumbai, Delhi, Ranchi, or Gujarat coordinates.'
             });
         }
 

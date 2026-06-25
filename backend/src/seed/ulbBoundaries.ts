@@ -31,11 +31,16 @@ export const seedUlbBoundaries = async () => {
             [72.8, 22.4], [73.2, 22.4], [73.2, 22.8], [72.8, 22.8], [72.8, 22.4]
         ];
 
+        const gujaratCoords = [
+            [68.0, 20.0], [74.5, 20.0], [74.5, 25.0], [68.0, 25.0], [68.0, 20.0]
+        ];
+
         const regions = [
             { name: 'Municipal Corporation of Delhi (MCD)', coords: delhiCoords, wardName: 'Ward 01 - Delhi Central' },
             { name: 'Ranchi Municipal Corporation', coords: ranchiCoords, wardName: 'Ward A-1 - Ranchi Main' },
             { name: 'Brihanmumbai Municipal Corporation (BMC)', coords: mumbaiCoords, wardName: 'Ward K/West - Mumbai' },
-            { name: 'Development Sandbox', coords: sandboxCoords, wardName: 'Dev Ward - User Location' }
+            { name: 'Development Sandbox', coords: sandboxCoords, wardName: 'Dev Ward - User Location' },
+            { name: 'Gujarat Municipal Corporation', coords: gujaratCoords, wardName: 'Gujarat State Ward' }
         ];
 
 
