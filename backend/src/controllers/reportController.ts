@@ -291,6 +291,20 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
                 report.minio_pre_key = await StorageService.getPresignedUrl(report.minio_pre_key);
             }
 
+            // Fetch associated repair/resolution evidence if it exists
+            let resolutionImageUrl: string | null = null;
+            if (['Pending Confirmation', 'Pending Citizen Confirmation', 'Resolved'].includes(report.status)) {
+                const repair = await Repair.findOne({ where: { issue_id: report.id }, order: [['createdAt', 'DESC']] });
+                if (repair && repair.minio_post_key) {
+                    resolutionImageUrl = await StorageService.getPresignedUrl(repair.minio_post_key);
+                }
+            }
+            report.resolution_image_url = resolutionImageUrl;
+            report.metadata = {
+                ...report.metadata,
+                resolution_image_url: resolutionImageUrl
+            };
+
             return report;
         }));
 
@@ -377,19 +391,35 @@ export const getReportById = async (req: AuthRequest, res: Response) => {
             issue.location.coordinates = [lon, lat];
         }
 
+        const report = issue.get();
+
         // 2. Generate Presigned URLs for all media
-        if (issue.minio_pre_key) issue.minio_pre_key = await StorageService.getPresignedUrl(issue.minio_pre_key);
-        if (issue.minio_audio_key) issue.minio_audio_key = await StorageService.getPresignedUrl(issue.minio_audio_key);
+        if (report.minio_pre_key) report.minio_pre_key = await StorageService.getPresignedUrl(report.minio_pre_key);
+        if (report.minio_audio_key) report.minio_audio_key = await StorageService.getPresignedUrl(report.minio_audio_key);
         
-        if (issue.minio_image_urls && issue.minio_image_urls.length > 0) {
-            issue.minio_image_urls = await Promise.all(issue.minio_image_urls.map(url => StorageService.getPresignedUrl(url)));
+        if (report.minio_image_urls && report.minio_image_urls.length > 0) {
+            report.minio_image_urls = await Promise.all(report.minio_image_urls.map((url: string) => StorageService.getPresignedUrl(url)));
         }
         
-        if (issue.minio_audio_urls && issue.minio_audio_urls.length > 0) {
-            issue.minio_audio_urls = await Promise.all(issue.minio_audio_urls.map(url => StorageService.getPresignedUrl(url)));
+        if (report.minio_audio_urls && report.minio_audio_urls.length > 0) {
+            report.minio_audio_urls = await Promise.all(report.minio_audio_urls.map((url: string) => StorageService.getPresignedUrl(url)));
         }
 
-        res.json(issue);
+        // Fetch associated repair/resolution evidence if it exists
+        let resolutionImageUrl: string | null = null;
+        if (['Pending Confirmation', 'Pending Citizen Confirmation', 'Resolved'].includes(report.status)) {
+            const repair = await Repair.findOne({ where: { issue_id: report.id }, order: [['createdAt', 'DESC']] });
+            if (repair && repair.minio_post_key) {
+                resolutionImageUrl = await StorageService.getPresignedUrl(repair.minio_post_key);
+            }
+        }
+        report.resolution_image_url = resolutionImageUrl;
+        report.metadata = {
+            ...report.metadata,
+            resolution_image_url: resolutionImageUrl
+        };
+
+        res.json(report);
 
     } catch (error: any) {
         res.status(500).json({ error: error.message });
