@@ -12,21 +12,46 @@ const Sidebar = ({ darkMode, isOpen, setIsOpen }) => {
     const { user, logout } = useAuth();
     const isActive = (path) => location.pathname === path;
 
-    const isAdmin = user?.role === 'Admin' || user?.role === 'super_admin';
-    const isSuperAdmin = user?.role === 'super_admin';
-    const prefix = isSuperAdmin ? '/superadmin' : (isAdmin ? '/admin' : '/authority');
-
-    const navItems = [
-        { path: `${prefix}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
-        { path: `${prefix}/issues`, label: 'Issues', icon: FileText },
-        { path: `${prefix}/map`, label: 'Live Map', icon: Map },
-        { path: `${prefix}/leaderboard`, label: 'Leaderboard', icon: Trophy },
-        ...(isAdmin ? [{ path: `${prefix}/analytics`, label: 'Executive AI', icon: Sparkles }] : []),
-        ...(isAdmin ? [{ path: '/admin/ai-retraining', label: 'AI Retraining', icon: BrainCircuit }] : []),
-        ...(isAdmin ? [{ path: '/admin/departments', label: 'Departments', icon: Users }] : []),
-        ...(isAdmin ? [{ path: '/admin/users', label: 'Users', icon: UserCog }] : []),
-        { path: `${prefix}/settings`, label: 'Settings', icon: Settings },
-    ];
+    const role = (user?.role || '').toLowerCase();
+    
+    let navItems = [];
+    
+    if (role === 'super_admin') {
+        navItems = [
+            { path: '/superadmin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { path: '/superadmin/map', label: 'Live Map', icon: Map },
+            { path: '/superadmin/leaderboard', label: 'Leaderboard', icon: Trophy },
+            { path: '/superadmin/users', label: 'Users', icon: UserCog },
+            { path: '/superadmin/analytics', label: 'Executive AI', icon: Sparkles },
+            { path: '/superadmin/settings', label: 'Settings', icon: Settings },
+        ];
+    } else if (role === 'admin') {
+        navItems = [
+            { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { path: '/admin/issues', label: 'Issues', icon: FileText },
+            { path: '/admin/map', label: 'Live Map', icon: Map },
+            { path: '/admin/leaderboard', label: 'Leaderboard', icon: Trophy },
+            { path: '/admin/analytics', label: 'Executive AI', icon: Sparkles },
+            { path: '/admin/ai-retraining', label: 'AI Retraining', icon: BrainCircuit },
+            { path: '/admin/departments', label: 'Departments', icon: Users },
+            { path: '/admin/users', label: 'Users', icon: UserCog },
+            { path: '/admin/settings', label: 'Settings', icon: Settings },
+        ];
+    } else if (role === 'staff') {
+        navItems = [
+            { path: '/staff/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { path: '/staff/issues', label: 'Issues', icon: FileText },
+            { path: '/staff/settings', label: 'Settings', icon: Settings },
+        ];
+    } else { // default to authority
+        navItems = [
+            { path: '/authority/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { path: '/authority/issues', label: 'Issues', icon: FileText },
+            { path: '/authority/map', label: 'Live Map', icon: Map },
+            { path: '/authority/leaderboard', label: 'Leaderboard', icon: Trophy },
+            { path: '/authority/settings', label: 'Settings', icon: Settings },
+        ];
+    }
 
     return (
         <aside className={`fixed md:relative inset-y-0 left-0 z-50 w-72 h-full flex flex-col px-6 py-8 border-r shadow-2xl transition-all duration-300 transform 
