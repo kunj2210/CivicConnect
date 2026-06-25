@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'dart:typed_data';
 
@@ -64,7 +65,7 @@ class _AudioRecordingWidgetState extends State<AudioRecordingWidget> {
 
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        final path = file.path;
+        final path = kIsWeb ? null : file.path;
         final bytes = file.bytes;
         final name = file.name;
 
