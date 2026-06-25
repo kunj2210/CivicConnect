@@ -102,15 +102,26 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         }
 
         // 4. LLM Standardization & Voice Translation (Open Source Llama 3)
-        let textTop3 = [];
-        try {
-            textTop3 = await AIService.standardizeContent(description || '', audioText || '');
-        } catch (textError) {
-            console.error('Text Standardization error:', textError);
+        let textTop3: any[] = [];
+        if (description) {
+            try {
+                textTop3 = await AIService.standardizeContent(description, '');
+            } catch (textError) {
+                console.error('Text Standardization error:', textError);
+            }
+        }
+
+        let audioTop3: any[] = [];
+        if (audioText) {
+            try {
+                audioTop3 = await AIService.standardizeContent('', audioText);
+            } catch (audioError) {
+                console.error('Audio Standardization error:', audioError);
+            }
         }
 
         // 4.1 Execute Weighted Fusion Logic
-        const fusionResult = AIService.calculateAdvancedFusion(imageTop3, [], textTop3);
+        const fusionResult = AIService.calculateAdvancedFusion(imageTop3, audioTop3, textTop3);
 
         // 4.1.5 SPATIAL DEDUPLICATION (Pillar 2)
         // Check if an issue of the same category exists within its dynamic radius
@@ -172,6 +183,7 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             minio_image_urls: imageUrl ? [imageUrl] : [],
             minio_audio_urls: audioUrl ? [audioUrl] : [],
             ai_image_top3: imageTop3,
+            ai_audio_top3: audioTop3,
             ai_text_top3: textTop3,
             audio_text: audioText,
             fusion_final_category: rawClass, // Store raw AI class (e.g., construction_waste)
