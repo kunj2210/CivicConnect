@@ -503,7 +503,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   ],
 
                   if (status == 'Pending Confirmation') ...[
-                    const _SectionHeader(icon: Icons.rate_review_outlined, title: 'Action Required'),
+                    const _SectionHeader(icon: Icons.rate_review_outlined, title: 'Pending Approval'),
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -511,13 +511,13 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                         color: Colors.orange.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-
                       ),
                       child: Column(
                         children: [
                           const Text(
-                            'The department has marked this issue as resolved. Please review and confirm.',
+                            'The field staff has submitted a resolution. This is currently undergoing review by municipal authorities.',
                             textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 16),
                           if (metadata['resolution_image_url'] != null) ...[
@@ -532,15 +532,23 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                             ),
                             const SizedBox(height: 16),
                           ],
-                          ElevatedButton(
-                            onPressed: _isConfirming ? null : _showRatingDialog,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              minimumSize: const Size(double.infinity, 48),
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: _isConfirming 
-                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Text('Confirm & Close'),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.hourglass_empty, color: Colors.orange, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Awaiting Authority Verification',
+                                  style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
