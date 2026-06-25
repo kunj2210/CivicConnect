@@ -113,6 +113,33 @@ const AuthorityIssueDetails = () => {
         }
     };
 
+    const handleConfirmResolution = async () => {
+        try {
+            setSubmitting(true);
+            await api.post(`/reports/${id}/confirm-resolution`);
+            fetchReport();
+        } catch (err) {
+            alert('Confirmation failed: ' + err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleRejectResolution = async () => {
+        const reason = prompt('Please enter the reason for rejection:');
+        if (reason === null) return; // Cancelled
+
+        try {
+            setSubmitting(true);
+            await api.post(`/reports/${id}/reject-resolution`, { reason });
+            fetchReport();
+        } catch (err) {
+            alert('Rejection failed: ' + err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
 
     if (loading) return <div className={`p-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading issue details...</div>;
     if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
@@ -162,6 +189,24 @@ const AuthorityIssueDetails = () => {
                         </div>
 
                     </div>
+
+                    {report.resolution_image_url && (
+                        <div className={`rounded-2xl shadow-sm border overflow-hidden ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
+                            <div className={`p-4 border-b flex items-center justify-between ${darkMode ? 'bg-white/5 border-white/5' : 'bg-gray-50'}`}>
+                                <h2 className={`font-bold flex items-center ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                    <CheckCircle className="w-5 h-5 mr-2 text-emerald-500" />
+                                    Resolution Evidence (After Fix)
+                                </h2>
+                            </div>
+                            <div className={`p-1 min-h-[300px] flex items-center justify-center rounded-xl ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
+                                <img
+                                    src={report.resolution_image_url}
+                                    alt="Resolution Evidence"
+                                    className="w-full aspect-video object-cover rounded-xl shadow-inner"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
                         <h2 className={`font-bold flex items-center mb-2 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -257,12 +302,38 @@ const AuthorityIssueDetails = () => {
                         <h2 className={`font-bold border-b pb-4 ${darkMode ? 'text-gray-200 border-white/5' : 'text-gray-800'}`}>Task Status</h2>
                         <div className="space-y-3">
                             {report.status === 'Pending Confirmation' ? (
+                                <div className="space-y-3">
+                                    <div className={`p-4 rounded-xl border ${darkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                                        <div className="flex items-center gap-2 mb-2 font-bold">
+                                            <Clock className="w-4 h-4" />
+                                            Awaiting Your Review
+                                        </div>
+                                        <p className="text-xs opacity-80">The field worker has submitted resolution evidence. Please review the proof and approve or reject the resolution.</p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={handleConfirmResolution}
+                                            disabled={submitting}
+                                            className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 text-xs flex items-center justify-center gap-1.5"
+                                        >
+                                            <CheckCircle className="w-4 h-4" /> Approve Fix
+                                        </button>
+                                        <button
+                                            onClick={handleRejectResolution}
+                                            disabled={submitting}
+                                            className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 text-xs flex items-center justify-center gap-1.5"
+                                        >
+                                            <X className="w-4 h-4" /> Reject Fix
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : report.status === 'Pending Citizen Confirmation' ? (
                                 <div className={`p-4 rounded-xl border ${darkMode ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>
                                     <div className="flex items-center gap-2 mb-2 font-bold">
                                         <Clock className="w-4 h-4" />
                                         Awaiting Citizen Confirmation
                                     </div>
-                                    <p className="text-xs opacity-80">Resolution image has been uploaded. The citizen must confirm to close the issue.</p>
+                                    <p className="text-xs opacity-80">You have approved this resolution. The reporting citizen must verify and confirm the fix to fully close the issue.</p>
                                 </div>
                             ) : (
                                 <>
@@ -291,7 +362,7 @@ const AuthorityIssueDetails = () => {
                         </div>
                     </div>
 
-                    {report.status !== 'Resolved' && report.status !== 'Pending Confirmation' && (
+                    {report.status !== 'Resolved' && report.status !== 'Pending Confirmation' && report.status !== 'Pending Citizen Confirmation' && (
                         <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
                             <h2 className={`font-bold border-b pb-4 ${darkMode ? 'text-gray-200 border-white/5' : 'text-gray-800'}`}>Propose Resolution</h2>
                             <div className="space-y-4">
