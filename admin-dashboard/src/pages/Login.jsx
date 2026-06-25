@@ -32,11 +32,11 @@ const Login = () => {
             console.log('[Dashboard Login] User detected with role:', userRole);
             if (userRole === 'super_admin') {
                 navigate('/superadmin/dashboard');
-            } else if (userRole === 'admin') {
+            } else if (userRole === 'admin' || userRole === 'hq_staff') {
                 navigate('/admin/dashboard');
-            } else if (userRole === 'authority') {
+            } else if (userRole === 'authority' || userRole === 'dept_head') {
                 navigate('/authority/dashboard');
-            } else if (userRole === 'staff') {
+            } else if (userRole === 'staff' || userRole === 'field_officer') {
                 navigate('/staff/dashboard');
             } else {
                 console.error('[Dashboard Login] Access Denied: Role is', userRole);

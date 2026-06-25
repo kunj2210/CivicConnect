@@ -264,19 +264,27 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
         const userRole = (user?.role || 'citizen').toLowerCase();
 
         // Server-Side RBAC Filtering
-        if (userRole === 'staff') {
-            // Staff only see their own assigned tasks
-            whereClause.assigned_staff_id = user?.id;
-        } else if (userRole === 'authority') {
-            // Authorities only see reports in their assigned ward AND department
-            if (user?.ward_id) whereClause.ward_id = user.ward_id;
-            if (user?.department_id) whereClause.assigned_department_id = user.department_id;
-        } else if (userRole === 'admin' || userRole === 'super_admin') {
-            // Admins can use query filters or see everything
+        const permissions: string[] = user?.permissions || [];
+        if (permissions.includes('report:view_all')) {
             if (ward_id) whereClause.ward_id = ward_id;
             if (assigned_staff_id) whereClause.assigned_staff_id = assigned_staff_id;
+            if (userRole === 'field_officer' || userRole === 'staff') {
+                whereClause.assigned_staff_id = user?.id;
+            } else if (userRole === 'dept_head' || userRole === 'authority') {
+                if (user?.ward_id) whereClause.ward_id = user.ward_id;
+                if (user?.department_id) whereClause.assigned_department_id = user.department_id;
+            }
+        } else if (permissions.includes('report:view_area')) {
+            if (user?.ward_id) {
+                whereClause.ward_id = user.ward_id;
+            } else {
+                whereClause.ward_id = '00000000-0000-0000-0000-000000000000';
+            }
+        } else if (permissions.includes('report:view_my')) {
+            whereClause.reporter_id = user?.id;
+        } else {
+            whereClause.id = '00000000-0000-0000-0000-000000000000';
         }
-        // Citizens see everything (handled by obfuscation below)
 
         if (status) whereClause.status = status;
 
@@ -287,7 +295,7 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
 
 
 
-        const isPrivileged = ['admin', 'authority', 'staff', 'super_admin'].includes(userRole);
+        const isPrivileged = ['admin', 'super_admin', 'dept_head', 'field_officer', 'hq_staff', 'authority', 'staff'].includes(userRole);
 
         const transformedIssues = await Promise.all(issues.map(async (issue) => {
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
@@ -335,20 +343,29 @@ export const getReportStats = async (req: AuthRequest, res: Response) => {
         let green_credits = 0;
 
         // RBAC: Citizens only see their own stats, others see global/departmental
-        if (userRole === 'citizen') {
-            where = { reporter_id: user?.id };
-            // Fetch citizen-specific info like green credits
-            const dbUser = await User.findByPk(user?.id);
-            if (dbUser) green_credits = dbUser.green_credits;
-        } else if (userRole === 'authority') {
-            // Authorities see stats for their ward/department
+        const permissions: string[] = user?.permissions || [];
+        if (permissions.includes('report:view_all')) {
             const dbUser = await User.findByPk(user?.id);
             if (dbUser) {
-                if (dbUser.ward_id) where.ward_id = dbUser.ward_id;
-                if (dbUser.department_id) where.assigned_department_id = dbUser.department_id;
+                if (userRole === 'field_officer' || userRole === 'staff') {
+                    where = { assigned_staff_id: user?.id };
+                } else if (userRole === 'dept_head' || userRole === 'authority') {
+                    if (dbUser.ward_id) where.ward_id = dbUser.ward_id;
+                    if (dbUser.department_id) where.assigned_department_id = dbUser.department_id;
+                }
             }
+        } else if (permissions.includes('report:view_area')) {
+            const dbUser = await User.findByPk(user?.id);
+            if (dbUser && dbUser.ward_id) {
+                where.ward_id = dbUser.ward_id;
+            } else {
+                where.ward_id = '00000000-0000-0000-0000-000000000000';
+            }
+        } else {
+            where = { reporter_id: user?.id };
+            const dbUser = await User.findByPk(user?.id);
+            if (dbUser) green_credits = dbUser.green_credits;
         }
-        // Admins and Super Admins keep where = {} for global stats
 
         const total = await Issue.count({ where });
         const pending = await Issue.count({ where: { ...where, status: 'Pending' } });
@@ -394,9 +411,26 @@ export const getReportById = async (req: AuthRequest, res: Response) => {
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
         // Apply privacy obfuscation for sensitive categories in public view
-        const userRole = req.user?.role || 'citizen';
+        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        const permissions: string[] = req.user?.permissions || [];
+        const isReporter = issue.reporter_id === req.user?.id;
+        
+        if (permissions.includes('report:view_all')) {
+            // Allowed
+        } else if (permissions.includes('report:view_area')) {
+            if (issue.ward_id !== req.user?.ward_id) {
+                return res.status(403).json({ error: 'Forbidden: Issue is outside your assigned ward' });
+            }
+        } else if (permissions.includes('report:view_my')) {
+            if (!isReporter) {
+                return res.status(403).json({ error: 'Forbidden: You can only access your own reported issues' });
+            }
+        } else {
+            return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+        }
+
         const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
-        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+        const isPrivileged = ['admin', 'super_admin', 'dept_head', 'field_officer', 'hq_staff', 'authority', 'staff'].includes(userRole);
 
         if (isSensitive && !isPrivileged) {
             const [lon, lat] = obfuscateLocation(issue.location.coordinates[0], issue.location.coordinates[1]);
@@ -446,6 +480,14 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
+        const permissions: string[] = req.user?.permissions || [];
+        const isAssigned = issue.assigned_staff_id === req.user?.id;
+        const isPrivilegedUser = ['admin', 'super_admin', 'hq_staff', 'dept_head'].includes(req.user?.role || '');
+
+        if (!isPrivilegedUser && !isAssigned) {
+            return res.status(403).json({ error: 'Forbidden: You can only update issues assigned to you' });
+        }
+
         if (status) issue.status = status;
         if (category && issue.category !== category) {
             // Discrepancy detected: Log to AI Retraining Queue
@@ -476,9 +518,9 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
 export const bulkUpdateReports = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { ids, status, category } = req.body;
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        const permissions: string[] = req.user?.permissions || [];
         
-        if (userRole !== 'admin' && userRole !== 'authority' && userRole !== 'super_admin') {
+        if (!permissions.includes('report:bulk_update')) {
             return res.status(403).json({ error: 'Access denied. Insufficient permissions for bulk actions.' });
         }
 
@@ -947,7 +989,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
 
             // Apply privacy obfuscation for sensitive categories in public view
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
-            const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+            const isPrivileged = ['admin', 'super_admin', 'dept_head', 'field_officer', 'hq_staff', 'authority', 'staff'].includes(userRole.toLowerCase());
 
             if (isSensitive && !isPrivileged) {
                 coords = obfuscateLocation(coords[0], coords[1]);
@@ -996,10 +1038,9 @@ export const getAuthorityKPIs = async (_req: AuthRequest, res: Response): Promis
 
 export const getRetrainingQueue = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
-        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff' || userRole === 'super_admin';
+        const permissions: string[] = req.user?.permissions || [];
 
-        if (!isPrivileged) return res.status(403).json({ error: 'Access denied. You must be an admin or staff member.' });
+        if (!permissions.includes('ai:manage')) return res.status(403).json({ error: 'Access denied. You must be an admin or staff member.' });
 
         const queue = await AIFeedback.findAll({
             order: [['createdAt', 'DESC']],
@@ -1012,10 +1053,9 @@ export const getRetrainingQueue = async (req: AuthRequest, res: Response): Promi
 
 export const updateFeedbackStatus = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
-        const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+        const permissions: string[] = req.user?.permissions || [];
 
-        if (!isAdmin) return res.status(403).json({ error: 'Access denied. Only administrators can update retraining status.' });
+        if (!permissions.includes('ai:manage')) return res.status(403).json({ error: 'Access denied. Only administrators can update retraining status.' });
 
         const { id } = req.params;
         const { status } = req.body; // 'Processed' or 'Dismissed'
@@ -1042,8 +1082,8 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response): Pro
 
 export const exportRetrainingData = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
-        if (userRole !== 'admin' && userRole !== 'super_admin') {
+        const permissions: string[] = req.user?.permissions || [];
+        if (!permissions.includes('ai:manage')) {
             return res.status(403).json({ error: 'Access denied' });
         }
 

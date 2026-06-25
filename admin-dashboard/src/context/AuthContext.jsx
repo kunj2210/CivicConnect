@@ -10,12 +10,12 @@ export const AuthProvider = ({ children }) => {
     const [initialLoading, setInitialLoading] = useState(true);
 
     const determineRole = (supabaseUser, profile) => {
-        let role = 'Citizen';
-        if (profile?.role) role = profile.role;
+        let role = 'citizen';
+        if (profile?.roles && profile.roles.length > 0) role = profile.roles[0];
+        else if (profile?.role) role = profile.role;
         else if (supabaseUser?.user_metadata?.role) role = supabaseUser.user_metadata.role;
 
-        // Force normalization to Title Case (e.g., "admin" -> "Admin")
-        return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+        return role.toLowerCase();
     };
 
     useEffect(() => {
@@ -128,8 +128,13 @@ export const AuthProvider = ({ children }) => {
         setUser(prev => ({ ...prev, ...data }));
     };
 
+    const can = (permission) => {
+        if (!user || !user.permissions) return false;
+        return user.permissions.includes(permission);
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading: loading || initialLoading, signInWithPhone, verifyPhoneOtp, updateUser, determineRole }}>
+        <AuthContext.Provider value={{ user, login, logout, loading: loading || initialLoading, signInWithPhone, verifyPhoneOtp, updateUser, determineRole, can }}>
             {initialLoading ? (
                 <div className="flex h-screen w-screen items-center justify-center bg-gray-900">
                     <div className="text-center">

@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { User, Department, Ward, UserDevice } from '../config/db.js';
+import { User, Department, Ward, UserDevice, Role, Permission } from '../config/db.js';
 import { findWardId } from '../utils/spatialUtils.js';
 import { GamificationService } from '../services/gamificationService.js';
 import { Op } from 'sequelize';
@@ -66,7 +66,32 @@ export const updateUserProfile = async (req: AuthRequest, res: Response) => {
 
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        if (role) user.role = role;
+        const isSelf = req.user && req.user.id === id;
+        const hasManagePerm = req.user && req.user.permissions?.includes('users:manage');
+
+        if (!isSelf && !hasManagePerm) {
+            return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+        }
+
+        if (!hasManagePerm) {
+            if (role !== undefined || ward_id !== undefined || department_id !== undefined || is_active !== undefined) {
+                return res.status(403).json({ error: 'Forbidden: Cannot update administrative fields' });
+            }
+        }
+
+        if (role) {
+            user.role = role;
+            const { Role, UserRole } = await import('../config/db.js');
+            let mappedRole = role.toLowerCase();
+            if (mappedRole === 'staff') mappedRole = 'field_officer';
+            else if (mappedRole === 'authority') mappedRole = 'dept_head';
+            
+            const dbRole = await Role.findOne({ where: { name: mappedRole } });
+            if (dbRole) {
+                await UserRole.destroy({ where: { user_id: user.id } });
+                await UserRole.create({ user_id: user.id, role_id: dbRole.id });
+            }
+        }
         if (ward_id) user.ward_id = ward_id;
         if (department_id) user.department_id = department_id;
         if (is_active !== undefined) user.is_active = is_active;
@@ -129,12 +154,25 @@ export const getMyProfile = async (req: AuthRequest, res: Response) => {
             },
             include: [
                 { model: Department, as: 'department' },
-                { model: Ward, as: 'ward' }
+                { model: Ward, as: 'ward' },
+                {
+                    model: Role,
+                    as: 'roles',
+                    include: [{ model: Permission, as: 'permissions' }]
+                }
             ]
         });
         
         if (!user) return res.status(404).json({ error: 'Profile not found' });
-        res.json(user);
+        
+        const attachedPermissions = (user as any).roles?.flatMap((r: any) => (r.permissions || []).map((p: any) => p.key)) || [];
+        const attachedRoles = (user as any).roles?.map((r: any) => r.name) || [];
+        
+        res.json({
+            ...user.toJSON(),
+            roles: attachedRoles,
+            permissions: attachedPermissions
+        });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

@@ -50,7 +50,7 @@ User.init({
         },
     },
     role: {
-        type: DataTypes.ENUM('citizen', 'staff', 'authority', 'admin', 'super_admin'),
+        type: DataTypes.ENUM('citizen', 'staff', 'authority', 'admin', 'super_admin', 'hq_staff', 'viewer', 'field_officer', 'dept_head'),
         defaultValue: 'citizen',
     },
     designation: {

@@ -37,13 +37,23 @@ const Sidebar = ({ darkMode, isOpen, setIsOpen }) => {
             { path: '/admin/users', label: 'Users', icon: UserCog },
             { path: '/admin/settings', label: 'Settings', icon: Settings },
         ];
-    } else if (role === 'staff') {
+    } else if (role === 'hq_staff') {
+        navItems = [
+            { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { path: '/admin/issues', label: 'Issues', icon: FileText },
+            { path: '/admin/map', label: 'Live Map', icon: Map },
+            { path: '/admin/leaderboard', label: 'Leaderboard', icon: Trophy },
+            { path: '/admin/analytics', label: 'Executive AI', icon: Sparkles },
+            { path: '/admin/ai-retraining', label: 'AI Retraining', icon: BrainCircuit },
+            { path: '/admin/settings', label: 'Settings', icon: Settings },
+        ];
+    } else if (role === 'staff' || role === 'field_officer') {
         navItems = [
             { path: '/staff/dashboard', label: 'Dashboard', icon: LayoutDashboard },
             { path: '/staff/issues', label: 'Issues', icon: FileText },
             { path: '/staff/settings', label: 'Settings', icon: Settings },
         ];
-    } else { // default to authority
+    } else { // default to authority / dept_head
         navItems = [
             { path: '/authority/dashboard', label: 'Dashboard', icon: LayoutDashboard },
             { path: '/authority/issues', label: 'Issues', icon: FileText },
