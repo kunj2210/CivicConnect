@@ -1,7 +1,16 @@
 import axios from 'axios';
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import dotenv from 'dotenv';
 import { Client, handle_file } from '@gradio/client';
+import { File as NodeFile, Blob as NodeBlob } from 'buffer';
+
+// Polyfill global File & Blob for compatibility in environments without them (e.g. Node <20)
+if (typeof globalThis.File === 'undefined' && NodeFile) {
+    (globalThis as any).File = NodeFile;
+}
+if (typeof globalThis.Blob === 'undefined' && NodeBlob) {
+    (globalThis as any).Blob = NodeBlob;
+}
 
 dotenv.config();
 
@@ -135,9 +144,8 @@ export class AIService {
      */
     static async transcribeAudio(audioBuffer: Buffer, fileName: string): Promise<string> {
         try {
-            // Convert Buffer to a File object for the OpenAI client
-            // Node.js 18+ has Blob/File, but for older we can use a Stream or just a custom object
-            const file = new File([new Uint8Array(audioBuffer)], fileName, { type: 'audio/mpeg' });
+            // Convert Buffer to a File object for the OpenAI client using toFile helper
+            const file = await toFile(audioBuffer, fileName, { type: 'audio/mpeg' });
 
             const transcription = await openai.audio.transcriptions.create({
                 file: file,
