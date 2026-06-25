@@ -141,6 +141,20 @@ const AuthorityIssueDetails = () => {
     };
 
 
+    const extractPredictions = (data) => {
+        if (!data) return [];
+        let raw = Array.isArray(data) ? (data.length === 1 ? data[0] : data) : data;
+        let list = raw.top_3 || raw.predictions || raw.issues || (Array.isArray(raw) ? raw : null);
+        if (!list && raw.citizen_requests && Array.isArray(raw.citizen_requests)) {
+            list = raw.citizen_requests[0]?.category;
+        }
+        if (!list) list = [raw];
+        return Array.isArray(list) ? list.map(item => ({
+            label: item.class || item.category || item.label || item.name || 'Unknown',
+            score: Number(item.confidence || item.score || item.probability || 0)
+        })) : [];
+    };
+
     if (loading) return <div className={`p-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading issue details...</div>;
     if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
     if (!report) return <div className={`p-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Issue not found.</div>;
@@ -254,41 +268,70 @@ const AuthorityIssueDetails = () => {
                         </div>
 
                         {/* Top-3 Matrix */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Image Modality (Top 3) */}
                             <div className="space-y-4">
                                 <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <FileText className="w-3 h-3 mr-1 text-indigo-500" /> Image Confidence
+                                    <FileText className="w-3 h-3 mr-1 text-indigo-500" /> Image Confidence (50% Weight)
                                 </div>
                                 <div className="space-y-3">
-                                    {(report.ai_image_top3 || []).map((p, i) => (
+                                    {extractPredictions(report.ai_image_top3).length > 0 ? (extractPredictions(report.ai_image_top3).map((p, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category}</span>
-                                                <span className="text-indigo-500">{(p.confidence * 100).toFixed(0)}%</span>
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-indigo-500">{(p.score * 100).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-indigo-500/50 h-full" style={{ width: `${p.confidence * 100}%` }} />
+                                                <div className="bg-indigo-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
                                             </div>
                                         </div>
-                                    ))}
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No image data processed</p>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* Text Modality (Top 3) */}
                             <div className="space-y-4">
                                 <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <Mic className="w-3 h-3 mr-1 text-emerald-500" /> Text/Audio Confidence
+                                    <Mic className="w-3 h-3 mr-1 text-emerald-500" /> Text Confidence (20% Weight)
                                 </div>
                                 <div className="space-y-3">
-                                    {(report.ai_text_top3 || []).map((p, i) => (
+                                    {extractPredictions(report.ai_text_top3).length > 0 ? (extractPredictions(report.ai_text_top3).map((p, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.category}</span>
-                                                <span className="text-emerald-500">{(p.confidence * 100).toFixed(0)}%</span>
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-emerald-500">{(p.score * 100).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${p.confidence * 100}%` }} />
+                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
                                             </div>
                                         </div>
-                                    ))}
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No text data processed</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Audio Modality (Top 3) */}
+                            <div className="space-y-4">
+                                <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <Mic className="w-3 h-3 mr-1 text-purple-500" /> Audio Confidence (30% Weight)
+                                </div>
+                                <div className="space-y-3">
+                                    {extractPredictions(report.ai_audio_top3).length > 0 ? (extractPredictions(report.ai_audio_top3).map((p, i) => (
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-purple-500">{(p.score * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-purple-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
+                                            </div>
+                                        </div>
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No audio data processed</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
