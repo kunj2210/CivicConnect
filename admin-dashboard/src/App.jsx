@@ -15,6 +15,7 @@ import Leaderboard from './pages/Leaderboard';
 import AIRetraining from './pages/AIRetraining';
 import AdminUsers from './pages/AdminUsers';
 import ExecutiveAnalytics from './pages/ExecutiveAnalytics';
+import AuditLogViewer from './pages/AuditLogViewer';
 
 // Authority specific pages
 import AuthorityIssueList from './pages/AuthorityIssueList';
@@ -52,6 +53,7 @@ function App() {
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="analytics" element={<ExecutiveAnalytics />} />
             <Route path="ai-retraining" element={<AIRetraining />} />
+            <Route path="audit-logs" element={<AuditLogViewer />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 

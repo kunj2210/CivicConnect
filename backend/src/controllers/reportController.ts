@@ -6,6 +6,7 @@ import { AIService } from '../services/aiService.js';
 import { SpatialService } from '../services/spatialService.js';
 import { GeoIntelligenceService } from '../services/geoIntelligenceService.js';
 import { AuditLog } from '../models/AuditLog.js';
+import { AuditService } from '../services/auditService.js';
 
 import { StorageService } from '../services/storageService.js';
 import { PriorityService } from '../services/priorityService.js';
@@ -198,10 +199,13 @@ export const createReport = async (req: AuthRequest, res: Response) => {
 
 
         // 6. Log
-        await AuditLog.create({
+        AuditService.log({
             actor_id: user.id,
-            event_type: 'ISSUE_CREATED',
-            payload: { issue_id: issue.id },
+            event_type: 'report.created',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            new_value: { category: issue.category, status: issue.status, ward_id: issue.ward_id },
+            payload: { description: issue.description?.slice(0, 120) },
         });
 
         // 6.2 Check Gamification Milestones
@@ -488,6 +492,9 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: 'Forbidden: You can only update issues assigned to you' });
         }
 
+        const oldStatus = issue.status;
+        const oldAssignee = issue.assigned_staff_id;
+
         if (status) issue.status = status;
         if (category && issue.category !== category) {
             // Discrepancy detected: Log to AI Retraining Queue
@@ -508,6 +515,29 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
         if (assigned_staff_id !== undefined) issue.assigned_staff_id = assigned_staff_id;
 
         await issue.save();
+
+        // Audit: status change
+        if (status && status !== oldStatus) {
+            AuditService.log({
+                actor_id: req.user?.id || 'SYSTEM',
+                event_type: 'report.status_changed',
+                target_resource: 'issue',
+                target_resource_id: issue.id,
+                old_value: { status: oldStatus },
+                new_value: { status },
+            });
+        }
+        // Audit: assignment change
+        if (assigned_staff_id !== undefined && assigned_staff_id !== oldAssignee) {
+            AuditService.log({
+                actor_id: req.user?.id || 'SYSTEM',
+                event_type: 'report.assigned',
+                target_resource: 'issue',
+                target_resource_id: issue.id,
+                old_value: { assigned_staff_id: oldAssignee },
+                new_value: { assigned_staff_id },
+            });
+        }
 
         res.json({ success: true, issue });
     } catch (error: any) {
@@ -543,14 +573,11 @@ export const bulkUpdateReports = async (req: AuthRequest, res: Response): Promis
         });
 
         // Log the bulk activity
-        await AuditLog.create({
-            actor_id: req.user?.id,
-            event_type: 'BULK_UPDATE',
-            payload: { 
-                ids, 
-                updates: updateData,
-                count
-            },
+        AuditService.log({
+            actor_id: req.user?.id || 'SYSTEM',
+            event_type: 'report.bulk_updated',
+            target_resource: 'issue',
+            payload: { ids, updates: updateData, count },
         });
 
         res.json({ success: true, message: `Successfully updated ${count} reports`, count });
@@ -609,11 +636,14 @@ export const deleteReport = async (req: AuthRequest, res: Response) => {
         // 3. Destroy the Database Record
         await issue.destroy();
 
-        // 4. Log the Deletion Activity
-        await AuditLog.create({
+        // 4. Log the Deletion
+        AuditService.log({
             actor_id: (req as any).user?.id || 'SYSTEM',
-            event_type: 'ISSUE_DELETED',
-            payload: { issue_id: issueId, category: issue.category },
+            event_type: 'report.deleted',
+            target_resource: 'issue',
+            target_resource_id: issueId,
+            old_value: { category: issue.category, status: issue.status },
+            payload: { description: issue.description?.slice(0, 120) },
         });
 
         res.json({
@@ -693,10 +723,13 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
         await issue.save();
 
         // 4. Log the submission
-        await AuditLog.create({
+        AuditService.log({
             actor_id: user.id,
-            event_type: 'RESOLUTION_SUBMITTED',
-            payload: { issue_id: issue.id, repair_image: imageUrl },
+            event_type: 'report.resolution_proposed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            new_value: { status: 'Pending Confirmation' },
+            payload: { repair_image: imageUrl },
         });
 
         // 5. Notify Authorities for approval
@@ -745,10 +778,13 @@ export const confirmResolution = async (req: AuthRequest, res: Response): Promis
         await issue.save();
 
         // 3. Log Authority Approval
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'AUTHORITY_RESOLUTION_APPROVED',
-            payload: { issue_id: issue.id },
+            event_type: 'report.resolution_confirmed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Confirmation' },
+            new_value: { status: 'Pending Citizen Confirmation' },
         });
 
         // 4. Notify ALL Reporters to verify
@@ -791,10 +827,14 @@ export const rejectResolution = async (req: AuthRequest, res: Response): Promise
         await issue.save();
 
         // 3. Log Rejection
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'RESOLUTION_REJECTED',
-            payload: { issue_id: issue.id, reason: reason || 'Quality of work not satisfactory' },
+            event_type: 'report.resolution_rejected',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Confirmation' },
+            new_value: { status: 'In Progress' },
+            payload: { reason: reason || 'Quality of work not satisfactory' },
         });
 
         // 4. Notify Staff
@@ -861,10 +901,14 @@ export const citizenConfirmResolution = async (req: AuthRequest, res: Response):
         }
 
         // 5. Log & Notify
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'CITIZEN_RESOLUTION_VERIFIED',
-            payload: { issue_id: issue.id, credits: totalAwarded },
+            event_type: 'report.citizen_confirmed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Citizen Confirmation' },
+            new_value: { status: 'Resolved' },
+            payload: { credits_awarded: totalAwarded },
         });
 
         // 6. Notify Staff
@@ -901,10 +945,14 @@ export const citizenDisputeResolution = async (req: AuthRequest, res: Response):
         issue.status = 'Disputed';
         await issue.save();
 
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'CITIZEN_RESOLUTION_DISPUTED',
-            payload: { issue_id: issue.id, reason },
+            event_type: 'report.citizen_disputed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Citizen Confirmation' },
+            new_value: { status: 'Disputed' },
+            payload: { reason },
         });
 
         // Notify Authority & Staff

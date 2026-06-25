@@ -126,7 +126,8 @@ export const connectPostgres = async () => {
                     'report:delete',
                     'analytics:query',
                     'ai:manage',
-                    'users:manage'
+                    'users:manage',
+                    'audit:view'
                 ],
                 super_admin: [
                     'report:create',
@@ -143,7 +144,8 @@ export const connectPostgres = async () => {
                     'report:delete',
                     'analytics:query',
                     'ai:manage',
-                    'users:manage'
+                    'users:manage',
+                    'audit:view'
                 ]
             };
 

@@ -1,6 +1,17 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+/** Maps a role to its default landing page */
+const getRoleHome = (role) => {
+    const r = (role || '').toLowerCase();
+    if (r === 'super_admin') return '/superadmin/dashboard';
+    if (r === 'admin') return '/admin/dashboard';
+    if (r === 'hq_staff') return '/admin/dashboard';
+    if (r === 'dept_head' || r === 'authority') return '/authority/dashboard';
+    if (r === 'field_officer' || r === 'staff') return '/staff/dashboard';
+    return '/login';
+};
+
 const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
     const { user, loading, can } = useAuth();
 
@@ -10,18 +21,18 @@ const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
 
     if (requiredPermission && !can(requiredPermission)) {
         console.warn(`[ProtectedRoute] Access Denied. Missing permission: ${requiredPermission}`);
-        return <Navigate to="/login" replace />;
+        return <Navigate to={getRoleHome(user.role)} replace />;
     }
 
     if (allowedRoles) {
         const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
         const userRole = (user.role || '').toLowerCase();
-        
+
         const hasAccess = roles.some(role => role.toLowerCase() === userRole);
 
         if (!hasAccess) {
             console.warn(`[ProtectedRoute] Access Denied. User role: ${userRole}, Required: ${roles}`);
-            return <Navigate to="/login" replace />;
+            return <Navigate to={getRoleHome(userRole)} replace />;
         }
     }
 
@@ -29,3 +40,4 @@ const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
 };
 
 export default ProtectedRoute;
+

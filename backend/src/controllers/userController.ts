@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { User, Department, Ward, UserDevice, Role, Permission } from '../config/db.js';
 import { findWardId } from '../utils/spatialUtils.js';
 import { GamificationService } from '../services/gamificationService.js';
+import { AuditService } from '../services/auditService.js';
 import { Op } from 'sequelize';
 
 
@@ -80,6 +81,7 @@ export const updateUserProfile = async (req: AuthRequest, res: Response) => {
         }
 
         if (role) {
+            const oldRole = user.role;
             user.role = role;
             const { Role, UserRole } = await import('../config/db.js');
             let mappedRole = role.toLowerCase();
@@ -91,6 +93,16 @@ export const updateUserProfile = async (req: AuthRequest, res: Response) => {
                 await UserRole.destroy({ where: { user_id: user.id } });
                 await UserRole.create({ user_id: user.id, role_id: dbRole.id });
             }
+
+            // Audit the role change
+            AuditService.log({
+                actor_id: req.user?.id || 'SYSTEM',
+                event_type: 'user.role_changed',
+                target_resource: 'user',
+                target_resource_id: user.id,
+                old_value: { role: oldRole },
+                new_value: { role: mappedRole },
+            });
         }
         if (ward_id) user.ward_id = ward_id;
         if (department_id) user.department_id = department_id;

@@ -16,6 +16,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import auditRoutes from './routes/auditRoutes.js';
 
 
 dotenv.config();
@@ -38,6 +39,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/audit-logs', auditRoutes);
 
 
 app.get('/health', (req: Request, res: Response) => {
