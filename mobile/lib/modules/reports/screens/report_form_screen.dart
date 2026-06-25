@@ -34,6 +34,8 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
   String? _category;
   Map<String, double>? _location;
   String? _audioPath;
+  Uint8List? _audioBytes;
+  String? _audioFilename;
   bool _isLocating = false;
   bool _isSubmitting = false;
 
@@ -208,7 +210,17 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
         ),
       );
 
-      if (!kIsWeb && _audioPath != null) {
+      if (kIsWeb && _audioBytes != null) {
+        final audioExtension = _audioFilename?.split('.').last.toLowerCase() ?? 'mp3';
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'audio',
+            _audioBytes!,
+            filename: _audioFilename ?? 'audio.mp3',
+            contentType: http_parser.MediaType('audio', audioExtension),
+          ),
+        );
+      } else if (!kIsWeb && _audioPath != null) {
         final audioFile = File(_audioPath!);
         final audioExtension = _audioPath!.split('.').last.toLowerCase();
         request.files.add(
@@ -356,9 +368,13 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
             _buildSectionHeader('Report Description'),
             const SizedBox(height: 12),
             AudioRecordingWidget(
-              onRecordingComplete: (path, transcription) {
+              onRecordingComplete: (path, bytes, name, transcription) {
                 if (!mounted) return;
-                setState(() => _audioPath = path);
+                setState(() {
+                  _audioPath = path;
+                  _audioBytes = bytes;
+                  _audioFilename = name;
+                });
                 if (transcription != null && transcription.isNotEmpty) {
                   _descriptionController.text = transcription;
                 }
