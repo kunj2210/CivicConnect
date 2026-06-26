@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Eye } from 'lucide-react';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -18,7 +18,7 @@ const AuthorityMapView = () => {
     const [center, setCenter] = useState([22.5540, 72.9299]);
 
     useEffect(() => {
-        api.get('/reports')
+        reportsApi.getAll()
             .then(data => {
                 const issuesArray = Array.isArray(data) ? data : [];
                 setIssues(issuesArray);

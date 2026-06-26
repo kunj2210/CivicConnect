@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../utils/api';
+import { systemApi } from '../../../services/systemApi';
+import { departmentsApi } from '../../../services/departmentsApi';
 
 export const useAdminJurisdictions = () => {
     const [activeTab, setActiveTab] = useState('wards'); // 'wards' or 'ulbs'
@@ -24,9 +25,9 @@ export const useAdminJurisdictions = () => {
         try {
             setLoading(true);
             const [wardsData, ulbsData, deptsData] = await Promise.all([
-                api.get('/system/wards'),
-                api.get('/system/ulb-boundaries'),
-                api.get('/departments')
+                systemApi.getWards(),
+                systemApi.getUlbs(),
+                departmentsApi.getAll()
             ]);
             setWards(wardsData);
             setUlbs(ulbsData);
@@ -59,14 +60,14 @@ export const useAdminJurisdictions = () => {
         try {
             if (activeTab === 'wards') {
                 if (!selectedDept) return alert('Please assign a department to the ward');
-                await api.post('/system/wards', {
+                await systemApi.createWard({
                     name,
                     dept_id: selectedDept,
                     ulb_id: selectedUlb ? parseInt(selectedUlb) : null,
                     boundaryCoordinates: drawnPoints
                 });
             } else {
-                await api.post('/system/ulb-boundaries', {
+                await systemApi.createUlb({
                     name,
                     boundaryCoordinates: drawnPoints
                 });

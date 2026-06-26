@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { Zap, Map as MapIcon, Search, Filter, Eye, CheckCircle, ChevronDown } from 'lucide-react';
 
@@ -66,7 +66,7 @@ const AuthorityIssueList = () => {
             department_id: user?.department_id
         };
 
-        api.get('/reports', { params })
+        reportsApi.getAll(params)
             .then(data => {
                 setIssues(data.map(i => ({
                     id: i.id,
@@ -110,7 +110,7 @@ const AuthorityIssueList = () => {
 
     const handleUpdateStatus = async (id, newStatus) => {
         try {
-            await api.patch(`/reports/${id}`, { status: newStatus });
+            await reportsApi.update(id, { status: newStatus });
             setIssues(issues.map(issue =>
                 issue.id === id ? { ...issue, status: newStatus } : issue
             ));
@@ -129,7 +129,7 @@ const AuthorityIssueList = () => {
 
     const handleBulkAction = async (newStatus) => {
         try {
-            const res = await api.patch('/reports/bulk-update', {
+            const res = await reportsApi.bulkUpdate({
                 ids: selectedIds,
                 status: newStatus
             });

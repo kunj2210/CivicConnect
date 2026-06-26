@@ -28,6 +28,9 @@ async function performFetch(url, options) {
 }
 
 export const api = {
+    getBaseUrl() {
+        return PRIMARY_API_URL;
+    },
     async get(endpoint) {
         const { data: { session } } = await supabase.auth.getSession();
         const headers = {

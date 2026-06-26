@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { api } from '../../../utils/api';
+import { usersApi } from '../../../services/usersApi';
+import { adminApi } from '../../../services/adminApi';
 
 export const useAdminSettings = () => {
     const { user, updateUser, logout } = useAuth();
@@ -44,7 +45,7 @@ export const useAdminSettings = () => {
         setSaving(true);
         try {
             if (activeSection === 'profile') {
-                const updatedUserData = await api.patch(`/auth/update-profile/${user.id}`, {
+                const updatedUserData = await usersApi.updateProfile(user.id, {
                     name: profile.name
                 });
                 updateUser(updatedUserData);
@@ -54,7 +55,7 @@ export const useAdminSettings = () => {
                     setSaving(false);
                     return;
                 }
-                await api.post('/auth/change-password', {
+                await usersApi.changePassword({
                     currentPassword: security.currentPassword,
                     newPassword: security.newPassword
                 });
@@ -76,7 +77,7 @@ export const useAdminSettings = () => {
         
         try {
             setWiping(true);
-            await api.post('/system/wipe-data');
+            await adminApi.wipeData();
             alert('System wiped successfully! Logging you out to reset administrative session.');
             logout();
         } catch (err) {

@@ -3,7 +3,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
 import { TrendingUp, CheckCircle, Clock, AlertCircle, MoreHorizontal } from 'lucide-react';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 
 
 const Dashboard = () => {
@@ -16,8 +16,8 @@ const Dashboard = () => {
 
     useEffect(() => {
         Promise.all([
-            api.get('/reports/stats'),
-            api.get('/reports')
+            reportsApi.getStats(),
+            reportsApi.getAll()
         ])
             .then(([statsData, issuesData]) => {
                 setStats(statsData);

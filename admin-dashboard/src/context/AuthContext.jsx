@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
-import { api } from '../utils/api';
+import { usersApi } from '../services/usersApi';
 
 const AuthContext = createContext();
 
@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
             const session = data?.session;
             if (session) {
                 // Fetch profile and determine role
-                api.get('/users/me')
+                usersApi.getMe()
                     .then(profile => {
                         setUser({
                             ...session.user,
@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }) => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session) {
                 setLoading(true); // Ensure app knows a profile is loading
-                api.get('/users/me')
+                usersApi.getMe()
                     .then(profile => {
                         setUser({
                             ...session.user,

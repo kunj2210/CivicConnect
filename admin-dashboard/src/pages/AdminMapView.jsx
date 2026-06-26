@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useOutletContext, useNavigate } from 'react-router-dom';
@@ -60,7 +60,7 @@ const AdminMapView = () => {
     const jurisdictions = ['All', ...new Set(issues.filter(f => f.properties?.metadata?.jurisdiction).map(f => f.properties.metadata.jurisdiction))];
 
     useEffect(() => {
-        api.get('/reports/geojson')
+        reportsApi.getGeoJSON()
             .then(data => {
                 if (data && data.type === 'FeatureCollection') {
                     setIssues(data.features);

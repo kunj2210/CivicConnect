@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createReport, getJobStatus, getReports, getReportStats, getReportById, updateReport, deleteReport, getNearbyReports, getGeoJSONReports, getAuthorityKPIs, proposeResolution, confirmResolution, rejectResolution, citizenConfirmResolution, citizenDisputeResolution, upvoteReport, getAuditLogs, getRetrainingQueue, updateFeedbackStatus, testAudioPrediction, bulkUpdateReports, askCivicAI, exportRetrainingData } from '../controllers/reportController.js';
+import { createReport, getJobStatus, getReports, getReportStats, getReportById, updateReport, deleteReport, getNearbyReports, getGeoJSONReports, getAuthorityKPIs, proposeResolution, confirmResolution, rejectResolution, citizenConfirmResolution, citizenDisputeResolution, upvoteReport, getAuditLogs, getRetrainingQueue, updateFeedbackStatus, testAudioPrediction, bulkUpdateReports, askCivicAI, exportRetrainingData } from '../controllers/report/index.js';
 import { upload } from '../middleware/upload.js';
 import { verifySupabaseToken } from '../middleware/authMiddleware.js';
 import { requirePermission } from '../middleware/rbacMiddleware.js';

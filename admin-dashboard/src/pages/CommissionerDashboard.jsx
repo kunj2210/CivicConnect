@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Building2, Users, TrendingUp, ShieldAlert, Map, PieChart, Activity, ChevronRight } from 'lucide-react';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 
 const CommissionerDashboard = () => {
     const { darkMode } = useOutletContext();
@@ -16,7 +16,7 @@ const CommissionerDashboard = () => {
     const fetchGlobalStats = async () => {
         try {
             setLoading(true);
-            const data = await api.get('/reports/kpi');
+            const data = await reportsApi.getKPIs();
             setStats({
                 totalIssues: data.totalIssues || 0,
                 resolved: data.resolvedCount || 0,

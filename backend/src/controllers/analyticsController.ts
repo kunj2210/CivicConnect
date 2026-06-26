@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import type { AuthRequest } from './userController.js';
+import type { AuthRequest } from './user/user.utils.js';
 import { RAGService } from '../services/ragService.js';
 
 /**

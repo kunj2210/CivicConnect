@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../utils/api';
+import { departmentsApi } from '../../../services/departmentsApi';
 
 export const useDepartments = () => {
     const [depts, setDepts] = useState([]);
@@ -22,7 +22,7 @@ export const useDepartments = () => {
     const fetchDepartments = async () => {
         try {
             setLoading(true);
-            const data = await api.get('/departments');
+            const data = await departmentsApi.getAll();
             setDepts(data);
         } catch (err) {
             setError(err.message);
@@ -34,7 +34,7 @@ export const useDepartments = () => {
     const handleEditClick = async (id) => {
         try {
             setLoading(true);
-            const dept = await api.get(`/departments/${id}`);
+            const dept = await departmentsApi.getById(id);
             setNewDept({
                 name: dept.name || '',
                 head: dept.head || '',
@@ -55,9 +55,9 @@ export const useDepartments = () => {
         if (e && e.preventDefault) e.preventDefault();
         try {
             if (editingId) {
-                await api.patch(`/departments/${editingId}`, newDept);
+                await departmentsApi.update(editingId, newDept);
             } else {
-                await api.post('/departments', newDept);
+                await departmentsApi.create(newDept);
             }
             setShowModal(false);
             setEditingId(null);
@@ -71,7 +71,7 @@ export const useDepartments = () => {
     const handleDelete = async (id) => {
         if (!window.confirm('Delete this department?')) return;
         try {
-            await api.delete(`/departments/${id}`);
+            await departmentsApi.delete(id);
             fetchDepartments();
         } catch (err) {
             alert('Delete failed: ' + err.message);

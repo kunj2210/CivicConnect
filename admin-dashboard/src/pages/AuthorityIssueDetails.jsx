@@ -3,7 +3,8 @@ import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Clock, AlertCircle, MapPin, User, Calendar, Tag, FileText, Camera, Send, X, Zap, Mic } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
+import { usersApi } from '../services/usersApi';
 
 const AuthorityIssueDetails = () => {
     const { id } = useParams();
@@ -33,7 +34,7 @@ const AuthorityIssueDetails = () => {
     const fetchReport = async () => {
         try {
             setLoading(true);
-            const data = await api.get(`/reports/${id}`);
+            const data = await reportsApi.getById(id);
             if (data.status === 'Submitted' || !data.status) data.status = 'Pending';
             setReport(data);
         } catch (err) {
@@ -46,9 +47,7 @@ const AuthorityIssueDetails = () => {
     const fetchStaff = async (wardId, deptId) => {
         try {
             setLoadingStaff(true);
-            const data = await api.get('/users/staff', { 
-                params: { ward_id: wardId, department_id: deptId } 
-            });
+            const data = await usersApi.getStaff({ ward_id: wardId, department_id: deptId });
             setStaffMembers(data);
         } catch (err) {
             console.error('Failed to fetch staff:', err);
@@ -61,7 +60,7 @@ const AuthorityIssueDetails = () => {
 
     const handleUpdateStatus = async (newStatus) => {
         try {
-            await api.patch(`/reports/${id}`, { status: newStatus });
+            await reportsApi.update(id, { status: newStatus });
             fetchReport();
         } catch (err) {
             alert('Update failed: ' + err.message);
@@ -71,7 +70,7 @@ const AuthorityIssueDetails = () => {
     const handleAssignStaff = async (staffId) => {
         try {
             setLoadingStaff(true);
-            await api.patch(`/reports/${id}`, { assigned_staff_id: staffId || null });
+            await reportsApi.update(id, { assigned_staff_id: staffId || null });
             fetchReport();
         } catch (err) {
             alert('Staff assignment failed: ' + err.message);
@@ -101,7 +100,7 @@ const AuthorityIssueDetails = () => {
             const formData = new FormData();
             formData.append('image', resImage);
 
-            await api.post(`/reports/${id}/propose-resolution`, formData);
+            await reportsApi.proposeResolution(id, formData);
 
             setResImage(null);
             setResPreview(null);
@@ -116,7 +115,7 @@ const AuthorityIssueDetails = () => {
     const handleConfirmResolution = async () => {
         try {
             setSubmitting(true);
-            await api.post(`/reports/${id}/confirm-resolution`);
+            await reportsApi.confirmResolution(id);
             fetchReport();
         } catch (err) {
             alert('Confirmation failed: ' + err.message);
@@ -131,7 +130,7 @@ const AuthorityIssueDetails = () => {
 
         try {
             setSubmitting(true);
-            await api.post(`/reports/${id}/reject-resolution`, { reason });
+            await reportsApi.rejectResolution(id, { reason });
             fetchReport();
         } catch (err) {
             alert('Rejection failed: ' + err.message);

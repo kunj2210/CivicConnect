@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { User, Bell, Shield, Globe, Save, CheckCircle2, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../utils/api';
+import { usersApi } from '../services/usersApi';
 
 const AuthoritySettings = () => {
     const { darkMode } = useOutletContext();
@@ -41,7 +41,7 @@ const AuthoritySettings = () => {
         setSaving(true);
         try {
             if (activeSection === 'profile') {
-                const updatedUserData = await api.patch(`/auth/update-profile/${user.id}`, {
+                const updatedUserData = await usersApi.updateProfile(user.id, {
                     name: profile.name
                 });
                 updateUser(updatedUserData);
@@ -51,7 +51,7 @@ const AuthoritySettings = () => {
                     setSaving(false);
                     return;
                 }
-                await api.post('/auth/change-password', {
+                await usersApi.changePassword({
                     currentPassword: security.currentPassword,
                     newPassword: security.newPassword
                 });

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../utils/api';
+import { usersApi } from '../../../services/usersApi';
+import { departmentsApi } from '../../../services/departmentsApi';
+import { systemApi } from '../../../services/systemApi';
 
 export const useAdminUsers = () => {
     const [users, setUsers] = useState([]);
@@ -33,10 +35,10 @@ export const useAdminUsers = () => {
         try {
             setLoading(true);
             const [usersData, deptData, wardsData, ulbsData] = await Promise.all([
-                api.get('/users'),
-                api.get('/departments'),
-                api.get('/system/wards').catch(() => []),
-                api.get('/system/ulb-boundaries').catch(() => [])
+                usersApi.getAll(),
+                departmentsApi.getAll(),
+                systemApi.getWards().catch(() => []),
+                systemApi.getUlbs().catch(() => [])
             ]);
             setUsers(usersData);
             setDepartments(deptData);
@@ -62,7 +64,7 @@ export const useAdminUsers = () => {
 
     const handleSave = async (userId) => {
         try {
-            await api.patch(`/users/${userId}`, {
+            await usersApi.update(userId, {
                 role: editData.role,
                 department_id: editData.department_id || null,
                 ward_id: editData.ward_id || null,
@@ -89,7 +91,7 @@ export const useAdminUsers = () => {
                 ulb_id: formData.ulb_id || null
             };
 
-            const res = await api.post('/users', body);
+            const res = await usersApi.create(body);
             alert(`User registered successfully!\nProvisional Credentials:\nEmail: ${formData.email}\nTemp Password: ${res.temp_password_cleartext}`);
             setShowAddModal(false);
             setFormData({
@@ -111,7 +113,7 @@ export const useAdminUsers = () => {
     const handleResetPassword = async (userId, userEmail) => {
         if (!window.confirm(`Are you sure you want to regenerate a temporary password for ${userEmail}?`)) return;
         try {
-            const res = await api.post(`/users/${userId}/reset-password`);
+            const res = await usersApi.resetPassword(userId);
             alert(`Password regenerated successfully!\nNew Password: ${res.temp_password_cleartext}`);
             fetchData();
         } catch (error) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../utils/api';
+import { reportsApi } from '../../../services/reportsApi';
 
 export const useIssueList = (user) => {
     const [filterStatus, setFilterStatus] = useState('All');
@@ -18,7 +18,7 @@ export const useIssueList = (user) => {
         if (isAuthority) params.ward_id = user.ward_id;
         if (isStaff) params.assigned_staff_id = user.id;
 
-        api.get('/reports', { params })
+        reportsApi.getAll(params)
             .then(data => {
                 setIssues(data.map(i => ({
                     id: i.id,
@@ -43,7 +43,7 @@ export const useIssueList = (user) => {
 
     const handleUpdateStatus = async (id, newStatus) => {
         try {
-            await api.patch(`/reports/${id}`, { status: newStatus });
+            await reportsApi.update(id, { status: newStatus });
             setIssues(issues.map(issue =>
                 issue.id === id ? { ...issue, status: newStatus } : issue
             ));
@@ -54,7 +54,7 @@ export const useIssueList = (user) => {
 
     const handleBulkAction = async (newStatus) => {
         try {
-            const res = await api.patch('/reports/bulk-update', {
+            const res = await reportsApi.bulkUpdate({
                 ids: selectedIds,
                 status: newStatus
             });
@@ -71,7 +71,7 @@ export const useIssueList = (user) => {
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this report?')) return;
         try {
-            await api.delete(`/reports/${id}`);
+            await reportsApi.delete(id);
             setIssues(issues.filter(issue => issue.id !== id));
         } catch (err) {
             alert('Delete failed: ' + err.message);

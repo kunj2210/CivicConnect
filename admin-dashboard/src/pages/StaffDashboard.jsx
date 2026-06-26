@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { ClipboardList, CheckCircle, Clock, AlertTriangle, ArrowRight, User, MapPin } from 'lucide-react';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 
 const StaffDashboard = () => {
     const { darkMode } = useOutletContext();
@@ -18,7 +18,7 @@ const StaffDashboard = () => {
         try {
             setLoading(true);
             // Efficiently fetch only issues assigned to me using backend filtering
-            const myTasks = await api.get('/reports?assigned_staff_id=me');
+            const myTasks = await reportsApi.getAll({ assigned_staff_id: 'me' });
             
             setTasks(myTasks);
             setStats({

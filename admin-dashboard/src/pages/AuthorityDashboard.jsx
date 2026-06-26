@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { TrendingUp, CheckCircle, Clock, AlertCircle, MapPin, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 
 
 const AuthorityDashboard = () => {
@@ -14,17 +14,14 @@ const AuthorityDashboard = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const path = user?.departmentId
-            ? `/reports?departmentId=${user.departmentId}`
-            : '/reports';
-
-        const kpiPath = user?.departmentId
-            ? `/reports/kpi?departmentId=${user.departmentId}`
-            : '/reports/kpi';
+        const params = {};
+        if (user?.departmentId) {
+            params.department_id = user.departmentId;
+        }
 
         Promise.all([
-            api.get(path),
-            api.get(kpiPath)
+            reportsApi.getAll(params),
+            reportsApi.getKPIs(params)
         ])
             .then(([issuesData, kpiData]) => {
                 setIssues(issuesData);
