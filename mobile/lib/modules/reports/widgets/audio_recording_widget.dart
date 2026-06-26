@@ -6,9 +6,13 @@ import 'package:record/record.dart';
 import 'package:path/path.dart' as p;
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+import 'dart:typed_data';
 
 class AudioRecordingWidget extends StatefulWidget {
-  final Function(String?, String?) onRecordingComplete; // (filePath, transcription)
+  final Function(String? filePath, Uint8List? fileBytes, String? filename, String? transcription) onRecordingComplete;
 
   const AudioRecordingWidget({super.key, required this.onRecordingComplete});
 
@@ -50,6 +54,31 @@ class _AudioRecordingWidgetState extends State<AudioRecordingWidget> {
     _audioRecorder.dispose();
     _speechToText.stop();
     super.dispose();
+  }
+
+  Future<void> _pickAudioFile() async {
+    try {
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final path = kIsWeb ? null : file.path;
+        final bytes = file.bytes;
+        final name = file.name;
+
+        setState(() {
+          _audioPath = path;
+          _recordDuration = 0;
+          _lastWords = '';
+        });
+        widget.onRecordingComplete(path, bytes, name, null);
+      }
+    } catch (e) {
+      debugPrint('Error picking audio file: $e');
+    }
   }
 
   Future<void> _start() async {
@@ -129,7 +158,7 @@ class _AudioRecordingWidgetState extends State<AudioRecordingWidget> {
       _audioPath = path;
     });
 
-    widget.onRecordingComplete(path, _lastWords);
+    widget.onRecordingComplete(path, null, path != null ? p.basename(path) : 'audio.m4a', _lastWords);
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
@@ -139,7 +168,7 @@ class _AudioRecordingWidgetState extends State<AudioRecordingWidget> {
       });
       // We send updates only when it's final or the recording stops to populate description
       if (result.finalResult || !_isRecording) {
-        widget.onRecordingComplete(_audioPath, _lastWords);
+        widget.onRecordingComplete(_audioPath, null, _audioPath != null ? p.basename(_audioPath!) : 'audio.m4a', _lastWords);
       }
     }
   }
@@ -189,6 +218,17 @@ class _AudioRecordingWidgetState extends State<AudioRecordingWidget> {
                   padding: const EdgeInsets.all(12),
                 ),
               ),
+              if (!_isRecording) ...[
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  onPressed: _pickAudioFile,
+                  icon: const Icon(Icons.upload_file_outlined),
+                  color: theme.colorScheme.secondary,
+                  style: IconButton.styleFrom(
+                    padding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ],
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -196,7 +236,7 @@ class _AudioRecordingWidgetState extends State<AudioRecordingWidget> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _isRecording ? 'Listening & Recording...' : (_audioPath != null ? 'Voice Recorded' : 'Tap mic to speak complaint'),
+                      _isRecording ? 'Listening & Recording...' : (_audioPath != null ? 'Audio file attached' : 'Speak or upload complaint audio'),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -228,7 +268,7 @@ class _AudioRecordingWidgetState extends State<AudioRecordingWidget> {
                                   _recordDuration = 0;
                                   _lastWords = '';
                                 });
-                                widget.onRecordingComplete(null, null);
+                                widget.onRecordingComplete(null, null, null, null);
                               },
                               child: const Text(
                                 'Remove',

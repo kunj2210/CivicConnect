@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
+import 'package:civic_connect_mobile/config/api_client.dart' as http;
 import '../../../config/api_config.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -378,55 +378,63 @@ class _BentoCard extends StatelessWidget {
                 )
               ] : null,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isLarge 
-                      ? Colors.white.withOpacity(0.2) 
-                      : color.withOpacity(0.1),
-                  ),
-                  child: Icon(
-                    icon, 
-                    color: isLarge ? Colors.white : color, 
-                    size: 24
-                  ),
-                ),
-                Column(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 130,
+                height: 130,
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.outfit(
-                        textStyle: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          height: 1.1,
-                          color: isLarge ? Colors.white : theme.textTheme.titleLarge?.color,
-                        ),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isLarge 
+                          ? Colors.white.withOpacity(0.2) 
+                          : color.withOpacity(0.1),
+                      ),
+                      child: Icon(
+                        icon, 
+                        color: isLarge ? Colors.white : color, 
+                        size: 24
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.outfit(
-                        textStyle: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isLarge 
-                            ? Colors.white.withOpacity(0.7) 
-                            : theme.textTheme.bodyMedium?.color?.withOpacity(0.5),
-                          letterSpacing: 0.5,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: GoogleFonts.outfit(
+                            textStyle: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              height: 1.1,
+                              color: isLarge ? Colors.white : theme.textTheme.titleLarge?.color,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: GoogleFonts.outfit(
+                            textStyle: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: isLarge 
+                                ? Colors.white.withOpacity(0.7) 
+                                : theme.textTheme.bodyMedium?.color?.withOpacity(0.5),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -469,34 +477,42 @@ class _StatBento extends StatelessWidget {
           )
         ] : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color.withOpacity(isDark ? 0.4 : 0.6), size: 20),
-          const Spacer(),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              textStyle: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                color: theme.textTheme.titleLarge?.color,
-                letterSpacing: -1,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 130,
+          height: 130,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color.withOpacity(isDark ? 0.4 : 0.6), size: 20),
+              const Spacer(),
+              Text(
+                value,
+                style: GoogleFonts.outfit(
+                  textStyle: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: theme.textTheme.titleLarge?.color,
+                    letterSpacing: -1,
+                  ),
+                ),
               ),
-            ),
-          ),
-          Text(
-            label.toUpperCase(),
-            style: GoogleFonts.outfit(
-              textStyle: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w900,
-                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.4),
-                letterSpacing: 1.5,
+              Text(
+                label.toUpperCase(),
+                style: GoogleFonts.outfit(
+                  textStyle: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.4),
+                    letterSpacing: 1.5,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

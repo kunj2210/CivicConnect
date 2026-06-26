@@ -113,6 +113,47 @@ const AuthorityIssueDetails = () => {
         }
     };
 
+    const handleConfirmResolution = async () => {
+        try {
+            setSubmitting(true);
+            await api.post(`/reports/${id}/confirm-resolution`);
+            fetchReport();
+        } catch (err) {
+            alert('Confirmation failed: ' + err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleRejectResolution = async () => {
+        const reason = prompt('Please enter the reason for rejection:');
+        if (reason === null) return; // Cancelled
+
+        try {
+            setSubmitting(true);
+            await api.post(`/reports/${id}/reject-resolution`, { reason });
+            fetchReport();
+        } catch (err) {
+            alert('Rejection failed: ' + err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+
+    const extractPredictions = (data) => {
+        if (!data) return [];
+        let raw = Array.isArray(data) ? (data.length === 1 ? data[0] : data) : data;
+        let list = raw.top_3 || raw.predictions || raw.issues || (Array.isArray(raw) ? raw : null);
+        if (!list && raw.citizen_requests && Array.isArray(raw.citizen_requests)) {
+            list = raw.citizen_requests[0]?.category;
+        }
+        if (!list) list = [raw];
+        return Array.isArray(list) ? list.map(item => ({
+            label: item.class || item.category || item.label || item.name || 'Unknown',
+            score: Number(item.confidence || item.score || item.probability || 0)
+        })) : [];
+    };
 
     if (loading) return <div className={`p-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading issue details...</div>;
     if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
@@ -163,6 +204,24 @@ const AuthorityIssueDetails = () => {
 
                     </div>
 
+                    {report.resolution_image_url && (
+                        <div className={`rounded-2xl shadow-sm border overflow-hidden ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
+                            <div className={`p-4 border-b flex items-center justify-between ${darkMode ? 'bg-white/5 border-white/5' : 'bg-gray-50'}`}>
+                                <h2 className={`font-bold flex items-center ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                    <CheckCircle className="w-5 h-5 mr-2 text-emerald-500" />
+                                    Resolution Evidence (After Fix)
+                                </h2>
+                            </div>
+                            <div className={`p-1 min-h-[300px] flex items-center justify-center rounded-xl ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
+                                <img
+                                    src={report.resolution_image_url}
+                                    alt="Resolution Evidence"
+                                    className="w-full aspect-video object-cover rounded-xl shadow-inner"
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
                         <h2 className={`font-bold flex items-center mb-2 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                             <Tag className="w-5 h-5 mr-2 text-indigo-500" />
@@ -209,41 +268,70 @@ const AuthorityIssueDetails = () => {
                         </div>
 
                         {/* Top-3 Matrix */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Image Modality (Top 3) */}
                             <div className="space-y-4">
                                 <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <FileText className="w-3 h-3 mr-1 text-indigo-500" /> Image Confidence
+                                    <FileText className="w-3 h-3 mr-1 text-indigo-500" /> Image Confidence (50% Weight)
                                 </div>
                                 <div className="space-y-3">
-                                    {(report.ai_image_top3 || []).map((p, i) => (
+                                    {extractPredictions(report.ai_image_top3).length > 0 ? (extractPredictions(report.ai_image_top3).map((p, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.class || p.category}</span>
-                                                <span className="text-indigo-500">{(p.confidence * 100).toFixed(0)}%</span>
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-indigo-500">{(p.score * 100).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-indigo-500/50 h-full" style={{ width: `${p.confidence * 100}%` }} />
+                                                <div className="bg-indigo-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
                                             </div>
                                         </div>
-                                    ))}
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No image data processed</p>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* Text Modality (Top 3) */}
                             <div className="space-y-4">
                                 <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <Mic className="w-3 h-3 mr-1 text-emerald-500" /> Text/Audio Confidence
+                                    <Mic className="w-3 h-3 mr-1 text-emerald-500" /> Text Confidence (20% Weight)
                                 </div>
                                 <div className="space-y-3">
-                                    {(report.ai_text_top3 || []).map((p, i) => (
+                                    {extractPredictions(report.ai_text_top3).length > 0 ? (extractPredictions(report.ai_text_top3).map((p, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.category}</span>
-                                                <span className="text-emerald-500">{(p.confidence * 100).toFixed(0)}%</span>
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-emerald-500">{(p.score * 100).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${p.confidence * 100}%` }} />
+                                                <div className="bg-emerald-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
                                             </div>
                                         </div>
-                                    ))}
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No text data processed</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Audio Modality (Top 3) */}
+                            <div className="space-y-4">
+                                <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <Mic className="w-3 h-3 mr-1 text-purple-500" /> Audio Confidence (30% Weight)
+                                </div>
+                                <div className="space-y-3">
+                                    {extractPredictions(report.ai_audio_top3).length > 0 ? (extractPredictions(report.ai_audio_top3).map((p, i) => (
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{p.label}</span>
+                                                <span className="text-purple-500">{(p.score * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 dark:bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-purple-500/50 h-full" style={{ width: `${p.score * 100}%` }} />
+                                            </div>
+                                        </div>
+                                    ))) : (
+                                        <p className="text-xs italic text-gray-500">No audio data processed</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -257,12 +345,38 @@ const AuthorityIssueDetails = () => {
                         <h2 className={`font-bold border-b pb-4 ${darkMode ? 'text-gray-200 border-white/5' : 'text-gray-800'}`}>Task Status</h2>
                         <div className="space-y-3">
                             {report.status === 'Pending Confirmation' ? (
+                                <div className="space-y-3">
+                                    <div className={`p-4 rounded-xl border ${darkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                                        <div className="flex items-center gap-2 mb-2 font-bold">
+                                            <Clock className="w-4 h-4" />
+                                            Awaiting Your Review
+                                        </div>
+                                        <p className="text-xs opacity-80">The field worker has submitted resolution evidence. Please review the proof and approve or reject the resolution.</p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={handleConfirmResolution}
+                                            disabled={submitting}
+                                            className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 text-xs flex items-center justify-center gap-1.5"
+                                        >
+                                            <CheckCircle className="w-4 h-4" /> Approve Fix
+                                        </button>
+                                        <button
+                                            onClick={handleRejectResolution}
+                                            disabled={submitting}
+                                            className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 text-xs flex items-center justify-center gap-1.5"
+                                        >
+                                            <X className="w-4 h-4" /> Reject Fix
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : report.status === 'Pending Citizen Confirmation' ? (
                                 <div className={`p-4 rounded-xl border ${darkMode ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>
                                     <div className="flex items-center gap-2 mb-2 font-bold">
                                         <Clock className="w-4 h-4" />
                                         Awaiting Citizen Confirmation
                                     </div>
-                                    <p className="text-xs opacity-80">Resolution image has been uploaded. The citizen must confirm to close the issue.</p>
+                                    <p className="text-xs opacity-80">You have approved this resolution. The reporting citizen must verify and confirm the fix to fully close the issue.</p>
                                 </div>
                             ) : (
                                 <>
@@ -291,7 +405,7 @@ const AuthorityIssueDetails = () => {
                         </div>
                     </div>
 
-                    {report.status !== 'Resolved' && report.status !== 'Pending Confirmation' && (
+                    {report.status !== 'Resolved' && report.status !== 'Pending Confirmation' && report.status !== 'Pending Citizen Confirmation' && (
                         <div className={`rounded-2xl shadow-sm border p-6 space-y-4 ${darkMode ? 'bg-gray-800 border-white/5' : 'bg-white'}`}>
                             <h2 className={`font-bold border-b pb-4 ${darkMode ? 'text-gray-200 border-white/5' : 'text-gray-800'}`}>Propose Resolution</h2>
                             <div className="space-y-4">

@@ -1,6 +1,4 @@
-import { User } from './models/User.js';
-import { Department } from './models/Department.js';
-import { Ward } from './models/Ward.js';
+import { User, Department, Ward, Role, UserRole } from './config/db.js';
 import dotenv from 'dotenv';
 import { supabaseAdmin } from './config/supabase.js';
 
@@ -77,6 +75,15 @@ export const seedUsers = async () => {
                 ward_id: '993dc994-ea01-4ac1-adad-a42251e2331b',
                 phone: '+919000000004'
             },
+            // --- HQ STAFF ---
+            {
+                name: 'HQ Operations Desk',
+                email: 'hq.staff@civicconnect.gov',
+                password: 'password123',
+                role: 'hq_staff',
+                designation: 'HQ Office Coordinator',
+                phone: '+919000000005'
+            },
             // --- Environmental Services ---
             {
                 name: 'Sanitation Inspector (Ranchi)',
@@ -130,6 +137,16 @@ export const seedUsers = async () => {
                 phone: '+919000000010'
             },
             // --- CITIZENS ---
+            // --- VIEWERS (Unverified Citizens) ---
+            {
+                name: 'Unverified Citizen Guest',
+                email: 'viewer.delhi@test.com',
+                password: 'password123',
+                role: 'viewer',
+                designation: 'Viewer',
+                ward_id: '993dc994-ea01-4ac1-adad-a42251e2331b', // Ward 01 - Delhi Central
+                phone: null
+            },
             {
                 name: 'Test Citizen (Delhi)',
                 email: 'citizen.delhi@test.com',
@@ -173,7 +190,7 @@ export const seedUsers = async () => {
 
             let authId = user?.id;
 
-            if (error && error.message.includes('already registered')) {
+            if (error && (error.message.toLowerCase().includes('already') && error.message.toLowerCase().includes('registered'))) {
                 console.log(`User ${userData.email} already exists in Supabase Auth. Fetching ID...`);
                 // Using search to be more efficient than listing all
                 const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers();
@@ -209,6 +226,26 @@ export const seedUsers = async () => {
                     green_credits: 100,
                     is_active: true
                 });
+
+                // Link role in UserRole
+                let roleName = userData.role;
+                if (roleName === 'staff') {
+                    roleName = 'field_officer';
+                } else if (roleName === 'authority') {
+                    roleName = 'dept_head';
+                }
+
+                const dbRole = await Role.findOne({ where: { name: roleName } });
+                if (dbRole) {
+                    await UserRole.upsert({
+                        user_id: authId,
+                        role_id: dbRole.id
+                    });
+                    console.log(`User ${userData.email} linked to role ${roleName} in DB.`);
+                } else {
+                    console.warn(`Role ${roleName} not found in DB for user ${userData.email}`);
+                }
+
                 console.log(`User ${userData.email} synced to PostgreSQL.`);
             }
         }

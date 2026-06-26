@@ -1,11 +1,13 @@
 import type { Request, Response } from 'express';
+import axios from 'axios';
 import { Op } from 'sequelize';
-import { User, Issue, Repair, AIFeedback, sequelize } from '../config/db.js';
+import { User, Issue, Repair, AIFeedback, ProcessingJob, sequelize } from '../config/db.js';
 import { sendNotificationToUser, broadcastNotification } from '../services/notificationService.js';
 import { AIService } from '../services/aiService.js';
 import { SpatialService } from '../services/spatialService.js';
 import { GeoIntelligenceService } from '../services/geoIntelligenceService.js';
 import { AuditLog } from '../models/AuditLog.js';
+import { AuditService } from '../services/auditService.js';
 
 import { StorageService } from '../services/storageService.js';
 import { PriorityService } from '../services/priorityService.js';
@@ -17,6 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 interface AuthRequest extends Request {
     userIdentifier?: string;
+    file?: any;
     files?: any;
     user?: any;
 }
@@ -32,18 +35,25 @@ function obfuscateLocation(lon: number, lat: number) {
     return [lon + offsetLon, lat + offsetLat];
 }
 
-
-
-
+function getS3KeyFromUrl(url: string, bucketName: string): string {
+    if (!url) return '';
+    if (url.includes(bucketName)) {
+        const parts = url.split(`${bucketName}/`);
+        if (parts.length > 1 && parts[1]) {
+            return parts[1].split('?')[0] || '';
+        }
+    }
+    return url.split('?')[0] || '';
+}
 
 export const createReport = async (req: AuthRequest, res: Response) => {
-    console.log('--- Incoming AI-Enhanced Issue Request ---');
+    console.log('--- Incoming Async AI-Enhanced Issue Request ---');
     const files = req.files;
-    const imageFile = files?.['image']?.[0];
+    const imageFile = files?.['image']?.[0] || req.file;
     const audioFile = files?.['audio']?.[0];
 
     try {
-        const { description, latitude, longitude } = req.body;
+        const { description, latitude, longitude, imageKey: bodyImageKey, audioKey: bodyAudioKey } = req.body;
         const userAuth = (req as any).user;
 
         if (!userAuth) return res.status(401).json({ error: 'User unauthorized' });
@@ -59,7 +69,6 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             });
         }
 
-
         // 2. Identify Ward
         console.log(`[DEBUG] Received Coordinates: Lon=${longitude}, Lat=${latitude}`);
         const ward_id = await findWardId(parseFloat(longitude), parseFloat(latitude));
@@ -70,176 +79,129 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({
                 error: 'Location outside of served wards',
                 received_coords: { longitude, latitude },
-                hint: 'Ensure your test location is within Mumbai, Delhi, or Ranchi coordinates.'
+                hint: 'Ensure your test location is within Mumbai, Delhi, Ranchi, or Gujarat coordinates.'
             });
         }
 
-
-
-        // 3. Handle Media & AI Predictions
+        // 3. Resolve S3 Keys and URLs
+        let imageKey = bodyImageKey || '';
         let imageUrl = '';
-        let imageTop3 = [];
+        const bucketName = StorageService.getBucketName();
+
         if (imageFile) {
             imageUrl = await StorageService.uploadFile(imageFile, 'issues') || '';
-            try {
-                imageTop3 = await AIService.classifyImage(imageFile.buffer, imageFile.originalname);
-            } catch (aiError) {
-                console.error('Image Classification error:', aiError);
-            }
+            imageKey = getS3KeyFromUrl(imageUrl, bucketName);
+        } else if (imageKey) {
+            imageUrl = await StorageService.getPresignedUrl(imageKey);
         }
 
+        let audioKey = bodyAudioKey || '';
         let audioUrl = '';
-        let audioText = '';
         if (audioFile) {
             audioUrl = await StorageService.uploadFile(audioFile, 'audio') || '';
-            try {
-                audioText = await AIService.transcribeAudio(audioFile.buffer, audioFile.originalname);
-                console.log(`[AUDIO] Transcribed: "${audioText}"`);
-            } catch (transError) {
-                console.error('Audio Transcription error:', transError);
-            }
+            audioKey = getS3KeyFromUrl(audioUrl, bucketName);
+        } else if (audioKey) {
+            audioUrl = await StorageService.getPresignedUrl(audioKey);
         }
 
-        // 4. LLM Standardization & Voice Translation (Open Source Llama 3)
-        let textTop3 = [];
-        try {
-            textTop3 = await AIService.standardizeContent(description || '', audioText || '');
-        } catch (textError) {
-            console.error('Text Standardization error:', textError);
-        }
+        // Generate short-lived presigned GET URLs for the AI classifier to access
+        const imageGetUrl = imageKey ? await StorageService.getPresignedUrl(imageKey) : '';
+        const audioGetUrl = audioKey ? await StorageService.getPresignedUrl(audioKey) : '';
 
-        // 4.1 Execute Weighted Fusion Logic
-        const fusionResult = AIService.calculateAdvancedFusion(imageTop3, [], textTop3);
-
-        // 4.1.5 SPATIAL DEDUPLICATION (Pillar 2)
-        // Check if an issue of the same category exists within its dynamic radius
-        const duplicate = await SpatialService.findDuplicateIssue(
-            parseFloat(latitude),
-            parseFloat(longitude),
-            fusionResult.finalCategory
-        );
-
-        if (duplicate) {
-            console.log(`[DEDUPLICATION] Matched existing issue ${duplicate.id}. Merging...`);
-            await SpatialService.handleDuplicate(duplicate, user.id, imageUrl, audioUrl);
-
-            // Log as UPDATE
-            await AuditLog.create({
-                actor_id: user.id,
-                event_type: 'ISSUE_UPDATED_VIA_DEDUPLICATION',
-                payload: { issue_id: duplicate.id, new_reporter: user.id },
-            });
-
-            return res.status(200).json({
-                success: true,
-                issue_id: duplicate.id,
-                message: 'Duplicate detected. Your report has been merged with an existing case to expedite resolution.',
-                is_duplicate: true
-            });
-        }
-
-        // 4.1.8 Auto-Routing Triage (NEW)
-        const assignedDeptId = await TriageService.getDepartmentIdForCategory(fusionResult.finalCategory);
-        const assignedStaffId = await TriageService.findBestStaff(assignedDeptId, ward_id);
-
-        // 4.2 Dynamic Priority Calculation (FR 4)
-        const priorityScore = await PriorityService.calculatePriority(
-            user.id,
-            ward_id,
-            parseFloat(longitude),
-            parseFloat(latitude),
-            (fusionResult.fusionScore * 100) || 50, // Urgency derived from fusion confidence
-            imageFile ? 80 : 50,
-            fusionResult.needsHumanReview ? 'Uncertain' : 'Verified'
-        );
-
-        // 5. Create Issue with Multimodal Evidence
-        const rawClass = fusionResult.finalCategory;
-        const mappedCategory = AIService.getAppCategory(rawClass);
-
+        // 4. Create Issue (Pending AI classification)
         const issue = await Issue.create({
             reporter_id: user.id,
             ward_id: ward_id,
             location: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
-            category: mappedCategory, // User-friendly mapped category
+            category: 'Other', // Temporary category
             description: description || '',
-            priority_score: priorityScore,
+            priority_score: 0, // Will be computed by Edge function
             status: 'Pending',
-            minio_pre_key: imageUrl,
-            minio_audio_key: audioUrl,
+            minio_pre_key: imageUrl || null,
+            minio_audio_key: audioUrl || null,
             reporter_ids: [user.id],
             minio_image_urls: imageUrl ? [imageUrl] : [],
             minio_audio_urls: audioUrl ? [audioUrl] : [],
-            ai_image_top3: imageTop3,
-            ai_text_top3: textTop3,
-            audio_text: audioText,
-            fusion_final_category: rawClass, // Store raw AI class (e.g., construction_waste)
-            fusion_confidence_score: fusionResult.fusionScore,
-            needs_human_review: fusionResult.needsHumanReview,
-            assigned_department_id: assignedDeptId,
-            assigned_staff_id: assignedStaffId
+            ai_image_top3: [],
+            ai_audio_top3: [],
+            ai_text_top3: [],
+            audio_text: '',
+            fusion_final_category: 'processing', // Temporary marker
+            fusion_confidence_score: 0,
+            needs_human_review: false,
+            assigned_department_id: null,
+            assigned_staff_id: null
         });
 
+        // 5. Create Processing Job entry
+        const job = await ProcessingJob.create({
+            issue_id: issue.id,
+            image_s3_key: imageKey || null,
+            image_get_url: imageGetUrl || null,
+            audio_s3_key: audioKey || null,
+            audio_get_url: audioGetUrl || null,
+            description: description || null,
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            reporter_id: user.id,
+            ward_id: ward_id,
+            status: 'pending',
+            attempts: 0
+        });
 
-
-
-
-        // 6. Log
-        await AuditLog.create({
+        // Log the event
+        AuditService.log({
             actor_id: user.id,
-            event_type: 'ISSUE_CREATED',
-            payload: { issue_id: issue.id },
+            event_type: 'report.created_async',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            new_value: { category: issue.category, status: issue.status, ward_id: issue.ward_id },
+            payload: { description: issue.description?.slice(0, 120), job_id: job.id },
         });
 
-        // 6.2 Check Gamification Milestones
-        const reportCount = await Issue.count({ where: { reporter_id: user.id } });
-        GamificationService.checkMilestones(user.id, reportCount, user.green_credits || 0);
+        // Trigger the Supabase Edge Function in the background
+        const triggerUrl = `${process.env.SUPABASE_URL}/functions/v1/classify-report`;
+        console.log(`[TRIGGER] Invoking Supabase Edge Function at: ${triggerUrl} for Job ID: ${job.id}`);
+        axios.post(triggerUrl, { job_id: job.id }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE}`
+            }
+        }).catch((err: any) => {
+            console.error('[TRIGGER] Supabase Edge Function invocation failed:', err.message);
+        });
 
-
-        // 5.5 Trigger Proactive Neighborhood Alerts (Pillar 5)
-        // This is non-blocking to ensure fast response to the reporter
-        GeoIntelligenceService.notifyNearbyCitizens(
-            issue.id,
-            issue.category,
-            parseFloat(latitude),
-            parseFloat(longitude),
-            user.id
-        ).catch((err: any) => console.error('[GeoIntelligence] Proactive Alert Failed:', err));
-        
-        // 5.6 Notify Assigned Staff (NEW)
-        if (assignedStaffId) {
-            sendNotificationToUser(
-                assignedStaffId,
-                'New Task Assigned',
-                `You have been assigned a new ${issue.category} report in ${issue.ward_id || 'your ward'}.`,
-                { issue_id: issue.id, type: 'TASK_ASSIGNED' }
-            ).catch((err: any) => console.error('[Triage] Staff Notification Failed:', err));
-        }
-
-
-        const priorityLevel = issue.priority_score > 70 ? 'High' : (issue.priority_score > 40 ? 'Medium' : 'Low');
-        const confidence = (issue.fusion_confidence_score! * 100).toFixed(0);
-
-        await sendNotificationToUser(
-            user.id,
-            `Issue Verified: ${issue.category}`,
-            `AI verified your report with ${confidence}% confidence. Priority set to ${priorityLevel}.`,
-            { issue_id: issue.id }
-        );
-
-
-        // 6. Trigger RAG Embedding (Background)
-        RAGService.updateIssueEmbedding(issue.id).catch((err: any) => console.error('[RAG] Async update failed:', err));
-
-        res.status(201).json({
+        return res.status(201).json({
             success: true,
             issue_id: issue.id,
-            ai_summary: `AI Analysis complete: Verified as ${issue.fusion_final_category} (${(issue.fusion_confidence_score! * 100).toFixed(1)}% confidence).`
+            job_id: job.id
         });
 
     } catch (error: any) {
-        console.error('CRITICAL ERROR in createIssue:', error);
+        console.error('CRITICAL ERROR in createReport (async):', error);
         res.status(500).json({ error: error.message });
+    }
+};
+
+export const getJobStatus = async (req: Request, res: Response): Promise<any> => {
+    try {
+        const { job_id } = req.params;
+        if (typeof job_id !== 'string') {
+            return res.status(400).json({ error: 'Invalid Job ID' });
+        }
+        const job = await ProcessingJob.findByPk(job_id);
+        if (!job) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+        return res.json({
+            status: job.status,
+            issue_id: job.issue_id,
+            result: job.result,
+            error: job.error
+        });
+    } catch (error: any) {
+        console.error('Error fetching job status:', error);
+        return res.status(500).json({ error: 'Failed to get job status' });
     }
 };
 
@@ -251,19 +213,38 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
         const userRole = (user?.role || 'citizen').toLowerCase();
 
         // Server-Side RBAC Filtering
-        if (userRole === 'staff') {
-            // Staff only see their own assigned tasks
-            whereClause.assigned_staff_id = user?.id;
-        } else if (userRole === 'authority') {
-            // Authorities only see reports in their assigned ward AND department
-            if (user?.ward_id) whereClause.ward_id = user.ward_id;
-            if (user?.department_id) whereClause.assigned_department_id = user.department_id;
-        } else if (userRole === 'admin' || userRole === 'super_admin') {
-            // Admins can use query filters or see everything
+        const permissions: string[] = user?.permissions || [];
+        const cityScopedRoles = ['admin', 'mayor'];
+
+        if (cityScopedRoles.includes(userRole) && user?.ulb_id) {
+            const { Ward } = await import('../config/db.js');
+            const cityWards = await Ward.findAll({ where: { ulb_id: user.ulb_id }, attributes: ['id'] });
+            const cityWardIds = cityWards.map((w: any) => w.id);
+            whereClause.ward_id = { [Op.in]: cityWardIds };
+            if (ward_id && cityWardIds.includes(ward_id as string)) {
+                whereClause.ward_id = ward_id;
+            }
+            if (assigned_staff_id) whereClause.assigned_staff_id = assigned_staff_id;
+        } else if (permissions.includes('report:view_all')) {
             if (ward_id) whereClause.ward_id = ward_id;
             if (assigned_staff_id) whereClause.assigned_staff_id = assigned_staff_id;
+            if (userRole === 'field_officer' || userRole === 'staff') {
+                whereClause.assigned_staff_id = user?.id;
+            } else if (userRole === 'dept_head' || userRole === 'authority') {
+                if (user?.ward_id) whereClause.ward_id = user.ward_id;
+                if (user?.department_id) whereClause.assigned_department_id = user.department_id;
+            }
+        } else if (permissions.includes('report:view_area')) {
+            if (user?.ward_id) {
+                whereClause.ward_id = user.ward_id;
+            } else {
+                whereClause.ward_id = '00000000-0000-0000-0000-000000000000';
+            }
+        } else if (permissions.includes('report:view_my')) {
+            whereClause.reporter_id = user?.id;
+        } else {
+            whereClause.id = '00000000-0000-0000-0000-000000000000';
         }
-        // Citizens see everything (handled by obfuscation below)
 
         if (status) whereClause.status = status;
 
@@ -274,7 +255,7 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
 
 
 
-        const isPrivileged = ['admin', 'authority', 'staff', 'super_admin'].includes(userRole);
+        const isPrivileged = ['admin', 'super_admin', 'dept_head', 'field_officer', 'hq_staff', 'authority', 'staff'].includes(userRole);
 
         const transformedIssues = await Promise.all(issues.map(async (issue) => {
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
@@ -289,6 +270,20 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
             if (report.minio_pre_key) {
                 report.minio_pre_key = await StorageService.getPresignedUrl(report.minio_pre_key);
             }
+
+            // Fetch associated repair/resolution evidence if it exists
+            let resolutionImageUrl: string | null = null;
+            if (['Pending Confirmation', 'Pending Citizen Confirmation', 'Resolved'].includes(report.status)) {
+                const repair = await Repair.findOne({ where: { issue_id: report.id }, order: [['createdAt', 'DESC']] });
+                if (repair && repair.minio_post_key) {
+                    resolutionImageUrl = await StorageService.getPresignedUrl(repair.minio_post_key);
+                }
+            }
+            report.resolution_image_url = resolutionImageUrl;
+            report.metadata = {
+                ...report.metadata,
+                resolution_image_url: resolutionImageUrl
+            };
 
             return report;
         }));
@@ -308,20 +303,34 @@ export const getReportStats = async (req: AuthRequest, res: Response) => {
         let green_credits = 0;
 
         // RBAC: Citizens only see their own stats, others see global/departmental
-        if (userRole === 'citizen') {
-            where = { reporter_id: user?.id };
-            // Fetch citizen-specific info like green credits
-            const dbUser = await User.findByPk(user?.id);
-            if (dbUser) green_credits = dbUser.green_credits;
-        } else if (userRole === 'authority') {
-            // Authorities see stats for their ward/department
+        const permissions: string[] = user?.permissions || [];
+        if (permissions.includes('report:view_all') || ['admin', 'mayor'].includes(userRole)) {
             const dbUser = await User.findByPk(user?.id);
             if (dbUser) {
-                if (dbUser.ward_id) where.ward_id = dbUser.ward_id;
-                if (dbUser.department_id) where.assigned_department_id = dbUser.department_id;
+                const cityScopedRoles = ['admin', 'mayor'];
+                if (cityScopedRoles.includes(userRole) && dbUser.ulb_id) {
+                    const { Ward } = await import('../config/db.js');
+                    const cityWards = await Ward.findAll({ where: { ulb_id: dbUser.ulb_id }, attributes: ['id'] });
+                    where.ward_id = { [Op.in]: cityWards.map((w: any) => w.id) };
+                } else if (userRole === 'field_officer' || userRole === 'staff') {
+                    where = { assigned_staff_id: user?.id };
+                } else if (userRole === 'dept_head' || userRole === 'authority') {
+                    if (dbUser.ward_id) where.ward_id = dbUser.ward_id;
+                    if (dbUser.department_id) where.assigned_department_id = dbUser.department_id;
+                }
             }
+        } else if (permissions.includes('report:view_area')) {
+            const dbUser = await User.findByPk(user?.id);
+            if (dbUser && dbUser.ward_id) {
+                where.ward_id = dbUser.ward_id;
+            } else {
+                where.ward_id = '00000000-0000-0000-0000-000000000000';
+            }
+        } else {
+            where = { reporter_id: user?.id };
+            const dbUser = await User.findByPk(user?.id);
+            if (dbUser) green_credits = dbUser.green_credits;
         }
-        // Admins and Super Admins keep where = {} for global stats
 
         const total = await Issue.count({ where });
         const pending = await Issue.count({ where: { ...where, status: 'Pending' } });
@@ -367,28 +376,61 @@ export const getReportById = async (req: AuthRequest, res: Response) => {
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
         // Apply privacy obfuscation for sensitive categories in public view
-        const userRole = req.user?.role || 'citizen';
+        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        const permissions: string[] = req.user?.permissions || [];
+        const isReporter = issue.reporter_id === req.user?.id;
+        
+        if (permissions.includes('report:view_all')) {
+            // Allowed
+        } else if (permissions.includes('report:view_area')) {
+            if (issue.ward_id !== req.user?.ward_id) {
+                return res.status(403).json({ error: 'Forbidden: Issue is outside your assigned ward' });
+            }
+        } else if (permissions.includes('report:view_my')) {
+            if (!isReporter) {
+                return res.status(403).json({ error: 'Forbidden: You can only access your own reported issues' });
+            }
+        } else {
+            return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+        }
+
         const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
-        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+        const isPrivileged = ['admin', 'super_admin', 'dept_head', 'field_officer', 'hq_staff', 'authority', 'staff'].includes(userRole);
 
         if (isSensitive && !isPrivileged) {
             const [lon, lat] = obfuscateLocation(issue.location.coordinates[0], issue.location.coordinates[1]);
             issue.location.coordinates = [lon, lat];
         }
 
+        const report = issue.get();
+
         // 2. Generate Presigned URLs for all media
-        if (issue.minio_pre_key) issue.minio_pre_key = await StorageService.getPresignedUrl(issue.minio_pre_key);
-        if (issue.minio_audio_key) issue.minio_audio_key = await StorageService.getPresignedUrl(issue.minio_audio_key);
+        if (report.minio_pre_key) report.minio_pre_key = await StorageService.getPresignedUrl(report.minio_pre_key);
+        if (report.minio_audio_key) report.minio_audio_key = await StorageService.getPresignedUrl(report.minio_audio_key);
         
-        if (issue.minio_image_urls && issue.minio_image_urls.length > 0) {
-            issue.minio_image_urls = await Promise.all(issue.minio_image_urls.map(url => StorageService.getPresignedUrl(url)));
+        if (report.minio_image_urls && report.minio_image_urls.length > 0) {
+            report.minio_image_urls = await Promise.all(report.minio_image_urls.map((url: string) => StorageService.getPresignedUrl(url)));
         }
         
-        if (issue.minio_audio_urls && issue.minio_audio_urls.length > 0) {
-            issue.minio_audio_urls = await Promise.all(issue.minio_audio_urls.map(url => StorageService.getPresignedUrl(url)));
+        if (report.minio_audio_urls && report.minio_audio_urls.length > 0) {
+            report.minio_audio_urls = await Promise.all(report.minio_audio_urls.map((url: string) => StorageService.getPresignedUrl(url)));
         }
 
-        res.json(issue);
+        // Fetch associated repair/resolution evidence if it exists
+        let resolutionImageUrl: string | null = null;
+        if (['Pending Confirmation', 'Pending Citizen Confirmation', 'Resolved'].includes(report.status)) {
+            const repair = await Repair.findOne({ where: { issue_id: report.id }, order: [['createdAt', 'DESC']] });
+            if (repair && repair.minio_post_key) {
+                resolutionImageUrl = await StorageService.getPresignedUrl(repair.minio_post_key);
+            }
+        }
+        report.resolution_image_url = resolutionImageUrl;
+        report.metadata = {
+            ...report.metadata,
+            resolution_image_url: resolutionImageUrl
+        };
+
+        res.json(report);
 
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -402,6 +444,17 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
 
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
+
+        const permissions: string[] = req.user?.permissions || [];
+        const isAssigned = issue.assigned_staff_id === req.user?.id;
+        const isPrivilegedUser = ['admin', 'super_admin', 'hq_staff', 'dept_head'].includes(req.user?.role || '');
+
+        if (!isPrivilegedUser && !isAssigned) {
+            return res.status(403).json({ error: 'Forbidden: You can only update issues assigned to you' });
+        }
+
+        const oldStatus = issue.status;
+        const oldAssignee = issue.assigned_staff_id;
 
         if (status) issue.status = status;
         if (category && issue.category !== category) {
@@ -424,6 +477,29 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
 
         await issue.save();
 
+        // Audit: status change
+        if (status && status !== oldStatus) {
+            AuditService.log({
+                actor_id: req.user?.id || 'SYSTEM',
+                event_type: 'report.status_changed',
+                target_resource: 'issue',
+                target_resource_id: issue.id,
+                old_value: { status: oldStatus },
+                new_value: { status },
+            });
+        }
+        // Audit: assignment change
+        if (assigned_staff_id !== undefined && assigned_staff_id !== oldAssignee) {
+            AuditService.log({
+                actor_id: req.user?.id || 'SYSTEM',
+                event_type: 'report.assigned',
+                target_resource: 'issue',
+                target_resource_id: issue.id,
+                old_value: { assigned_staff_id: oldAssignee },
+                new_value: { assigned_staff_id },
+            });
+        }
+
         res.json({ success: true, issue });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -433,9 +509,9 @@ export const updateReport = async (req: AuthRequest, res: Response) => {
 export const bulkUpdateReports = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { ids, status, category } = req.body;
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
+        const permissions: string[] = req.user?.permissions || [];
         
-        if (userRole !== 'admin' && userRole !== 'authority' && userRole !== 'super_admin') {
+        if (!permissions.includes('report:bulk_update')) {
             return res.status(403).json({ error: 'Access denied. Insufficient permissions for bulk actions.' });
         }
 
@@ -458,14 +534,11 @@ export const bulkUpdateReports = async (req: AuthRequest, res: Response): Promis
         });
 
         // Log the bulk activity
-        await AuditLog.create({
-            actor_id: req.user?.id,
-            event_type: 'BULK_UPDATE',
-            payload: { 
-                ids, 
-                updates: updateData,
-                count
-            },
+        AuditService.log({
+            actor_id: req.user?.id || 'SYSTEM',
+            event_type: 'report.bulk_updated',
+            target_resource: 'issue',
+            payload: { ids, updates: updateData, count },
         });
 
         res.json({ success: true, message: `Successfully updated ${count} reports`, count });
@@ -524,11 +597,14 @@ export const deleteReport = async (req: AuthRequest, res: Response) => {
         // 3. Destroy the Database Record
         await issue.destroy();
 
-        // 4. Log the Deletion Activity
-        await AuditLog.create({
+        // 4. Log the Deletion
+        AuditService.log({
             actor_id: (req as any).user?.id || 'SYSTEM',
-            event_type: 'ISSUE_DELETED',
-            payload: { issue_id: issueId, category: issue.category },
+            event_type: 'report.deleted',
+            target_resource: 'issue',
+            target_resource_id: issueId,
+            old_value: { category: issue.category, status: issue.status },
+            payload: { description: issue.description?.slice(0, 120) },
         });
 
         res.json({
@@ -567,11 +643,16 @@ export const getNearbyReports = async (req: AuthRequest, res: Response) => {
 export const proposeResolution = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { id } = req.params;
-        const file = req.files?.['image']?.[0] || req.files?.[0];
-        const phone = req.userIdentifier;
-        const user = await User.findOne({ where: { phone } });
-        if (!user || (user.role !== 'staff' && user.role !== 'admin' && user.role !== 'super_admin')) {
-            return res.status(403).json({ error: 'Access denied. Only assigned staff can propose resolution.' });
+        const file = req.file || req.files?.['image']?.[0] || req.files?.[0];
+        const userAuth = (req as any).user;
+        
+        if (!userAuth) {
+            return res.status(401).json({ error: 'User unauthorized' });
+        }
+
+        const user = await User.findByPk(userAuth.id);
+        if (!user || (user.role !== 'staff' && user.role !== 'authority' && user.role !== 'admin' && user.role !== 'super_admin')) {
+            return res.status(403).json({ error: 'Access denied. Only assigned staff or authorities can propose resolution.' });
         }
 
         if (!file) return res.status(400).json({ error: 'Resolution image required' });
@@ -579,9 +660,14 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
         const issue = await Issue.findByPk(id as string);
         if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
-        // Ensure the staff member is the one assigned (unless admin)
+        // Ensure the staff member is the one assigned
         if (user.role === 'staff' && issue.assigned_staff_id !== user.id) {
             return res.status(403).json({ error: 'Access denied. You are not assigned to this issue.' });
+        }
+
+        // Ensure the authority belongs to the same department (if they have one assigned)
+        if (user.role === 'authority' && user.department_id && issue.assigned_department_id !== user.department_id) {
+            return res.status(403).json({ error: 'Access denied. You do not belong to the department assigned to this issue.' });
         }
 
         const imageUrl = await StorageService.uploadFile(file, 'repairs') || '';
@@ -598,10 +684,13 @@ export const proposeResolution = async (req: AuthRequest, res: Response): Promis
         await issue.save();
 
         // 4. Log the submission
-        await AuditLog.create({
+        AuditService.log({
             actor_id: user.id,
-            event_type: 'RESOLUTION_SUBMITTED',
-            payload: { issue_id: issue.id, repair_image: imageUrl },
+            event_type: 'report.resolution_proposed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            new_value: { status: 'Pending Confirmation' },
+            payload: { repair_image: imageUrl },
         });
 
         // 5. Notify Authorities for approval
@@ -650,10 +739,13 @@ export const confirmResolution = async (req: AuthRequest, res: Response): Promis
         await issue.save();
 
         // 3. Log Authority Approval
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'AUTHORITY_RESOLUTION_APPROVED',
-            payload: { issue_id: issue.id },
+            event_type: 'report.resolution_confirmed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Confirmation' },
+            new_value: { status: 'Pending Citizen Confirmation' },
         });
 
         // 4. Notify ALL Reporters to verify
@@ -696,10 +788,14 @@ export const rejectResolution = async (req: AuthRequest, res: Response): Promise
         await issue.save();
 
         // 3. Log Rejection
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'RESOLUTION_REJECTED',
-            payload: { issue_id: issue.id, reason: reason || 'Quality of work not satisfactory' },
+            event_type: 'report.resolution_rejected',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Confirmation' },
+            new_value: { status: 'In Progress' },
+            payload: { reason: reason || 'Quality of work not satisfactory' },
         });
 
         // 4. Notify Staff
@@ -766,10 +862,14 @@ export const citizenConfirmResolution = async (req: AuthRequest, res: Response):
         }
 
         // 5. Log & Notify
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'CITIZEN_RESOLUTION_VERIFIED',
-            payload: { issue_id: issue.id, credits: totalAwarded },
+            event_type: 'report.citizen_confirmed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Citizen Confirmation' },
+            new_value: { status: 'Resolved' },
+            payload: { credits_awarded: totalAwarded },
         });
 
         // 6. Notify Staff
@@ -806,10 +906,14 @@ export const citizenDisputeResolution = async (req: AuthRequest, res: Response):
         issue.status = 'Disputed';
         await issue.save();
 
-        await AuditLog.create({
+        AuditService.log({
             actor_id: userAuth.id,
-            event_type: 'CITIZEN_RESOLUTION_DISPUTED',
-            payload: { issue_id: issue.id, reason },
+            event_type: 'report.citizen_disputed',
+            target_resource: 'issue',
+            target_resource_id: issue.id,
+            old_value: { status: 'Pending Citizen Confirmation' },
+            new_value: { status: 'Disputed' },
+            payload: { reason },
         });
 
         // Notify Authority & Staff
@@ -869,11 +973,27 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
 export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { status } = req.query;
-        const userRole = req.user?.role || 'citizen'; // Assuming req.user is populated by auth middleware
+        const user = req.user;
+        const userRole = (user?.role || 'citizen').toLowerCase();
 
         let whereClause: any = {};
         if (status) {
             whereClause.status = status;
+        }
+
+        // Apply scoping for City Admin, Mayor, and Councilor
+        const cityScopedRoles = ['admin', 'mayor'];
+        if (cityScopedRoles.includes(userRole) && user?.ulb_id) {
+            const { Ward } = await import('../config/db.js');
+            const cityWards = await Ward.findAll({ where: { ulb_id: user.ulb_id }, attributes: ['id'] });
+            whereClause.ward_id = { [Op.in]: cityWards.map((w: any) => w.id) };
+        } else if (userRole === 'field_officer' || userRole === 'staff') {
+            whereClause.assigned_staff_id = user?.id;
+        } else if (userRole === 'dept_head' || userRole === 'authority') {
+            if (user?.ward_id) whereClause.ward_id = user.ward_id;
+            if (user?.department_id) whereClause.assigned_department_id = user.department_id;
+        } else if (userRole === 'councilor' && user?.ward_id) {
+            whereClause.ward_id = user.ward_id;
         }
 
         // Fetch raw issue data
@@ -887,18 +1007,27 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
             raw: true, // Get raw data to easily manipulate
         });
 
+        // Filter out issues with no location data to prevent JSON.parse crash
+        const issuesWithLocation = issues.filter((issue: any) => !!issue.location_geojson);
+
         // Transform to GeoJSON and obfuscate if sensitive
-        const features = issues.map((issue: any) => {
-            let geometry = JSON.parse(issue.location_geojson);
-            let coords = geometry.coordinates;
+        const features = issuesWithLocation.map((issue: any) => {
+            let geometry: any;
+            try {
+                geometry = JSON.parse(issue.location_geojson);
+            } catch {
+                return null; // Skip malformed geometry
+            }
+            const coords = geometry?.coordinates;
+            if (!coords) return null;
 
             // Apply privacy obfuscation for sensitive categories in public view
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
-            const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff';
+            const isPrivileged = ['admin', 'super_admin', 'dept_head', 'field_officer', 'hq_staff', 'authority', 'staff'].includes(userRole.toLowerCase());
 
             if (isSensitive && !isPrivileged) {
-                coords = obfuscateLocation(coords[0], coords[1]);
-                geometry.coordinates = coords;
+                const obfuscated = obfuscateLocation(coords[0], coords[1]);
+                geometry.coordinates = obfuscated;
             }
 
             // Remove the raw geojson string and add the processed geometry
@@ -910,7 +1039,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
                 geometry: geometry,
                 properties: properties
             };
-        });
+        }).filter(Boolean); // Remove any null entries from parse failures
 
         const geojson = {
             type: 'FeatureCollection',
@@ -919,6 +1048,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
 
         res.json(geojson);
     } catch (error: any) {
+        console.error('[GeoJSON] Error building GeoJSON response:', error.message);
         res.status(500).json({ error: error.message });
     }
 };
@@ -943,10 +1073,9 @@ export const getAuthorityKPIs = async (_req: AuthRequest, res: Response): Promis
 
 export const getRetrainingQueue = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
-        const isPrivileged = userRole === 'admin' || userRole === 'authority' || userRole === 'staff' || userRole === 'super_admin';
+        const permissions: string[] = req.user?.permissions || [];
 
-        if (!isPrivileged) return res.status(403).json({ error: 'Access denied. You must be an admin or staff member.' });
+        if (!permissions.includes('ai:manage')) return res.status(403).json({ error: 'Access denied. You must be an admin or staff member.' });
 
         const queue = await AIFeedback.findAll({
             order: [['createdAt', 'DESC']],
@@ -959,10 +1088,9 @@ export const getRetrainingQueue = async (req: AuthRequest, res: Response): Promi
 
 export const updateFeedbackStatus = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
-        const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+        const permissions: string[] = req.user?.permissions || [];
 
-        if (!isAdmin) return res.status(403).json({ error: 'Access denied. Only administrators can update retraining status.' });
+        if (!permissions.includes('ai:manage')) return res.status(403).json({ error: 'Access denied. Only administrators can update retraining status.' });
 
         const { id } = req.params;
         const { status } = req.body; // 'Processed' or 'Dismissed'
@@ -989,8 +1117,8 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response): Pro
 
 export const exportRetrainingData = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const userRole = (req.user?.role || 'citizen').toLowerCase();
-        if (userRole !== 'admin' && userRole !== 'super_admin') {
+        const permissions: string[] = req.user?.permissions || [];
+        if (!permissions.includes('ai:manage')) {
             return res.status(403).json({ error: 'Access denied' });
         }
 

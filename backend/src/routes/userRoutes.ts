@@ -1,18 +1,20 @@
 import { Router } from 'express';
-import { getAllUsers, getStaff, getMyProfile, updateUserProfile, getLeaderboard, updateDeviceToken } from '../controllers/userController.js';
-
+import { getAllUsers, getStaff, getMyProfile, updateUserProfile, getLeaderboard, updateDeviceToken, createUser, resetUserPassword } from '../controllers/userController.js';
 import { verifySupabaseToken } from '../middleware/authMiddleware.js';
+import { requirePermission } from '../middleware/rbacMiddleware.js';
 
 const router = Router();
 
 // All user routes require authentication
-// duplicate route eliminated
-router.get('/', verifySupabaseToken, getAllUsers);
-router.get('/me', verifySupabaseToken, getMyProfile);
-router.patch('/:id', verifySupabaseToken, updateUserProfile);
-router.get('/staff', verifySupabaseToken, getStaff);
-router.get('/leaderboard', verifySupabaseToken, getLeaderboard);
-router.post('/device-token', verifySupabaseToken, updateDeviceToken);
+router.use(verifySupabaseToken);
 
+router.get('/', requirePermission('users:manage'), getAllUsers);
+router.post('/', requirePermission('users:manage'), createUser);
+router.post('/:id/reset-password', requirePermission('users:manage'), resetUserPassword);
+router.get('/me', getMyProfile);
+router.patch('/:id', updateUserProfile); // Self-check or users:manage checked inside controller
+router.get('/staff', requirePermission('report:assign'), getStaff);
+router.get('/leaderboard', getLeaderboard);
+router.post('/device-token', updateDeviceToken);
 
 export default router;

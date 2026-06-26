@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:http/http.dart' as http;
+import 'package:civic_connect_mobile/config/api_client.dart' as http;
 import '../../../config/api_config.dart';
 
 class UserService {
@@ -52,7 +52,21 @@ class UserService {
       debugPrint('Error updating public DB profile: $e');
     }
   }
-
+  Future<Map<String, dynamic>?> getProfile() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.usersUrl}/me'),
+        headers: ApiConfig.getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error getting user profile: $e');
+      return null;
+    }
+  }
 
   Future<Map<String, dynamic>> getUserStats() async {
     final user = _client.auth.currentUser;

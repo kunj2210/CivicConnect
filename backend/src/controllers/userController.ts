@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
-import { User, Department, Ward, UserDevice } from '../config/db.js';
+import { User, Department, Ward, UserDevice, Role, Permission, UserRole } from '../config/db.js';
 import { findWardId } from '../utils/spatialUtils.js';
 import { GamificationService } from '../services/gamificationService.js';
+import { AuditService } from '../services/auditService.js';
+import { supabaseAdmin } from '../config/supabase.js';
 import { Op } from 'sequelize';
 
 
@@ -66,7 +68,43 @@ export const updateUserProfile = async (req: AuthRequest, res: Response) => {
 
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        if (role) user.role = role;
+        const isSelf = req.user && req.user.id === id;
+        const hasManagePerm = req.user && req.user.permissions?.includes('users:manage');
+
+        if (!isSelf && !hasManagePerm) {
+            return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+        }
+
+        if (!hasManagePerm) {
+            if (role !== undefined || ward_id !== undefined || department_id !== undefined || is_active !== undefined) {
+                return res.status(403).json({ error: 'Forbidden: Cannot update administrative fields' });
+            }
+        }
+
+        if (role) {
+            const oldRole = user.role;
+            user.role = role;
+            const { Role, UserRole } = await import('../config/db.js');
+            let mappedRole = role.toLowerCase();
+            if (mappedRole === 'staff') mappedRole = 'field_officer';
+            else if (mappedRole === 'authority') mappedRole = 'dept_head';
+            
+            const dbRole = await Role.findOne({ where: { name: mappedRole } });
+            if (dbRole) {
+                await UserRole.destroy({ where: { user_id: user.id } });
+                await UserRole.create({ user_id: user.id, role_id: dbRole.id });
+            }
+
+            // Audit the role change
+            AuditService.log({
+                actor_id: req.user?.id || 'SYSTEM',
+                event_type: 'user.role_changed',
+                target_resource: 'user',
+                target_resource_id: user.id,
+                old_value: { role: oldRole },
+                new_value: { role: mappedRole },
+            });
+        }
         if (ward_id) user.ward_id = ward_id;
         if (department_id) user.department_id = department_id;
         if (is_active !== undefined) user.is_active = is_active;
@@ -129,12 +167,25 @@ export const getMyProfile = async (req: AuthRequest, res: Response) => {
             },
             include: [
                 { model: Department, as: 'department' },
-                { model: Ward, as: 'ward' }
+                { model: Ward, as: 'ward' },
+                {
+                    model: Role,
+                    as: 'roles',
+                    include: [{ model: Permission, as: 'permissions' }]
+                }
             ]
         });
         
         if (!user) return res.status(404).json({ error: 'Profile not found' });
-        res.json(user);
+        
+        const attachedPermissions = (user as any).roles?.flatMap((r: any) => (r.permissions || []).map((p: any) => p.key)) || [];
+        const attachedRoles = (user as any).roles?.map((r: any) => r.name) || [];
+        
+        res.json({
+            ...user.toJSON(),
+            roles: attachedRoles,
+            permissions: attachedPermissions
+        });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -172,6 +223,147 @@ export const updateDeviceToken = async (req: AuthRequest, res: Response) => {
         }
 
         res.json({ success: true, message: 'Device token updated' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * Creates a new user in both Supabase Auth and PostgreSQL.
+ */
+export const createUser = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const creator = req.user;
+        const { name, email, role, phone, designation, department_id, ward_id } = req.body;
+        let ulb_id = req.body.ulb_id;
+
+        // If local City Admin, restrict ulb_id to their own city
+        if (creator && creator.role !== 'super_admin') {
+            ulb_id = creator.ulb_id;
+        }
+
+        if (!email || !role || !name) {
+            return res.status(400).json({ error: 'Name, email, and role are required.' });
+        }
+
+        // Generate temporary password
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$';
+        let generatedPassword = '';
+        for (let i = 0; i < 12; i++) {
+            generatedPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        console.log(`[UserController] Creating Supabase Auth account for: ${email}`);
+        const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password: generatedPassword,
+            email_confirm: true,
+            user_metadata: {
+                role,
+                name,
+                designation
+            }
+        });
+
+        if (error || !supabaseUser) {
+            console.error('[UserController] Supabase creation failed:', error?.message);
+            return res.status(400).json({ error: error?.message || 'Failed to create user in Auth provider.' });
+        }
+
+        console.log(`[UserController] Supabase Auth account created (ID: ${supabaseUser.id}). Syncing to PG...`);
+        
+        // Sync to Postgres users table
+        const newUser = await User.create({
+            id: supabaseUser.id,
+            email,
+            phone: phone || null,
+            role,
+            designation: designation || null,
+            department_id: department_id || null,
+            ward_id: ward_id || null,
+            ulb_id: ulb_id || null,
+            temp_password_cleartext: generatedPassword,
+            green_credits: 100,
+            is_active: true
+        });
+
+        // Link Role in user_roles
+        let mappedRole = role.toLowerCase();
+        if (mappedRole === 'staff') mappedRole = 'field_officer';
+        else if (mappedRole === 'authority') mappedRole = 'dept_head';
+
+        const dbRole = await Role.findOne({ where: { name: mappedRole } });
+        if (dbRole) {
+            await UserRole.create({
+                user_id: supabaseUser.id,
+                role_id: dbRole.id
+            });
+        }
+
+        // Log Audit Event
+        AuditService.log({
+            actor_id: creator?.id || 'SYSTEM',
+            event_type: 'user.created',
+            target_resource: 'user',
+            target_resource_id: supabaseUser.id,
+            new_value: { email, role, name }
+        });
+
+        res.status(201).json({
+            ...newUser.toJSON(),
+            temp_password_cleartext: generatedPassword
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * Resets a user's password, generating a new cleartext temporary password.
+ */
+export const resetUserPassword = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const creator = req.user;
+        const { id } = req.params;
+
+        const user = await User.findByPk(id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Scoping check: City Admin can only reset their own city's users
+        if (creator && creator.role !== 'super_admin' && user.ulb_id !== creator.ulb_id) {
+            return res.status(403).json({ error: 'Forbidden: Cannot reset password for users in another city.' });
+        }
+
+        // Generate new password
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$';
+        let generatedPassword = '';
+        for (let i = 0; i < 12; i++) {
+            generatedPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        console.log(`[UserController] Resetting password in Supabase for user ${id}`);
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(id, {
+            password: generatedPassword
+        });
+
+        if (error) {
+            return res.status(400).json({ error: error.message });
+        }
+
+        // Save new cleartext password to PG
+        user.temp_password_cleartext = generatedPassword;
+        await user.save();
+
+        // Log Audit Event
+        AuditService.log({
+            actor_id: creator?.id || 'SYSTEM',
+            event_type: 'user.password_reset',
+            target_resource: 'user',
+            target_resource_id: id,
+            payload: { message: `Password reset by Admin: ${creator?.email || 'Unknown'}` }
+        });
+
+        res.json({ success: true, temp_password_cleartext: generatedPassword });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

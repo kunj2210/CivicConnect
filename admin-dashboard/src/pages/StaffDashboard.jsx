@@ -82,7 +82,7 @@ const StaffDashboard = () => {
                     {tasks.length > 0 ? tasks.map(task => (
                         <div 
                             key={task.id} 
-                            onClick={() => navigate(`/admin/issues/${task.id}`)}
+                            onClick={() => navigate(`/staff/issues/${task.id}`)}
                             className="p-6 hover:bg-white/5 transition-all cursor-pointer group"
                         >
                             <div className="flex justify-between items-start">

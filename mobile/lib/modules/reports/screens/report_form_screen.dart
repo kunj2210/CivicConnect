@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,6 +35,8 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
   String? _category;
   Map<String, double>? _location;
   String? _audioPath;
+  Uint8List? _audioBytes;
+  String? _audioFilename;
   bool _isLocating = false;
   bool _isSubmitting = false;
 
@@ -79,8 +82,10 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     final XFile? photo = await _picker.pickImage(source: source);
+    if (!mounted) return;
     if (photo != null) {
       final bytes = await photo.readAsBytes();
+      if (!mounted) return;
 
       setState(() {
         _pickedImage = photo;
@@ -95,10 +100,12 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
 
       try {
         final exifLoc = await _locationService.getExifLocation(bytes);
+        if (!mounted) return;
         if (exifLoc != null) {
           setState(() => _location = exifLoc);
         } else {
           final gpsLoc = await _locationService.getCurrentLocation();
+          if (!mounted) return;
           if (gpsLoc != null) {
             setState(
               () => _location = {
@@ -118,7 +125,9 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
           }
         }
       } finally {
-        setState(() => _isLocating = false);
+        if (mounted) {
+          setState(() => _isLocating = false);
+        }
       }
     }
   }
@@ -202,7 +211,17 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
         ),
       );
 
-      if (!kIsWeb && _audioPath != null) {
+      if (kIsWeb && _audioBytes != null) {
+        final audioExtension = _audioFilename?.split('.').last.toLowerCase() ?? 'mp3';
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'audio',
+            _audioBytes!,
+            filename: _audioFilename ?? 'audio.mp3',
+            contentType: http_parser.MediaType('audio', audioExtension),
+          ),
+        );
+      } else if (!kIsWeb && _audioPath != null) {
         final audioFile = File(_audioPath!);
         final audioExtension = _audioPath!.split('.').last.toLowerCase();
         request.files.add(
@@ -229,7 +248,15 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
           ),
         );
       } else {
-        throw Exception('Server returned ${response.statusCode}');
+        final resStr = await response.stream.bytesToString();
+        String errorMessage = 'Server returned ${response.statusCode}';
+        try {
+          final errJson = json.decode(resStr);
+          if (errJson['error'] != null) {
+            errorMessage = errJson['error'];
+          }
+        } catch (_) {}
+        throw Exception(errorMessage);
       }
     } catch (e) {
       // Offline / Error handling
@@ -350,8 +377,13 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
             _buildSectionHeader('Report Description'),
             const SizedBox(height: 12),
             AudioRecordingWidget(
-              onRecordingComplete: (path, transcription) {
-                setState(() => _audioPath = path);
+              onRecordingComplete: (path, bytes, name, transcription) {
+                if (!mounted) return;
+                setState(() {
+                  _audioPath = path;
+                  _audioBytes = bytes;
+                  _audioFilename = name;
+                });
                 if (transcription != null && transcription.isNotEmpty) {
                   _descriptionController.text = transcription;
                 }
@@ -449,6 +481,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
                 ),
               );
               if (result != null) {
+                if (!mounted) return;
                 setState(() {
                   _location = {
                     'latitude': result.latitude,
