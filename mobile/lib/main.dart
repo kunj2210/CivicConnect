@@ -4,7 +4,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
@@ -23,11 +22,11 @@ import 'modules/auth/screens/splash_screen.dart';
 
 void main() async {
   try {
-    print("RUNNING MAIN WITH FIREBASE WEB FIX");
+    debugPrint("RUNNING MAIN WITH FIREBASE WEB FIX");
     WidgetsFlutterBinding.ensureInitialized();
     
     try {
-      print("Initializing Firebase with Default Options...");
+      debugPrint("Initializing Firebase with Default Options...");
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
@@ -133,7 +132,7 @@ class _MyAppState extends State<MyApp> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             elevation: 4,
-            shadowColor: const Color(0xFF8B5CF6).withOpacity(0.3),
+            shadowColor: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
             textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, letterSpacing: 0.5),
           ),
         ),
@@ -162,7 +161,7 @@ class _MyAppState extends State<MyApp> {
             side: const BorderSide(color: Color(0xFFF1F5F9)),
           ),
           elevation: 2,
-          shadowColor: Colors.black.withOpacity(0.04),
+          shadowColor: Colors.black.withValues(alpha: 0.04),
         ),
       ),
       darkTheme: ThemeData(
@@ -206,14 +205,14 @@ class _MyAppState extends State<MyApp> {
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: Colors.white.withOpacity(0.04),
+          fillColor: Colors.white.withValues(alpha: 0.04),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
@@ -226,7 +225,7 @@ class _MyAppState extends State<MyApp> {
           color: const Color(0xFF121214),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
-            side: BorderSide(color: Colors.white.withOpacity(0.04)),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
           ),
           elevation: 0,
         ),

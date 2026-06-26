@@ -36,7 +36,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     final locData = await _locationService.getCurrentLocation();
     if (locData != null) {
       setState(() {
-        _selectedLocation = LatLng(locData.latitude!, locData.longitude!);
+        _selectedLocation = LatLng(locData.latitude, locData.longitude);
         _isLoading = false;
       });
     } else {

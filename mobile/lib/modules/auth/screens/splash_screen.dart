@@ -43,7 +43,7 @@ class _SplashScreenState extends State<SplashScreen> {
               height: 250,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF8B5CF6).withOpacity(0.05),
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.05),
               ),
             ).animate(onPlay: (controller) => controller.repeat(reverse: true))
              .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2), duration: 2.seconds, curve: Curves.easeInOut)
@@ -59,10 +59,10 @@ class _SplashScreenState extends State<SplashScreen> {
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
                         blurRadius: 40,
                         spreadRadius: 10,
                       ),
@@ -76,7 +76,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ).animate()
                  .fadeIn(duration: 800.ms)
                  .scale(begin: const Offset(0.5, 0.5), end: const Offset(1, 1), curve: Curves.elasticOut, duration: 1200.ms)
-                 .shimmer(delay: 1500.ms, duration: 2.seconds, color: Colors.white.withOpacity(0.3))
+                 .shimmer(delay: 1500.ms, duration: 2.seconds, color: Colors.white.withValues(alpha: 0.3))
                  .callback(delay: 3.seconds, callback: (_) => {}),
 
                 const SizedBox(height: 40),
@@ -90,7 +90,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 6,
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
                     ).animate().fadeIn(delay: 1.seconds).slideY(begin: 0.2),
                     const SizedBox(height: 8),
@@ -100,7 +100,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 2,
-                        color: const Color(0xFF8B5CF6).withOpacity(0.6),
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.6),
                       ),
                     ).animate().fadeIn(delay: 1200.ms),
                   ],
@@ -119,7 +119,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 width: 140,
                 height: 2,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(2),
                 ),
                 child: Stack(
@@ -131,7 +131,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         borderRadius: BorderRadius.circular(2),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF8B5CF6).withOpacity(0.5),
+                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
                             blurRadius: 10,
                           ),
                         ],

@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { getWards, createWard, getUlbs, createUlb, wipeData } from '../controllers/systemController.js';
+import { getWards, createWard } from '../controllers/wardController.js';
+import { getUlbs, createUlb } from '../controllers/ulbController.js';
+import { wipeData } from '../controllers/systemController.js';
 import { verifySupabaseToken } from '../middleware/authMiddleware.js';
 import { requirePermission } from '../middleware/rbacMiddleware.js';
 
