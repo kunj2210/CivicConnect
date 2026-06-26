@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllUsers, getStaff, getMyProfile, updateUserProfile, getLeaderboard, updateDeviceToken } from '../controllers/userController.js';
+import { getAllUsers, getStaff, getMyProfile, updateUserProfile, getLeaderboard, updateDeviceToken, createUser, resetUserPassword } from '../controllers/userController.js';
 import { verifySupabaseToken } from '../middleware/authMiddleware.js';
 import { requirePermission } from '../middleware/rbacMiddleware.js';
 
@@ -9,6 +9,8 @@ const router = Router();
 router.use(verifySupabaseToken);
 
 router.get('/', requirePermission('users:manage'), getAllUsers);
+router.post('/', requirePermission('users:manage'), createUser);
+router.post('/:id/reset-password', requirePermission('users:manage'), resetUserPassword);
 router.get('/me', getMyProfile);
 router.patch('/:id', updateUserProfile); // Self-check or users:manage checked inside controller
 router.get('/staff', requirePermission('report:assign'), getStaff);

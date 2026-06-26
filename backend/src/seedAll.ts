@@ -31,10 +31,21 @@ const seedDatabase = async () => {
         try {
             await sequelize.query(`ALTER TYPE "enum_users_role" ADD VALUE IF NOT EXISTS 'dept_head';`);
         } catch (e) {}
+        try {
+            await sequelize.query(`ALTER TYPE "enum_users_role" ADD VALUE IF NOT EXISTS 'mayor';`);
+        } catch (e) {}
+        try {
+            await sequelize.query(`ALTER TYPE "enum_users_role" ADD VALUE IF NOT EXISTS 'councilor';`);
+        } catch (e) {}
         
-        // 2. Sync Schema (Ensures tables exist before truncation)
-        await sequelize.sync();
-        console.log('✔ Database schema synchronized.');
+        // Drop incompatible foreign key constraint if it exists to allow 'SYSTEM' as actor_id string
+        try {
+            await sequelize.query('ALTER TABLE "audit_logs" DROP CONSTRAINT IF EXISTS "audit_logs_actor_id_fkey";');
+        } catch (e) {}
+
+        // 2. Sync Schema (Ensures tables exist and are up to date before truncation)
+        await sequelize.sync({ alter: true });
+        console.log('✔ Database schema synchronized (with alter).');
 
         // 3. Clear critical tables if they exist to prevent duplication
         await sequelize.query('TRUNCATE TABLE "users", "wards", "departments", "ulb_boundaries" CASCADE');

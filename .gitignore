@@ -43,4 +43,13 @@ backend/src/**/*.js.map
 backend/src/**/*.d.ts
 backend/src/**/*.d.ts.map
 
+# Python Virtual Environments & Caches
+venv/
+**/venv/
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+
 civicconnect-7c316-firebase-adminsdk-fbsvc-ef6ad24d2e.json

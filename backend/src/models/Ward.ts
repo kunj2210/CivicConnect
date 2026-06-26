@@ -5,6 +5,7 @@ export class Ward extends Model {
     declare id: string;
     declare boundary: any;
     declare dept_id: string;
+    declare ulb_id: number | null;
     declare name: string;
 }
 
@@ -23,6 +24,14 @@ Ward.init({
         allowNull: false,
         references: {
             model: 'departments',
+            key: 'id',
+        },
+    },
+    ulb_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'ulb_boundaries',
             key: 'id',
         },
     },

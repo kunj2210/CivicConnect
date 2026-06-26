@@ -16,6 +16,7 @@ import AIRetraining from './pages/AIRetraining';
 import AdminUsers from './pages/AdminUsers';
 import ExecutiveAnalytics from './pages/ExecutiveAnalytics';
 import AuditLogViewer from './pages/AuditLogViewer';
+import AdminJurisdictions from './pages/AdminJurisdictions';
 
 // Authority specific pages
 import AuthorityIssueList from './pages/AuthorityIssueList';
@@ -49,11 +50,45 @@ function App() {
             <Route path="issues/:id" element={<AdminIssueDetails />} />
             <Route path="map" element={<AdminMapView />} />
             <Route path="departments" element={<Departments />} />
+            <Route path="jurisdictions" element={<AdminJurisdictions />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="analytics" element={<ExecutiveAnalytics />} />
             <Route path="ai-retraining" element={<AIRetraining />} />
             <Route path="audit-logs" element={<AuditLogViewer />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+
+          {/* Mayor Routes */}
+          <Route
+            path="/mayor"
+            element={
+              <ProtectedRoute allowedRoles={['mayor']}>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="map" element={<AdminMapView />} />
+            <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="analytics" element={<ExecutiveAnalytics />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+
+          {/* Councilor Routes */}
+          <Route
+            path="/councilor"
+            element={
+              <ProtectedRoute allowedRoles={['councilor']}>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="map" element={<AdminMapView />} />
+            <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 
@@ -104,6 +139,7 @@ function App() {
             <Route path="dashboard" element={<CommissionerDashboard />} />
             <Route path="map" element={<AdminMapView />} />
             <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="jurisdictions" element={<AdminJurisdictions />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="analytics" element={<ExecutiveAnalytics />} />
             <Route path="settings" element={<AdminSettings />} />

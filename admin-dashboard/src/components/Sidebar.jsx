@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, FileText, Map, Users,
     Settings, LogOut, Trophy, BrainCircuit,
-    UserCog, ChevronRight, X, Sparkles, Shield
+    UserCog, ChevronRight, X, Sparkles, Shield, Layers
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logo from '../assets/logo.png';
@@ -21,6 +21,7 @@ const Sidebar = ({ darkMode, isOpen, setIsOpen }) => {
             { path: '/superadmin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
             { path: '/superadmin/map', label: 'Live Map', icon: Map },
             { path: '/superadmin/leaderboard', label: 'Leaderboard', icon: Trophy },
+            { path: '/superadmin/jurisdictions', label: 'Jurisdictions', icon: Layers },
             { path: '/superadmin/users', label: 'Users', icon: UserCog },
             { path: '/superadmin/analytics', label: 'Executive AI', icon: Sparkles },
             { path: '/admin/audit-logs', label: 'Audit Trail', icon: Shield },
@@ -35,9 +36,26 @@ const Sidebar = ({ darkMode, isOpen, setIsOpen }) => {
             { path: '/admin/analytics', label: 'Executive AI', icon: Sparkles },
             { path: '/admin/ai-retraining', label: 'AI Retraining', icon: BrainCircuit },
             { path: '/admin/departments', label: 'Departments', icon: Users },
+            { path: '/admin/jurisdictions', label: 'Jurisdictions', icon: Layers },
             { path: '/admin/users', label: 'Users', icon: UserCog },
             { path: '/admin/audit-logs', label: 'Audit Trail', icon: Shield },
             { path: '/admin/settings', label: 'Settings', icon: Settings },
+        ];
+    } else if (role === 'mayor') {
+        navItems = [
+            { path: '/mayor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { path: '/mayor/map', label: 'Live Map', icon: Map },
+            { path: '/mayor/leaderboard', label: 'Leaderboard', icon: Trophy },
+            { path: '/mayor/analytics', label: 'Executive AI', icon: Sparkles },
+            { path: '/admin/audit-logs', label: 'Audit Trail', icon: Shield },
+            { path: '/mayor/settings', label: 'Settings', icon: Settings },
+        ];
+    } else if (role === 'councilor') {
+        navItems = [
+            { path: '/councilor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { path: '/councilor/map', label: 'Live Map', icon: Map },
+            { path: '/councilor/leaderboard', label: 'Leaderboard', icon: Trophy },
+            { path: '/councilor/settings', label: 'Settings', icon: Settings },
         ];
     } else if (role === 'hq_staff') {
         navItems = [

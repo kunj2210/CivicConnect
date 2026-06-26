@@ -34,6 +34,10 @@ const Login = () => {
                 navigate('/superadmin/dashboard');
             } else if (userRole === 'admin' || userRole === 'hq_staff') {
                 navigate('/admin/dashboard');
+            } else if (userRole === 'mayor') {
+                navigate('/mayor/dashboard');
+            } else if (userRole === 'councilor') {
+                navigate('/councilor/dashboard');
             } else if (userRole === 'authority' || userRole === 'dept_head') {
                 navigate('/authority/dashboard');
             } else if (userRole === 'staff' || userRole === 'field_officer') {

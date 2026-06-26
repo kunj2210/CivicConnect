@@ -76,4 +76,13 @@ export class StorageService {
     static getBucketName(): string {
         return this.bucketName;
     }
+
+    static async getPresignedPutUrl(fileName: string): Promise<string> {
+        try {
+            return await minioClient.presignedPutObject(this.bucketName, fileName, 60 * 60);
+        } catch (error) {
+            console.error('MinIO Storage Service Presigned PUT URL Error:', error);
+            throw error;
+        }
+    }
 }

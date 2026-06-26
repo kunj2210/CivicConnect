@@ -9,6 +9,8 @@ export class User extends Model {
     declare ward_id: string | null;
     declare role: string;
     declare department_id: string | null;
+    declare ulb_id: number | null;
+    declare temp_password_cleartext: string | null;
     declare is_active: boolean;
     declare home_location: any;
     declare alert_radius_meters: number;
@@ -52,7 +54,7 @@ User.init({
         },
     },
     role: {
-        type: DataTypes.ENUM('citizen', 'staff', 'authority', 'admin', 'super_admin', 'hq_staff', 'viewer', 'field_officer', 'dept_head'),
+        type: DataTypes.ENUM('citizen', 'staff', 'authority', 'admin', 'super_admin', 'hq_staff', 'viewer', 'field_officer', 'dept_head', 'mayor', 'councilor'),
         defaultValue: 'citizen',
     },
     designation: {
@@ -66,6 +68,18 @@ User.init({
             model: 'departments',
             key: 'id',
         },
+    },
+    ulb_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'ulb_boundaries',
+            key: 'id',
+        },
+    },
+    temp_password_cleartext: {
+        type: DataTypes.STRING,
+        allowNull: true,
     },
     is_active: {
         type: DataTypes.BOOLEAN,

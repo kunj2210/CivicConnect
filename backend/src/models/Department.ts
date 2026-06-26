@@ -5,6 +5,7 @@ export class Department extends Model {
     declare id: string;
     declare name: string;
     declare contact_email: string;
+    declare ulb_id: number | null;
 }
 
 Department.init({
@@ -21,6 +22,14 @@ Department.init({
     contact_email: {
         type: DataTypes.STRING,
         allowNull: false,
+    },
+    ulb_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'ulb_boundaries',
+            key: 'id',
+        },
     },
 }, {
     sequelize,

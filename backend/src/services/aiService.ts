@@ -44,46 +44,47 @@ export class AIService {
      * Standardizes and translates multiple text inputs into a ranked JSON array using an Open Source LLM (via Groq/Ollama).
      */
     static async standardizeContent(userInput: string, audioTranscription: string): Promise<any[]> {
-        const prompt = `
-            You are a civic infrastructure expert for "Civic Connect". 
-            Analyze these two inputs from a citizen:
-            1. User Description: "${userInput}"
-            2. Voice Transcription: "${audioTranscription}"
+        const systemMsg = `You are a civic infrastructure expert for "Civic Connect".
+Your task is to classify citizen reports into the top 3 most likely categories.
 
-            PRIMARY CLASSIFICATION CLASSES (Choose only from these 14):
-            - construction_waste
-            - damaged_sidewalk
-            - damaged_sign
-            - dead_animal
-            - flooding_waterlogging
-            - garbage_overflow_west_container
-            - good_road
-            - illegal_construction
-            - illegal_parking
-            - open_manhole
-            - pothole_road_crack
-            - powerline_damage
-            - streetlight_damage
-            - traffic_light
+PRIMARY CLASSIFICATION CLASSES (Choose ONLY from this list):
+- construction_waste
+- damaged_sidewalk
+- damaged_sign
+- dead_animal
+- flooding_waterlogging
+- garbage_overflow_west_container
+- good_road
+- illegal_construction
+- illegal_parking
+- open_manhole
+- pothole_road_crack
+- powerline_damage
+- streetlight_damage
+- traffic_light
 
-            CONVINCING CONTEXT:
-            Citizens often use voice recording while walking or driving. Transcription errors are common.
-            - "Portal" or "Bottle" in the road usually means "pothole_road_crack".
-            - "Leak" or "Pipe" usually means "flooding_waterlogging" or "open_manhole".
-            - "Darkness" or "Bulb" usually means "streetlight_damage".
-            
-            Tasks:
-            1. Select the Top 3 most likely classes from the list above.
-            2. Return a JSON object with "predictions" containing these classes with confidence scores (must sum to 1.0).
-            
-            Format strictly as: {"predictions": [{"category": "class_name", "confidence": 0.XX}, ...]}
-        `;
+MAPPING GUIDES:
+- "Trash", "garbage", "waste", "rubbish", "piled up", "dump" -> "garbage_overflow_west_container" or "construction_waste"
+- "Portal", "Bottle", "pothole", "cracked road", "bump" -> "pothole_road_crack"
+- "Leak", "Pipe", "water logging", "overflowing water" -> "flooding_waterlogging" or "open_manhole"
+- "Darkness", "Bulb", "lamp", "street light out" -> "streetlight_damage"
+
+Return a JSON object containing "predictions", which is a list of the top 3 categories and confidence scores (must sum to 1.0).
+Format strictly as: {"predictions": [{"category": "class_name", "confidence": 0.XX}, ...]}`;
+
+        const userMsg = `Analyze these citizen inputs:
+1. User Description: "${userInput}"
+2. Voice Transcription: "${audioTranscription}"`;
 
         try {
             const response = await openai.chat.completions.create({
                 model: process.env.LLM_MODEL || 'llama-3.1-8b-instant',
-                messages: [{ role: 'user', content: prompt }],
-                response_format: { type: 'json_object' }
+                messages: [
+                    { role: 'system', content: systemMsg },
+                    { role: 'user', content: userMsg }
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0
             });
 
             const rawJson = response.choices?.[0]?.message?.content || '{}';

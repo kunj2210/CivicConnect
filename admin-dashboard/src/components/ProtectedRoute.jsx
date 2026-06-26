@@ -7,6 +7,8 @@ const getRoleHome = (role) => {
     if (r === 'super_admin') return '/superadmin/dashboard';
     if (r === 'admin') return '/admin/dashboard';
     if (r === 'hq_staff') return '/admin/dashboard';
+    if (r === 'mayor') return '/mayor/dashboard';
+    if (r === 'councilor') return '/councilor/dashboard';
     if (r === 'dept_head' || r === 'authority') return '/authority/dashboard';
     if (r === 'field_officer' || r === 'staff') return '/staff/dashboard';
     return '/login';

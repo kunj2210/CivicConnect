@@ -76,7 +76,8 @@ const AuthorityIssueList = () => {
                         : 'Location unavailable',
                     category: i.category,
                     status: i.status,
-                    date: (i.createdAt || i.timestamp || i.reported_at) ? new Date(i.createdAt || i.timestamp || i.reported_at).toLocaleDateString() : 'Unknown'
+                    date: (i.createdAt || i.timestamp || i.reported_at) ? new Date(i.createdAt || i.timestamp || i.reported_at).toLocaleDateString() : 'Unknown',
+                    fusion_final_category: i.fusion_final_category
                 })));
                 setLoading(false);
             })
@@ -216,13 +217,21 @@ const AuthorityIssueList = () => {
                                     <td className={`px-6 py-4 text-sm font-medium transition-colors ${darkMode ? 'text-gray-300 group-hover:text-blue-400' : 'text-gray-900 group-hover:text-blue-600'}`}>{issue.id.slice(0, 8)}...</td>
                                     {/* ... rest of the row ... */}
                                     <td className="px-6 py-4">
-                                        <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{issue.title}</p>
+                                        <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                            {issue.fusion_final_category === 'processing' ? 'Processing...' : issue.title}
+                                        </p>
                                         <p className={`text-xs truncate max-w-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{issue.description}</p>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`inline-block whitespace-nowrap text-sm font-medium px-3 py-1 rounded-full border ${darkMode ? 'bg-gray-700 text-gray-300 border-gray-600' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                                            {issue.category}
-                                        </span>
+                                        {issue.fusion_final_category === 'processing' ? (
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-black uppercase tracking-wider rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse">
+                                                <Zap className="w-3.5 h-3.5 animate-bounce" /> AI Classifying
+                                            </span>
+                                        ) : (
+                                            <span className={`inline-block whitespace-nowrap text-sm font-medium px-3 py-1 rounded-full border ${darkMode ? 'bg-gray-700 text-gray-300 border-gray-600' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                                                {issue.category}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
                                         <StatusDropdown

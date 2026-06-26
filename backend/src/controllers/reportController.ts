@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
+import axios from 'axios';
 import { Op } from 'sequelize';
-import { User, Issue, Repair, AIFeedback, sequelize } from '../config/db.js';
+import { User, Issue, Repair, AIFeedback, ProcessingJob, sequelize } from '../config/db.js';
 import { sendNotificationToUser, broadcastNotification } from '../services/notificationService.js';
 import { AIService } from '../services/aiService.js';
 import { SpatialService } from '../services/spatialService.js';
@@ -34,18 +35,25 @@ function obfuscateLocation(lon: number, lat: number) {
     return [lon + offsetLon, lat + offsetLat];
 }
 
-
-
-
+function getS3KeyFromUrl(url: string, bucketName: string): string {
+    if (!url) return '';
+    if (url.includes(bucketName)) {
+        const parts = url.split(`${bucketName}/`);
+        if (parts.length > 1 && parts[1]) {
+            return parts[1].split('?')[0] || '';
+        }
+    }
+    return url.split('?')[0] || '';
+}
 
 export const createReport = async (req: AuthRequest, res: Response) => {
-    console.log('--- Incoming AI-Enhanced Issue Request ---');
+    console.log('--- Incoming Async AI-Enhanced Issue Request ---');
     const files = req.files;
     const imageFile = files?.['image']?.[0] || req.file;
     const audioFile = files?.['audio']?.[0];
 
     try {
-        const { description, latitude, longitude } = req.body;
+        const { description, latitude, longitude, imageKey: bodyImageKey, audioKey: bodyAudioKey } = req.body;
         const userAuth = (req as any).user;
 
         if (!userAuth) return res.status(401).json({ error: 'User unauthorized' });
@@ -61,7 +69,6 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             });
         }
 
-
         // 2. Identify Ward
         console.log(`[DEBUG] Received Coordinates: Lon=${longitude}, Lat=${latitude}`);
         const ward_id = await findWardId(parseFloat(longitude), parseFloat(latitude));
@@ -76,187 +83,125 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             });
         }
 
-
-
-        // 3. Handle Media & AI Predictions
+        // 3. Resolve S3 Keys and URLs
+        let imageKey = bodyImageKey || '';
         let imageUrl = '';
-        let imageTop3 = [];
+        const bucketName = StorageService.getBucketName();
+
         if (imageFile) {
             imageUrl = await StorageService.uploadFile(imageFile, 'issues') || '';
-            try {
-                imageTop3 = await AIService.classifyImage(imageFile.buffer, imageFile.originalname);
-            } catch (aiError) {
-                console.error('Image Classification error:', aiError);
-            }
+            imageKey = getS3KeyFromUrl(imageUrl, bucketName);
+        } else if (imageKey) {
+            imageUrl = await StorageService.getPresignedUrl(imageKey);
         }
 
+        let audioKey = bodyAudioKey || '';
         let audioUrl = '';
-        let audioText = '';
         if (audioFile) {
             audioUrl = await StorageService.uploadFile(audioFile, 'audio') || '';
-            try {
-                audioText = await AIService.transcribeAudio(audioFile.buffer, audioFile.originalname);
-                console.log(`[AUDIO] Transcribed: "${audioText}"`);
-            } catch (transError) {
-                console.error('Audio Transcription error:', transError);
-            }
+            audioKey = getS3KeyFromUrl(audioUrl, bucketName);
+        } else if (audioKey) {
+            audioUrl = await StorageService.getPresignedUrl(audioKey);
         }
 
-        // 4. LLM Standardization & Voice Translation (Open Source Llama 3)
-        let textTop3: any[] = [];
-        if (description) {
-            try {
-                textTop3 = await AIService.standardizeContent(description, '');
-            } catch (textError) {
-                console.error('Text Standardization error:', textError);
-            }
-        }
+        // Generate short-lived presigned GET URLs for the AI classifier to access
+        const imageGetUrl = imageKey ? await StorageService.getPresignedUrl(imageKey) : '';
+        const audioGetUrl = audioKey ? await StorageService.getPresignedUrl(audioKey) : '';
 
-        let audioTop3: any[] = [];
-        if (audioText) {
-            try {
-                audioTop3 = await AIService.standardizeContent('', audioText);
-            } catch (audioError) {
-                console.error('Audio Standardization error:', audioError);
-            }
-        }
-
-        // 4.1 Execute Weighted Fusion Logic
-        const fusionResult = AIService.calculateAdvancedFusion(imageTop3, audioTop3, textTop3);
-
-        // 4.1.5 SPATIAL DEDUPLICATION (Pillar 2)
-        // Check if an issue of the same category exists within its dynamic radius
-        const duplicate = await SpatialService.findDuplicateIssue(
-            parseFloat(latitude),
-            parseFloat(longitude),
-            fusionResult.finalCategory
-        );
-
-        if (duplicate) {
-            console.log(`[DEDUPLICATION] Matched existing issue ${duplicate.id}. Merging...`);
-            await SpatialService.handleDuplicate(duplicate, user.id, imageUrl, audioUrl);
-
-            // Log as UPDATE
-            await AuditLog.create({
-                actor_id: user.id,
-                event_type: 'ISSUE_UPDATED_VIA_DEDUPLICATION',
-                payload: { issue_id: duplicate.id, new_reporter: user.id },
-            });
-
-            return res.status(200).json({
-                success: true,
-                issue_id: duplicate.id,
-                message: 'Duplicate detected. Your report has been merged with an existing case to expedite resolution.',
-                is_duplicate: true
-            });
-        }
-
-        // 4.1.8 Auto-Routing Triage (NEW)
-        const assignedDeptId = await TriageService.getDepartmentIdForCategory(fusionResult.finalCategory);
-        const assignedStaffId = await TriageService.findBestStaff(assignedDeptId, ward_id);
-
-        // 4.2 Dynamic Priority Calculation (FR 4)
-        const priorityScore = await PriorityService.calculatePriority(
-            user.id,
-            ward_id,
-            parseFloat(longitude),
-            parseFloat(latitude),
-            (fusionResult.fusionScore * 100) || 50, // Urgency derived from fusion confidence
-            imageFile ? 80 : 50,
-            fusionResult.needsHumanReview ? 'Uncertain' : 'Verified'
-        );
-
-        // 5. Create Issue with Multimodal Evidence
-        const rawClass = fusionResult.finalCategory;
-        const mappedCategory = AIService.getAppCategory(rawClass);
-
+        // 4. Create Issue (Pending AI classification)
         const issue = await Issue.create({
             reporter_id: user.id,
             ward_id: ward_id,
             location: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
-            category: mappedCategory, // User-friendly mapped category
+            category: 'Other', // Temporary category
             description: description || '',
-            priority_score: priorityScore,
+            priority_score: 0, // Will be computed by Edge function
             status: 'Pending',
-            minio_pre_key: imageUrl,
-            minio_audio_key: audioUrl,
+            minio_pre_key: imageUrl || null,
+            minio_audio_key: audioUrl || null,
             reporter_ids: [user.id],
             minio_image_urls: imageUrl ? [imageUrl] : [],
             minio_audio_urls: audioUrl ? [audioUrl] : [],
-            ai_image_top3: imageTop3,
-            ai_audio_top3: audioTop3,
-            ai_text_top3: textTop3,
-            audio_text: audioText,
-            fusion_final_category: rawClass, // Store raw AI class (e.g., construction_waste)
-            fusion_confidence_score: fusionResult.fusionScore,
-            needs_human_review: fusionResult.needsHumanReview,
-            assigned_department_id: assignedDeptId,
-            assigned_staff_id: assignedStaffId
+            ai_image_top3: [],
+            ai_audio_top3: [],
+            ai_text_top3: [],
+            audio_text: '',
+            fusion_final_category: 'processing', // Temporary marker
+            fusion_confidence_score: 0,
+            needs_human_review: false,
+            assigned_department_id: null,
+            assigned_staff_id: null
         });
 
+        // 5. Create Processing Job entry
+        const job = await ProcessingJob.create({
+            issue_id: issue.id,
+            image_s3_key: imageKey || null,
+            image_get_url: imageGetUrl || null,
+            audio_s3_key: audioKey || null,
+            audio_get_url: audioGetUrl || null,
+            description: description || null,
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            reporter_id: user.id,
+            ward_id: ward_id,
+            status: 'pending',
+            attempts: 0
+        });
 
-
-
-
-        // 6. Log
+        // Log the event
         AuditService.log({
             actor_id: user.id,
-            event_type: 'report.created',
+            event_type: 'report.created_async',
             target_resource: 'issue',
             target_resource_id: issue.id,
             new_value: { category: issue.category, status: issue.status, ward_id: issue.ward_id },
-            payload: { description: issue.description?.slice(0, 120) },
+            payload: { description: issue.description?.slice(0, 120), job_id: job.id },
         });
 
-        // 6.2 Check Gamification Milestones
-        const reportCount = await Issue.count({ where: { reporter_id: user.id } });
-        GamificationService.checkMilestones(user.id, reportCount, user.green_credits || 0);
+        // Trigger the Supabase Edge Function in the background
+        const triggerUrl = `${process.env.SUPABASE_URL}/functions/v1/classify-report`;
+        console.log(`[TRIGGER] Invoking Supabase Edge Function at: ${triggerUrl} for Job ID: ${job.id}`);
+        axios.post(triggerUrl, { job_id: job.id }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE}`
+            }
+        }).catch((err: any) => {
+            console.error('[TRIGGER] Supabase Edge Function invocation failed:', err.message);
+        });
 
-
-        // 5.5 Trigger Proactive Neighborhood Alerts (Pillar 5)
-        // This is non-blocking to ensure fast response to the reporter
-        GeoIntelligenceService.notifyNearbyCitizens(
-            issue.id,
-            issue.category,
-            parseFloat(latitude),
-            parseFloat(longitude),
-            user.id
-        ).catch((err: any) => console.error('[GeoIntelligence] Proactive Alert Failed:', err));
-        
-        // 5.6 Notify Assigned Staff (NEW)
-        if (assignedStaffId) {
-            sendNotificationToUser(
-                assignedStaffId,
-                'New Task Assigned',
-                `You have been assigned a new ${issue.category} report in ${issue.ward_id || 'your ward'}.`,
-                { issue_id: issue.id, type: 'TASK_ASSIGNED' }
-            ).catch((err: any) => console.error('[Triage] Staff Notification Failed:', err));
-        }
-
-
-        const priorityLevel = issue.priority_score > 70 ? 'High' : (issue.priority_score > 40 ? 'Medium' : 'Low');
-        const confidence = (issue.fusion_confidence_score! * 100).toFixed(0);
-
-        await sendNotificationToUser(
-            user.id,
-            `Issue Verified: ${issue.category}`,
-            `AI verified your report with ${confidence}% confidence. Priority set to ${priorityLevel}.`,
-            { issue_id: issue.id }
-        );
-
-
-        // 6. Trigger RAG Embedding (Background)
-        RAGService.updateIssueEmbedding(issue.id).catch((err: any) => console.error('[RAG] Async update failed:', err));
-
-        res.status(201).json({
+        return res.status(201).json({
             success: true,
             issue_id: issue.id,
-            ai_summary: `AI Analysis complete: Verified as ${issue.fusion_final_category} (${(issue.fusion_confidence_score! * 100).toFixed(1)}% confidence).`
+            job_id: job.id
         });
 
     } catch (error: any) {
-        console.error('CRITICAL ERROR in createIssue:', error);
+        console.error('CRITICAL ERROR in createReport (async):', error);
         res.status(500).json({ error: error.message });
+    }
+};
+
+export const getJobStatus = async (req: Request, res: Response): Promise<any> => {
+    try {
+        const { job_id } = req.params;
+        if (typeof job_id !== 'string') {
+            return res.status(400).json({ error: 'Invalid Job ID' });
+        }
+        const job = await ProcessingJob.findByPk(job_id);
+        if (!job) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+        return res.json({
+            status: job.status,
+            issue_id: job.issue_id,
+            result: job.result,
+            error: job.error
+        });
+    } catch (error: any) {
+        console.error('Error fetching job status:', error);
+        return res.status(500).json({ error: 'Failed to get job status' });
     }
 };
 
@@ -269,7 +214,18 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
 
         // Server-Side RBAC Filtering
         const permissions: string[] = user?.permissions || [];
-        if (permissions.includes('report:view_all')) {
+        const cityScopedRoles = ['admin', 'mayor'];
+
+        if (cityScopedRoles.includes(userRole) && user?.ulb_id) {
+            const { Ward } = await import('../config/db.js');
+            const cityWards = await Ward.findAll({ where: { ulb_id: user.ulb_id }, attributes: ['id'] });
+            const cityWardIds = cityWards.map((w: any) => w.id);
+            whereClause.ward_id = { [Op.in]: cityWardIds };
+            if (ward_id && cityWardIds.includes(ward_id as string)) {
+                whereClause.ward_id = ward_id;
+            }
+            if (assigned_staff_id) whereClause.assigned_staff_id = assigned_staff_id;
+        } else if (permissions.includes('report:view_all')) {
             if (ward_id) whereClause.ward_id = ward_id;
             if (assigned_staff_id) whereClause.assigned_staff_id = assigned_staff_id;
             if (userRole === 'field_officer' || userRole === 'staff') {
@@ -348,10 +304,15 @@ export const getReportStats = async (req: AuthRequest, res: Response) => {
 
         // RBAC: Citizens only see their own stats, others see global/departmental
         const permissions: string[] = user?.permissions || [];
-        if (permissions.includes('report:view_all')) {
+        if (permissions.includes('report:view_all') || ['admin', 'mayor'].includes(userRole)) {
             const dbUser = await User.findByPk(user?.id);
             if (dbUser) {
-                if (userRole === 'field_officer' || userRole === 'staff') {
+                const cityScopedRoles = ['admin', 'mayor'];
+                if (cityScopedRoles.includes(userRole) && dbUser.ulb_id) {
+                    const { Ward } = await import('../config/db.js');
+                    const cityWards = await Ward.findAll({ where: { ulb_id: dbUser.ulb_id }, attributes: ['id'] });
+                    where.ward_id = { [Op.in]: cityWards.map((w: any) => w.id) };
+                } else if (userRole === 'field_officer' || userRole === 'staff') {
                     where = { assigned_staff_id: user?.id };
                 } else if (userRole === 'dept_head' || userRole === 'authority') {
                     if (dbUser.ward_id) where.ward_id = dbUser.ward_id;
@@ -1012,11 +973,27 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
 export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const { status } = req.query;
-        const userRole = req.user?.role || 'citizen'; // Assuming req.user is populated by auth middleware
+        const user = req.user;
+        const userRole = (user?.role || 'citizen').toLowerCase();
 
         let whereClause: any = {};
         if (status) {
             whereClause.status = status;
+        }
+
+        // Apply scoping for City Admin, Mayor, and Councilor
+        const cityScopedRoles = ['admin', 'mayor'];
+        if (cityScopedRoles.includes(userRole) && user?.ulb_id) {
+            const { Ward } = await import('../config/db.js');
+            const cityWards = await Ward.findAll({ where: { ulb_id: user.ulb_id }, attributes: ['id'] });
+            whereClause.ward_id = { [Op.in]: cityWards.map((w: any) => w.id) };
+        } else if (userRole === 'field_officer' || userRole === 'staff') {
+            whereClause.assigned_staff_id = user?.id;
+        } else if (userRole === 'dept_head' || userRole === 'authority') {
+            if (user?.ward_id) whereClause.ward_id = user.ward_id;
+            if (user?.department_id) whereClause.assigned_department_id = user.department_id;
+        } else if (userRole === 'councilor' && user?.ward_id) {
+            whereClause.ward_id = user.ward_id;
         }
 
         // Fetch raw issue data

@@ -17,6 +17,8 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
+import systemRoutes from './routes/systemRoutes.js';
 
 
 dotenv.config();
@@ -40,6 +42,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/system', systemRoutes);
 
 
 app.get('/health', (req: Request, res: Response) => {
