@@ -39,10 +39,6 @@ Ward.init({
     zone_id: {
         type: DataTypes.UUID,
         allowNull: true,
-        references: {
-            model: 'zones',
-            key: 'id',
-        },
     },
     name: {
         type: DataTypes.STRING,

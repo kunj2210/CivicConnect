@@ -36,18 +36,10 @@ Department.init({
     zone_id: {
         type: DataTypes.UUID,
         allowNull: true,
-        references: {
-            model: 'zones',
-            key: 'id',
-        },
     },
     ward_id: {
         type: DataTypes.UUID,
         allowNull: true,
-        references: {
-            model: 'wards',
-            key: 'id',
-        },
     },
 }, {
     sequelize,
