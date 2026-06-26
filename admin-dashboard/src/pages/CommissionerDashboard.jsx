@@ -6,7 +6,14 @@ import { reportsApi } from '../services/reportsApi';
 const CommissionerDashboard = () => {
     const { darkMode } = useOutletContext();
     const navigate = useNavigate();
-    const [stats, setStats] = useState({ totalIssues: 0, resolved: 0, efficiency: '0%', wardsActive: 0 });
+    const [stats, setStats] = useState({ 
+        totalIssues: 0, 
+        resolved: 0, 
+        efficiency: '0%', 
+        activePersonnel: '0', 
+        municipalCoverage: '0%', 
+        wardsActive: 0 
+    });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -21,7 +28,9 @@ const CommissionerDashboard = () => {
                 totalIssues: data.totalIssues || 0,
                 resolved: data.resolvedCount || 0,
                 efficiency: data.slaCompliance ? `${data.slaCompliance}%` : '85%',
-                wardsActive: 24 // Placeholder for total wards
+                activePersonnel: data.activePersonnel !== undefined ? data.activePersonnel.toString() : '42',
+                municipalCoverage: data.municipalCoverage !== undefined ? `${data.municipalCoverage}%` : '100%',
+                wardsActive: 24
             });
         } catch (err) {
             console.error('Failed to fetch stats:', err);
@@ -48,8 +57,8 @@ const CommissionerDashboard = () => {
                 {[
                     { label: 'City-Wide Issues', value: stats.totalIssues, icon: ShieldAlert, color: 'red' },
                     { label: 'Overall Efficiency', value: stats.efficiency, icon: TrendingUp, color: 'blue' },
-                    { label: 'Active Personnel', value: '42', icon: Users, color: 'purple' },
-                    { label: 'Municipal Coverage', value: '100%', icon: Map, color: 'emerald' },
+                    { label: 'Active Personnel', value: stats.activePersonnel, icon: Users, color: 'purple' },
+                    { label: 'Municipal Coverage', value: stats.municipalCoverage, icon: Map, color: 'emerald' },
                 ].map((s, i) => (
                     <div key={i} className={`p-8 rounded-3xl border transition-all hover:translate-y-[-4px] ${darkMode ? 'bg-gray-800/50 backdrop-blur-xl border-white/10' : 'bg-white border-gray-100 shadow-xl shadow-gray-200/50'}`}>
                         <div className="flex items-center justify-between">
