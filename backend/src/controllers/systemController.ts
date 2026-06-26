@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { User, Department, Ward, Issue, Repair, AuditLog, Notification, AIFeedback, UserDevice, UserRole, UlbBoundary, sequelize } from '../config/db.js';
+import { User, Department, Ward, Issue, Repair, AuditLog, Notification, AIFeedback, UserDevice, UserRole, UlbBoundary, ProcessingJob, sequelize } from '../config/db.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { Op } from 'sequelize';
 

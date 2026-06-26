@@ -100,12 +100,36 @@ const SettingsSection = ({
         case 'danger':
             return (
                 <div className="space-y-6">
+                    {/* Wiping Full-Screen Overlay */}
+                    {wiping && (
+                        <div className="fixed inset-0 z-[999] bg-black/70 backdrop-blur-md flex flex-col items-center justify-center gap-6">
+                            <div className="relative flex items-center justify-center">
+                                <div className="w-20 h-20 rounded-full border-4 border-rose-500/20 border-t-rose-500 animate-spin" />
+                                <div className="absolute w-12 h-12 rounded-full border-4 border-rose-400/20 border-t-rose-400 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.6s' }} />
+                            </div>
+                            <div className="text-center space-y-2">
+                                <h3 className="text-white text-xl font-black tracking-tight">Wiping System Data</h3>
+                                <p className="text-rose-300 text-sm font-medium">Deleting all records, wards, departments and non-admin users…</p>
+                                <p className="text-gray-500 text-xs">Do not close this window.</p>
+                            </div>
+                            <div className="flex gap-1.5 mt-2">
+                                {[0, 1, 2, 3, 4].map(i => (
+                                    <div
+                                        key={i}
+                                        className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-bounce"
+                                        style={{ animationDelay: `${i * 0.1}s` }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-4 animate-pulse">
                         <AlertTriangle className="text-rose-500 shrink-0 mt-1" />
                         <div>
                             <h4 className="font-bold text-rose-500">Irreversible Administration Event</h4>
                             <p className="text-xs text-rose-400 mt-1">
-                                Wiping out system data will delete **all** issues, repairs, notifications, departments, wards, cities (ULBs), and all non-admin user accounts. 
+                                Wiping out system data will delete <strong>all</strong> issues, repairs, notifications, departments, wards, cities (ULBs), and all non-admin user accounts.
                                 Once executed, the platform will require re-configuring city boundaries and departments from scratch.
                             </p>
                         </div>
@@ -118,8 +142,9 @@ const SettingsSection = ({
                                 type="text"
                                 value={wipeConfirm}
                                 onChange={(e) => setWipeConfirm(e.target.value)}
+                                disabled={wiping}
                                 placeholder="Type 'WIPE ALL DATA'"
-                                className={`w-full p-4 rounded-xl border-none ring-1 ring-rose-500/30 outline-none focus:ring-2 focus:ring-rose-500 font-bold ${darkMode ? 'bg-gray-700/50 text-white' : 'bg-rose-50 text-gray-900'}`}
+                                className={`w-full p-4 rounded-xl border-none ring-1 ring-rose-500/30 outline-none focus:ring-2 focus:ring-rose-500 font-bold transition-opacity ${wiping ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'bg-gray-700/50 text-white' : 'bg-rose-50 text-gray-900'}`}
                             />
                         </div>
                         <button
@@ -127,13 +152,24 @@ const SettingsSection = ({
                             disabled={wipeConfirm !== 'WIPE ALL DATA' || wiping}
                             onClick={onWipe}
                             className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all ${
-                                wipeConfirm === 'WIPE ALL DATA' 
-                                    ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xl shadow-rose-500/20' 
-                                    : 'bg-gray-500/20 text-gray-500 cursor-not-allowed'
+                                wiping
+                                    ? 'bg-rose-900/50 text-rose-300 cursor-not-allowed'
+                                    : wipeConfirm === 'WIPE ALL DATA'
+                                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xl shadow-rose-500/20 active:scale-95'
+                                        : 'bg-gray-500/20 text-gray-500 cursor-not-allowed'
                             }`}
                         >
-                            <Trash2 size={16} />
-                            {wiping ? 'Executing Wipe...' : 'Wipe Out System Data'}
+                            {wiping ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-rose-300/40 border-t-rose-300 rounded-full animate-spin" />
+                                    Wiping System…
+                                </>
+                            ) : (
+                                <>
+                                    <Trash2 size={16} />
+                                    Wipe Out System Data
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>

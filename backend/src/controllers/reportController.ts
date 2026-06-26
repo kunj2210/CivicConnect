@@ -1007,18 +1007,27 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
             raw: true, // Get raw data to easily manipulate
         });
 
+        // Filter out issues with no location data to prevent JSON.parse crash
+        const issuesWithLocation = issues.filter((issue: any) => !!issue.location_geojson);
+
         // Transform to GeoJSON and obfuscate if sensitive
-        const features = issues.map((issue: any) => {
-            let geometry = JSON.parse(issue.location_geojson);
-            let coords = geometry.coordinates;
+        const features = issuesWithLocation.map((issue: any) => {
+            let geometry: any;
+            try {
+                geometry = JSON.parse(issue.location_geojson);
+            } catch {
+                return null; // Skip malformed geometry
+            }
+            const coords = geometry?.coordinates;
+            if (!coords) return null;
 
             // Apply privacy obfuscation for sensitive categories in public view
             const isSensitive = SENSITIVE_CATEGORIES.includes(issue.category);
             const isPrivileged = ['admin', 'super_admin', 'dept_head', 'field_officer', 'hq_staff', 'authority', 'staff'].includes(userRole.toLowerCase());
 
             if (isSensitive && !isPrivileged) {
-                coords = obfuscateLocation(coords[0], coords[1]);
-                geometry.coordinates = coords;
+                const obfuscated = obfuscateLocation(coords[0], coords[1]);
+                geometry.coordinates = obfuscated;
             }
 
             // Remove the raw geojson string and add the processed geometry
@@ -1030,7 +1039,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
                 geometry: geometry,
                 properties: properties
             };
-        });
+        }).filter(Boolean); // Remove any null entries from parse failures
 
         const geojson = {
             type: 'FeatureCollection',
@@ -1039,6 +1048,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
 
         res.json(geojson);
     } catch (error: any) {
+        console.error('[GeoJSON] Error building GeoJSON response:', error.message);
         res.status(500).json({ error: error.message });
     }
 };
