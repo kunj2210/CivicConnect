@@ -154,7 +154,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
         const issues = await Issue.findAll({
             where: whereClause,
             attributes: [
-                'id', 'category', 'status', 'priority_score', 'description', 'image_url',
+                'id', 'category', 'status', 'priority_score', 'description', 'minio_pre_key',
                 'reporter_id', 'assigned_staff_id', 'createdAt', 'updatedAt',
                 [sequelize.fn('ST_AsGeoJSON', sequelize.col('location')), 'location_geojson']
             ],

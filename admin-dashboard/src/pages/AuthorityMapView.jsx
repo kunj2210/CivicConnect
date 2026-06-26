@@ -20,18 +20,37 @@ const ChangeView = ({ center }) => {
     return null;
 };
 
+const getUserIcon = (darkMode) => {
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36">
+            <circle cx="12" cy="12" r="8" fill="#3B82F6" stroke="white" stroke-width="2"/>
+            <circle cx="12" cy="12" r="12" fill="#3B82F6" opacity="0.3"/>
+        </svg>
+    `;
+    return L.divIcon({
+        html: svg,
+        className: 'user-marker',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18]
+    });
+};
+
 const AuthorityMapView = () => {
     const { darkMode } = useOutletContext();
     const navigate = useNavigate();
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
     const [center, setCenter] = useState([22.5540, 72.9299]);
+    const [userLocation, setUserLocation] = useState(null);
 
     useEffect(() => {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    setCenter([position.coords.latitude, position.coords.longitude]);
+                    const latLng = [position.coords.latitude, position.coords.longitude];
+                    setCenter(latLng);
+                    setUserLocation(latLng);
                 },
                 (error) => {
                     console.warn("Geolocation lookup failed:", error);
@@ -100,6 +119,18 @@ const AuthorityMapView = () => {
                             </Marker>
                         );
                     })}
+                    {userLocation && (
+                        <Marker
+                            position={userLocation}
+                            icon={getUserIcon(darkMode)}
+                        >
+                            <Popup>
+                                <div className="p-1 font-bold text-center text-xs text-gray-900">
+                                    Your Current Location
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )}
                 </MapContainer>
             </div>
         </div>
