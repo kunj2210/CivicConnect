@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
-import { api } from '../utils/api';
+import { usersApi } from '../services/usersApi';
 
 const AuthContext = createContext();
 
@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
             const session = data?.session;
             if (session) {
                 // Fetch profile and determine role
-                api.get('/users/me')
+                usersApi.getMe()
                     .then(profile => {
                         setUser({
                             ...session.user,
@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }) => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session) {
                 setLoading(true); // Ensure app knows a profile is loading
-                api.get('/users/me')
+                usersApi.getMe()
                     .then(profile => {
                         setUser({
                             ...session.user,
@@ -119,6 +119,28 @@ export const AuthProvider = ({ children }) => {
         return data;
     };
 
+    const linkPhone = async (phone) => {
+        const { data, error } = await supabase.auth.updateUser({
+            phone,
+        });
+        if (error) {
+            throw error;
+        }
+        return data;
+    };
+
+    const verifyLinkedPhone = async (phone, token) => {
+        const { data, error } = await supabase.auth.verifyOtp({
+            phone,
+            token,
+            type: 'phone_change',
+        });
+        if (error) {
+            throw error;
+        }
+        return data;
+    };
+
     const logout = async () => {
         await supabase.auth.signOut();
         setUser(null);
@@ -134,7 +156,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading: loading || initialLoading, signInWithPhone, verifyPhoneOtp, updateUser, determineRole, can }}>
+        <AuthContext.Provider value={{ user, login, logout, loading: loading || initialLoading, signInWithPhone, verifyPhoneOtp, linkPhone, verifyLinkedPhone, updateUser, determineRole, can }}>
             {initialLoading ? (
                 <div className="flex h-screen w-screen items-center justify-center bg-gray-900">
                     <div className="text-center">

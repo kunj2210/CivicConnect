@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { api } from '../utils/api';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { reportsApi } from '../services/reportsApi';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useOutletContext, useNavigate } from 'react-router-dom';
@@ -46,12 +46,39 @@ const getIcon = (issue, colorMode, darkMode) => {
     });
 };
 
+const getUserIcon = (darkMode) => {
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36">
+            <circle cx="12" cy="12" r="8" fill="#3B82F6" stroke="white" stroke-width="2"/>
+            <circle cx="12" cy="12" r="12" fill="#3B82F6" opacity="0.3"/>
+        </svg>
+    `;
+    return L.divIcon({
+        html: svg,
+        className: 'user-marker',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18]
+    });
+};
+
+const ChangeView = ({ center }) => {
+    const map = useMap();
+    useEffect(() => {
+        if (center) {
+            map.setView(center, map.getZoom());
+        }
+    }, [center, map]);
+    return null;
+};
+
 const AdminMapView = () => {
     const { darkMode } = useOutletContext();
     const navigate = useNavigate();
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
     const [center, setCenter] = useState([22.5540, 72.9299]);
+    const [userLocation, setUserLocation] = useState(null);
     const [statusFilter, setStatusFilter] = useState('All');
     const [jurisdictionFilter, setJurisdictionFilter] = useState('All');
     const [colorMode, setColorMode] = useState('Status');
@@ -60,12 +87,30 @@ const AdminMapView = () => {
     const jurisdictions = ['All', ...new Set(issues.filter(f => f.properties?.metadata?.jurisdiction).map(f => f.properties.metadata.jurisdiction))];
 
     useEffect(() => {
-        api.get('/reports/geojson')
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const latLng = [position.coords.latitude, position.coords.longitude];
+                    setCenter(latLng);
+                    setUserLocation(latLng);
+                },
+                (error) => {
+                    console.warn("Geolocation lookup failed:", error);
+                }
+            );
+        }
+
+        reportsApi.getGeoJSON()
             .then(data => {
                 if (data && data.type === 'FeatureCollection') {
                     setIssues(data.features);
                     if (data.features.length > 0 && data.features[0].geometry) {
-                        setCenter([data.features[0].geometry.coordinates[1], data.features[0].geometry.coordinates[0]]);
+                        setCenter(prevCenter => {
+                            if (prevCenter[0] === 22.5540 && prevCenter[1] === 72.9299) {
+                                return [data.features[0].geometry.coordinates[1], data.features[0].geometry.coordinates[0]];
+                            }
+                            return prevCenter;
+                        });
                     }
                 } else {
                     setIssues([]);
@@ -119,6 +164,7 @@ const AdminMapView = () => {
 
             <div className={`flex-1 overflow-hidden border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
                 <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
+                    <ChangeView center={center} />
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     {issues.map((feature) => {
                         if (!feature.geometry || !feature.properties) return null;
@@ -164,6 +210,18 @@ const AdminMapView = () => {
                             </Marker>
                         );
                     })}
+                    {userLocation && (
+                        <Marker
+                            position={userLocation}
+                            icon={getUserIcon(darkMode)}
+                        >
+                            <Popup>
+                                <div className="p-1 font-bold text-center text-xs text-gray-900">
+                                    Your Current Location
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )}
                 </MapContainer>
             </div>
         </div>

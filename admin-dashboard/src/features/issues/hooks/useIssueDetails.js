@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../utils/api';
+import { reportsApi } from '../../../services/reportsApi';
+import { departmentsApi } from '../../../services/departmentsApi';
+import { usersApi } from '../../../services/usersApi';
 import { supabase } from '../../../config/supabase';
 
 export const useIssueDetails = (id, onDeleted) => {
@@ -38,7 +40,7 @@ export const useIssueDetails = (id, onDeleted) => {
 
     const fetchDepartments = async () => {
         try {
-            const data = await api.get('/departments');
+            const data = await departmentsApi.getAll();
             setDepartments(data);
         } catch (err) {
             console.error('Failed to fetch departments:', err);
@@ -47,7 +49,7 @@ export const useIssueDetails = (id, onDeleted) => {
 
     const fetchAuditLogs = async () => {
         try {
-            const data = await api.get(`/reports/${id}/audit`);
+            const data = await reportsApi.getAudit(id);
             setAuditLogs(data);
         } catch (err) {
             console.error('Failed to fetch audit logs:', err);
@@ -57,7 +59,7 @@ export const useIssueDetails = (id, onDeleted) => {
     const fetchStaff = async (wardId, deptId) => {
         setLoadingStaff(true);
         try {
-            const data = await api.get(`/users?ward_id=${wardId}&department_id=${deptId}&role=staff`);
+            const data = await usersApi.getAll({ ward_id: wardId, department_id: deptId, role: 'staff' });
             setStaffMembers(data);
         } catch (err) {
             console.error('Failed to fetch staff:', err);
@@ -70,7 +72,7 @@ export const useIssueDetails = (id, onDeleted) => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                const profile = await api.get('/users/me');
+                const profile = await usersApi.getMe();
                 setCurrentUser(profile);
             }
         } catch (err) {
@@ -80,7 +82,7 @@ export const useIssueDetails = (id, onDeleted) => {
 
     const fetchRepairData = async () => {
         try {
-            const logs = await api.get(`/reports/${id}/audit`);
+            const logs = await reportsApi.getAudit(id);
             const resolutionLog = logs.find(log => log.event_type === 'RESOLUTION_SUBMITTED');
             if (resolutionLog) {
                 setRepairData(resolutionLog.payload);
@@ -93,7 +95,7 @@ export const useIssueDetails = (id, onDeleted) => {
     const fetchReport = async () => {
         try {
             setLoading(true);
-            const data = await api.get(`/reports/${id}`);
+            const data = await reportsApi.getById(id);
             if (data.status === 'Submitted' || !data.status) data.status = 'Pending';
             setReport(data);
             setRemarks(data.remarks || '');
@@ -106,7 +108,7 @@ export const useIssueDetails = (id, onDeleted) => {
 
     const handleUpdateStatus = async (newStatus) => {
         try {
-            await api.patch(`/reports/${id}`, { status: newStatus, remarks });
+            await reportsApi.update(id, { status: newStatus, remarks });
             fetchReport();
         } catch (err) {
             alert('Update failed: ' + err.message);
@@ -116,7 +118,7 @@ export const useIssueDetails = (id, onDeleted) => {
     const handleReassign = async (deptId) => {
         try {
             setUpdatingDeps(true);
-            await api.patch(`/reports/${id}`, { assigned_department_id: deptId ? parseInt(deptId) : null });
+            await reportsApi.update(id, { assigned_department_id: deptId ? parseInt(deptId) : null });
             fetchReport();
         } catch (err) {
             alert('Reassignment failed: ' + err.message);
@@ -128,7 +130,7 @@ export const useIssueDetails = (id, onDeleted) => {
     const handleAssignStaff = async (staffId) => {
         try {
             setLoadingStaff(true);
-            await api.patch(`/reports/${id}`, { assigned_staff_id: staffId || null });
+            await reportsApi.update(id, { assigned_staff_id: staffId || null });
             fetchReport();
         } catch (err) {
             alert('Staff assignment failed: ' + err.message);
@@ -141,7 +143,7 @@ export const useIssueDetails = (id, onDeleted) => {
         if (!window.confirm(`Are you sure you want to change this category to ${newCategory}? This will train the AI.`)) return;
         try {
             setUpdatingCategory(true);
-            await api.patch(`/reports/${id}`, { category: newCategory });
+            await reportsApi.update(id, { category: newCategory });
             fetchReport();
         } catch (err) {
             alert('Category update failed: ' + err.message);
@@ -153,11 +155,11 @@ export const useIssueDetails = (id, onDeleted) => {
     const handleStatusAction = async (action) => {
         try {
             if (action === 'start_work') {
-                await api.patch(`/reports/${id}`, { status: 'In Progress' });
+                await reportsApi.update(id, { status: 'In Progress' });
             } else if (action === 'approve') {
-                await api.post(`/reports/${id}/confirm-resolution`);
+                await reportsApi.confirmResolution(id);
             } else if (action === 'reject') {
-                await api.post(`/reports/${id}/reject-resolution`, { reason: rejectionReason });
+                await reportsApi.rejectResolution(id, { reason: rejectionReason });
                 setIsRejecting(false);
             }
             fetchReport();
@@ -176,7 +178,7 @@ export const useIssueDetails = (id, onDeleted) => {
             const formData = new FormData();
             formData.append('image', proofFile);
             
-            await api.post(`/reports/${id}/propose-resolution`, formData);
+            await reportsApi.proposeResolution(id, formData);
             
             setProofFile(null);
             setIsSubmittingProof(false);
@@ -191,7 +193,7 @@ export const useIssueDetails = (id, onDeleted) => {
     const handleDelete = async () => {
         if (!window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) return;
         try {
-            await api.delete(`/reports/${id}`);
+            await reportsApi.delete(id);
             if (onDeleted) onDeleted();
         } catch (err) {
             alert('Delete failed: ' + err.message);

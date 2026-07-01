@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { api } from '../../../utils/api';
+import { usersApi } from '../../../services/usersApi';
+import { adminApi } from '../../../services/adminApi';
 
 export const useAdminSettings = () => {
-    const { user, updateUser, logout } = useAuth();
+    const { user, updateUser, logout, linkPhone, verifyLinkedPhone } = useAuth();
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [activeSection, setActiveSection] = useState('profile');
@@ -11,8 +12,44 @@ export const useAdminSettings = () => {
     const [profile, setProfile] = useState({
         name: user?.name || 'Administrator',
         email: user?.email || 'admin@civicconnect.gov',
+        phone: user?.phone || '',
         role: user?.role || 'Administrator',
     });
+
+    const [otpSent, setOtpSent] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [verificationError, setVerificationError] = useState('');
+
+    const handleSendPhoneOtp = async (newPhone) => {
+        setVerificationError('');
+        setSaving(true);
+        try {
+            await linkPhone(newPhone);
+            setOtpSent(true);
+        } catch (err) {
+            setVerificationError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleVerifyPhoneOtp = async (newPhone, token) => {
+        setVerificationError('');
+        setIsVerifying(true);
+        try {
+            await verifyLinkedPhone(newPhone, token);
+            updateUser({ phone: newPhone });
+            setProfile(prev => ({ ...prev, phone: newPhone }));
+            setOtpSent(false);
+            setOtpCode('');
+            alert('Phone number verified successfully!');
+        } catch (err) {
+            setVerificationError(err.message);
+        } finally {
+            setIsVerifying(false);
+        }
+    };
 
     const [notifications, setNotifications] = useState({
         systemAlerts: true,
@@ -44,7 +81,7 @@ export const useAdminSettings = () => {
         setSaving(true);
         try {
             if (activeSection === 'profile') {
-                const updatedUserData = await api.patch(`/auth/update-profile/${user.id}`, {
+                const updatedUserData = await usersApi.updateProfile(user.id, {
                     name: profile.name
                 });
                 updateUser(updatedUserData);
@@ -54,7 +91,7 @@ export const useAdminSettings = () => {
                     setSaving(false);
                     return;
                 }
-                await api.post('/auth/change-password', {
+                await usersApi.changePassword({
                     currentPassword: security.currentPassword,
                     newPassword: security.newPassword
                 });
@@ -76,7 +113,7 @@ export const useAdminSettings = () => {
         
         try {
             setWiping(true);
-            await api.post('/system/wipe-data');
+            await adminApi.wipeData();
             alert('System wiped successfully! Logging you out to reset administrative session.');
             logout();
         } catch (err) {
@@ -105,6 +142,14 @@ export const useAdminSettings = () => {
         activeSection,
         setActiveSection,
         handleSave,
-        handleWipeData
+        handleWipeData,
+        otpSent,
+        setOtpSent,
+        otpCode,
+        setOtpCode,
+        isVerifying,
+        verificationError,
+        handleSendPhoneOtp,
+        handleVerifyPhoneOtp,
     };
 };

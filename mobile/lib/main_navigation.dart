@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'shared/providers/navigation_provider.dart';
+import 'shared/utils/verification_helper.dart';
 import 'modules/reports/screens/dashboard_screen.dart';
 import 'modules/reports/screens/history_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -84,7 +85,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   const SizedBox(height: 20),
                   FloatingActionButton(
                     mini: true,
-                    onPressed: () => Navigator.pushNamed(context, '/report'),
+                    onPressed: () {
+                      if (VerificationHelper.checkVerification(context, action: 'report issues')) {
+                        Navigator.pushNamed(context, '/report');
+                      }
+                    },
                     backgroundColor: theme.colorScheme.secondary,
                     child: const Icon(Icons.add, color: Colors.white),
                   ),
@@ -122,7 +127,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             )
           : null,
       floatingActionButton: isDesktop ? null : FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/report'),
+        onPressed: () {
+          if (VerificationHelper.checkVerification(context, action: 'report issues')) {
+            Navigator.pushNamed(context, '/report');
+          }
+        },
         backgroundColor: theme.colorScheme.secondary,
         child: const Icon(Icons.add, color: Colors.white, size: 30),
       ),

@@ -1,6 +1,6 @@
-import { User, Department, Ward, Role, UserRole } from './config/db.js';
+import { User, Department, Ward, Role, UserRole } from '../config/db.js';
 import dotenv from 'dotenv';
-import { supabaseAdmin } from './config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 
 dotenv.config();
 
@@ -194,7 +194,7 @@ export const seedUsers = async () => {
                 console.log(`User ${userData.email} already exists in Supabase Auth. Fetching ID...`);
                 // Using search to be more efficient than listing all
                 const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers();
-                authId = existingUser.users.find(u => u.email === userData.email)?.id;
+                authId = existingUser.users.find((u: any) => u.email === userData.email)?.id;
                 
                 // Update metadata if user already exists
                 if (authId) {
@@ -234,6 +234,7 @@ export const seedUsers = async () => {
                 } else if (roleName === 'authority') {
                     roleName = 'dept_head';
                 }
+
 
                 const dbRole = await Role.findOne({ where: { name: roleName } });
                 if (dbRole) {

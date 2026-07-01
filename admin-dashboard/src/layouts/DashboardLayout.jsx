@@ -53,28 +53,31 @@ const DashboardLayout = () => {
 
         fetchNotifications();
 
-        const channelName = `user:${user.id}:notifications`;
         const subscription = supabase
-            .channel(channelName, {
-                config: {
-                    broadcast: { self: false },
-                    private: true
+            .channel(`user-notifications-${user.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`
+                },
+                (payload) => {
+                    const record = payload.new;
+                    if (record) {
+                        const normalizedNotif = {
+                            id: record.id,
+                            title: record.title || 'New Notification',
+                            body: record.body || 'Details...',
+                            createdAt: record.createdAt || record.created_at || new Date().toISOString(),
+                            is_read: record.is_read || false
+                        };
+                        setNotifications(prev => [normalizedNotif, ...prev]);
+                        setUnreadCount(prev => prev + 1);
+                    }
                 }
-            })
-            .on('broadcast', { event: 'INSERT' }, (payload) => {
-                const record = payload.new || payload.record || payload.payload?.record || payload;
-                if (record) {
-                    const normalizedNotif = {
-                        id: record.id || record.ID,
-                        title: record.title || record.Title || record.event_type || 'New Notification',
-                        body: record.body || record.Body || record.message || record.Message || 'Details...',
-                        createdAt: record.createdAt || record.created_at || record.timestamp || new Date().toISOString(),
-                        is_read: record.is_read || false
-                    };
-                    setNotifications(prev => [normalizedNotif, ...prev]);
-                    setUnreadCount(prev => prev + 1);
-                }
-            })
+            )
             .subscribe();
 
         return () => {

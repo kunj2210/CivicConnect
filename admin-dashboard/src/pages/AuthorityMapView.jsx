@@ -1,14 +1,48 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Eye } from 'lucide-react';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+const ChangeView = ({ center }) => {
+    const map = useMap();
+    useEffect(() => {
+        if (center) {
+            map.setView(center, map.getZoom());
+        }
+    }, [center, map]);
+    return null;
+};
+
+const getUserIcon = (darkMode) => {
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36">
+            <circle cx="12" cy="12" r="8" fill="#3B82F6" stroke="white" stroke-width="2"/>
+            <circle cx="12" cy="12" r="12" fill="#3B82F6" opacity="0.3"/>
+        </svg>
+    `;
+    return L.divIcon({
+        html: svg,
+        className: 'user-marker',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18]
+    });
+};
 
 const AuthorityMapView = () => {
     const { darkMode } = useOutletContext();
@@ -16,14 +50,33 @@ const AuthorityMapView = () => {
     const [issues, setIssues] = useState([]);
     const [loading, setLoading] = useState(true);
     const [center, setCenter] = useState([22.5540, 72.9299]);
+    const [userLocation, setUserLocation] = useState(null);
 
     useEffect(() => {
-        api.get('/reports')
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const latLng = [position.coords.latitude, position.coords.longitude];
+                    setCenter(latLng);
+                    setUserLocation(latLng);
+                },
+                (error) => {
+                    console.warn("Geolocation lookup failed:", error);
+                }
+            );
+        }
+
+        reportsApi.getAll()
             .then(data => {
                 const issuesArray = Array.isArray(data) ? data : [];
                 setIssues(issuesArray);
                 if (issuesArray.length > 0 && issuesArray[0].location) {
-                    setCenter([issuesArray[0].location.coordinates[1], issuesArray[0].location.coordinates[0]]);
+                    setCenter(prevCenter => {
+                        if (prevCenter[0] === 22.5540 && prevCenter[1] === 72.9299) {
+                            return [issuesArray[0].location.coordinates[1], issuesArray[0].location.coordinates[0]];
+                        }
+                        return prevCenter;
+                    });
                 }
                 setLoading(false);
             })
@@ -47,6 +100,7 @@ const AuthorityMapView = () => {
 
             <div className="flex-1 bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-gray-700">
                 <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
+                    <ChangeView center={center} />
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     {issues.map((issue) => {
                         if (!issue.location) return null;
@@ -73,6 +127,18 @@ const AuthorityMapView = () => {
                             </Marker>
                         );
                     })}
+                    {userLocation && (
+                        <Marker
+                            position={userLocation}
+                            icon={getUserIcon(darkMode)}
+                        >
+                            <Popup>
+                                <div className="p-1 font-bold text-center text-xs text-gray-900">
+                                    Your Current Location
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )}
                 </MapContainer>
             </div>
         </div>

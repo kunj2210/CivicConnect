@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 export 'package:http/http.dart' hide get, post, patch, put, delete;
 import 'api_config.dart';
@@ -32,22 +33,22 @@ Future<http.Response> _requestWithFallback(
 
   try {
     final response = await execute(url);
-    print("[API Client] ${method} ${url} -> ${response.statusCode}");
+    debugPrint("[API Client] $method $url -> ${response.statusCode}");
     if (response.statusCode >= 502 && response.statusCode <= 504) {
       throw http.ClientException("Server proxy error: ${response.statusCode}", url);
     }
     return response;
   } catch (e) {
-    print("[API Fallback] Request to $url failed: $e. Shifting to local fallback.");
+    debugPrint("[API Fallback] Request to $url failed: $e. Shifting to local fallback.");
     ApiConfig.useLocalFallback = true;
     final fallbackUrl = Uri.parse(url.toString().replaceFirst(ApiConfig.primaryBaseUrl, ApiConfig.localBaseUrl));
-    print("[API Fallback] Retrying request with local URL: $fallbackUrl");
+    debugPrint("[API Fallback] Retrying request with local URL: $fallbackUrl");
     try {
       final response = await execute(fallbackUrl);
-      print("[API Fallback Client] ${method} ${fallbackUrl} -> ${response.statusCode}");
+      debugPrint("[API Fallback Client] $method $fallbackUrl -> ${response.statusCode}");
       return response;
     } catch (fallbackErr) {
-      print("[API Fallback] Local fallback also failed: $fallbackErr");
+      debugPrint("[API Fallback] Local fallback also failed: $fallbackErr");
       rethrow;
     }
   }

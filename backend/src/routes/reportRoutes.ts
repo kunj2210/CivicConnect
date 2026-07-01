@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createReport, getJobStatus, getReports, getReportStats, getReportById, updateReport, deleteReport, getNearbyReports, getGeoJSONReports, getAuthorityKPIs, proposeResolution, confirmResolution, rejectResolution, citizenConfirmResolution, citizenDisputeResolution, upvoteReport, getAuditLogs, getRetrainingQueue, updateFeedbackStatus, testAudioPrediction, bulkUpdateReports, askCivicAI, exportRetrainingData } from '../controllers/reportController.js';
+import { createReport, getJobStatus, getReports, getReportStats, getReportById, updateReport, deleteReport, getNearbyReports, getGeoJSONReports, getAuthorityKPIs, proposeResolution, confirmResolution, rejectResolution, citizenConfirmResolution, citizenDisputeResolution, upvoteReport, getAuditLogs, getRetrainingQueue, updateFeedbackStatus, testAudioPrediction, bulkUpdateReports, askCivicAI, exportRetrainingData } from '../controllers/report/index.js';
 import { upload } from '../middleware/upload.js';
 import { verifySupabaseToken } from '../middleware/authMiddleware.js';
 import { requirePermission } from '../middleware/rbacMiddleware.js';
@@ -17,7 +17,7 @@ router.get('/kpi', requirePermission('report:view_all'), getAuthorityKPIs);
 router.get('/', getReports);
 router.patch('/bulk-update', requirePermission('report:bulk_update'), bulkUpdateReports);
 router.get('/nearby', requirePermission('report:view_area'), getNearbyReports);
-router.get('/stats', requirePermission('report:view_all'), getReportStats);
+router.get('/stats', getReportStats);
 router.get('/ask', requirePermission('report:view_all'), askCivicAI);
 router.get('/retraining-queue/export', requirePermission('ai:manage'), exportRetrainingData);
 router.get('/retraining-queue', requirePermission('ai:manage'), getRetrainingQueue);

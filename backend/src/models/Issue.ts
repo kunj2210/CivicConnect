@@ -25,6 +25,8 @@ export class Issue extends Model {
     declare assigned_department_id: string | null;
     declare assigned_staff_id: string | null;
     declare audio_text: string | null;
+    declare createdAt: Date;
+    declare updatedAt: Date;
 }
 
 

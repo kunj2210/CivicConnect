@@ -26,10 +26,11 @@ class LocationService {
         return null;
       } 
 
-      // Get current position
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: timeoutSeconds),
+        locationSettings: LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: timeoutSeconds),
+        ),
       );
     } catch (e) {
       debugPrint("Location acquisition failed: $e");

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Shield, Search, Filter, RefreshCw, Clock, User, Activity, ChevronDown, ChevronUp } from 'lucide-react';
-import { api } from '../utils/api';
+import { auditApi } from '../services/auditApi';
 import RoleGuard from '../components/RoleGuard';
 
 const EVENT_LABELS = {
@@ -139,15 +139,10 @@ const AuditLogViewer = () => {
         setLoading(true);
         setError(null);
         try {
-            const params = new URLSearchParams();
-            if (filters.resource) params.set('resource', filters.resource);
-            if (filters.resource_id) params.set('resource_id', filters.resource_id);
-            if (filters.event_type) params.set('event_type', filters.event_type);
-            if (filters.from) params.set('from', filters.from);
-            if (filters.to) params.set('to', filters.to);
-            params.set('limit', '200');
-
-            const data = await api.get(`/audit-logs?${params.toString()}`);
+            const data = await auditApi.getAll({
+                ...filters,
+                limit: '200'
+            });
             setLogs(Array.isArray(data) ? data : []);
         } catch (err) {
             setError(err.message || 'Failed to load audit logs');

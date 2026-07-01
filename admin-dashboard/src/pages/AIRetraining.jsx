@@ -19,7 +19,7 @@ import {
   Activity,
   Search
 } from 'lucide-react';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 import { useAuth } from '../context/AuthContext';
 
 const AIRetraining = () => {
@@ -39,7 +39,7 @@ const AIRetraining = () => {
   const fetchQueue = async () => {
     try {
       setLoading(true);
-      const data = await api.get('/reports/retraining-queue');
+      const data = await reportsApi.getRetrainingQueue();
       setFeedbackQueue(data);
       setLoading(false);
     } catch (err) {
@@ -51,7 +51,7 @@ const AIRetraining = () => {
   const handleAction = async (id, status) => {
     try {
       setProcessingId(id);
-      await api.patch(`/reports/retraining-queue/${id}`, { status });
+      await reportsApi.updateRetrainingStatus(id, status);
       
       // Update local state
       setFeedbackQueue(prev => prev.map(item => 
@@ -109,7 +109,7 @@ const AIRetraining = () => {
           </div>
         </div>
         <button 
-          onClick={() => window.open(`${api.defaults.baseURL}/reports/retraining-queue/export`, '_blank')}
+          onClick={() => window.open(reportsApi.exportRetrainingUrl(), '_blank')}
           className="flex items-center gap-3 px-6 py-4 bg-violet-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-2xl shadow-violet-600/40 hover:bg-violet-500 transition-all active:scale-95"
         >
           <Database size={16} />

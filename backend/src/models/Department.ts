@@ -6,6 +6,8 @@ export class Department extends Model {
     declare name: string;
     declare contact_email: string;
     declare ulb_id: number | null;
+    declare zone_id: string | null;
+    declare ward_id: string | null;
 }
 
 Department.init({
@@ -30,6 +32,14 @@ Department.init({
             model: 'ulb_boundaries',
             key: 'id',
         },
+    },
+    zone_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
+    ward_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
     },
 }, {
     sequelize,

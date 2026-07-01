@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Trophy, Medal, Star, User, ShieldCheck } from 'lucide-react';
-import { api } from '../utils/api';
+import { usersApi } from '../services/usersApi';
 
 const Leaderboard = () => {
     const [leaderboard, setLeaderboard] = useState([]);
@@ -9,7 +9,7 @@ const Leaderboard = () => {
     useEffect(() => {
         const fetchLeaderboard = async () => {
             try {
-                const response = await api.get('/users/leaderboard');
+                const response = await usersApi.getLeaderboard();
                 setLeaderboard(response);
             } catch (error) {
                 console.error('Error fetching leaderboard:', error);

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { TrendingUp, CheckCircle, Clock, AlertCircle, MapPin, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../utils/api';
+import { reportsApi } from '../services/reportsApi';
 
 
 const AuthorityDashboard = () => {
@@ -14,17 +14,14 @@ const AuthorityDashboard = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const path = user?.departmentId
-            ? `/reports?departmentId=${user.departmentId}`
-            : '/reports';
-
-        const kpiPath = user?.departmentId
-            ? `/reports/kpi?departmentId=${user.departmentId}`
-            : '/reports/kpi';
+        const params = {};
+        if (user?.departmentId) {
+            params.department_id = user.departmentId;
+        }
 
         Promise.all([
-            api.get(path),
-            api.get(kpiPath)
+            reportsApi.getAll(params),
+            reportsApi.getKPIs(params)
         ])
             .then(([issuesData, kpiData]) => {
                 setIssues(issuesData);
@@ -39,13 +36,13 @@ const AuthorityDashboard = () => {
 
 
     const stats = kpis ? [
-        { title: 'SLA Compliance', value: `${kpis.slaCompliance || 0}%`, color: 'green', icon: CheckCircle },
-        { title: 'Avg Satisfaction', value: `${kpis.satisfactionScore || 0}/5`, color: 'blue', icon: TrendingUp },
-        { title: 'Total Tasks', value: kpis.totalIssues || 0, color: 'yellow', icon: Clock },
+        { title: 'SLA Compliance', value: `${kpis.slaCompliance || 0}%`, percentage: kpis.slaCompliance || 0, color: 'green', icon: CheckCircle },
+        { title: 'Avg Satisfaction', value: `${kpis.satisfactionScore || 0}/5`, percentage: Math.round((kpis.satisfactionScore || 0) * 20), color: 'blue', icon: TrendingUp },
+        { title: 'Total Tasks', value: kpis.totalIssues || 0, percentage: kpis.totalIssues > 0 ? Math.round((kpis.resolvedCount / kpis.totalIssues) * 100) : 0, color: 'yellow', icon: Clock },
     ] : [
-        { title: 'SLA Compliance', value: '...', color: 'green', icon: CheckCircle },
-        { title: 'Avg Satisfaction', value: '...', color: 'blue', icon: TrendingUp },
-        { title: 'Total Tasks', value: '...', color: 'yellow', icon: Clock },
+        { title: 'SLA Compliance', value: '...', percentage: 0, color: 'green', icon: CheckCircle },
+        { title: 'Avg Satisfaction', value: '...', percentage: 0, color: 'blue', icon: TrendingUp },
+        { title: 'Total Tasks', value: '...', percentage: 0, color: 'yellow', icon: Clock },
     ];
 
     return (
@@ -71,7 +68,7 @@ const AuthorityDashboard = () => {
                             </div>
                         </div>
                         <div className="h-1 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                            <div className={`h-full bg-violet-600 rounded-full`} style={{ width: '65%' }}></div>
+                            <div className={`h-full bg-violet-600 rounded-full`} style={{ width: `${stat.percentage}%` }}></div>
                         </div>
                     </div>
                 ))}

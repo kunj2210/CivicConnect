@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllUsers, getStaff, getMyProfile, updateUserProfile, getLeaderboard, updateDeviceToken, createUser, resetUserPassword } from '../controllers/userController.js';
+import { getAllUsers, getStaff, getMyProfile, updateUserProfile, getLeaderboard, updateDeviceToken, createUser, resetUserPassword } from '../controllers/user/index.js';
 import { verifySupabaseToken } from '../middleware/authMiddleware.js';
 import { requirePermission } from '../middleware/rbacMiddleware.js';
 

@@ -13,7 +13,7 @@ import {
     ExternalLink,
     Quote
 } from 'lucide-react';
-import { api } from '../utils/api';
+import { analyticsApi } from '../services/analyticsApi';
 
 const ExecutiveAnalytics = () => {
     const { darkMode } = useOutletContext();
@@ -47,7 +47,7 @@ const ExecutiveAnalytics = () => {
         setLoading(true);
 
         try {
-            const data = await api.post('/analytics/query', { query: userMessage.content });
+            const data = await analyticsApi.query({ query: userMessage.content });
             
             const assistantMessage = { 
                 role: 'assistant', 

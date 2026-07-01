@@ -17,6 +17,24 @@ class AuthService {
     );
   }
 
+  Future<void> updatePhone(String phoneNumber) async {
+    final phone = phoneNumber.startsWith('+') ? phoneNumber : '+91$phoneNumber';
+    await _client.auth.updateUser(
+      UserAttributes(
+        phone: phone,
+      ),
+    );
+  }
+
+  Future<AuthResponse> verifyPhoneChange(String phoneNumber, String token) async {
+    final phone = phoneNumber.startsWith('+') ? phoneNumber : '+91$phoneNumber';
+    return await _client.auth.verifyOTP(
+      phone: phone,
+      token: token,
+      type: OtpType.phoneChange,
+    );
+  }
+
   Future<AuthResponse> signUpWithEmail(String email, String password) async {
     return await _client.auth.signUp(email: email, password: password);
   }

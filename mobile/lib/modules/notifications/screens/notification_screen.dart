@@ -55,6 +55,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
@@ -115,7 +116,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         }
       },
       leading: CircleAvatar(
-        backgroundColor: notification.isRead ? Colors.grey[100] : theme.colorScheme.primary.withOpacity(0.1),
+        backgroundColor: notification.isRead ? Colors.grey[100] : theme.colorScheme.primary.withValues(alpha: 0.1),
         child: Icon(
           _getIconForNotification(notification.title),
           color: notification.isRead ? Colors.grey[400] : theme.colorScheme.primary,

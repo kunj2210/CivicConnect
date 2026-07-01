@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { connectPostgres } from './config/db.js';
+import { connectPostgres } from './config/connect.js';
 import { seedUlbBoundaries } from './seed/ulbBoundaries.js';
 import { startSpatialDeduplicator } from './cron/deduplicator.js';
 import { runArchivalProcess } from './cron/archiver.js';
@@ -19,6 +19,7 @@ import analyticsRoutes from './routes/analyticsRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import systemRoutes from './routes/systemRoutes.js';
+import { errorHandler } from './middleware/errorMiddleware.js';
 
 
 dotenv.config();
@@ -74,8 +75,5 @@ startServer().catch(err => {
 
 
 // Global Error Handler
-app.use((err: any, req: Request, res: Response, next: any) => {
-    console.error('Global Error:', err);
-    res.status(500).json({ error: err.message || 'Internal Server Error', stack: err.stack });
-});
+app.use(errorHandler);
 

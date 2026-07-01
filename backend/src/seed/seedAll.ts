@@ -1,6 +1,6 @@
-import { seedUlbBoundaries } from './seed/ulbBoundaries.js';
+import { seedUlbBoundaries } from './ulbBoundaries.js';
 import { seedUsers } from './seedUsers.js';
-import { sequelize } from './config/db.js';
+import { sequelize, User, Issue, Department, Ward } from '../config/db.js';
 import dotenv from 'dotenv';
 
 dotenv.config();

@@ -1,24 +1,31 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../utils/api';
+import { reportsApi } from '../../../services/reportsApi';
+import { systemApi } from '../../../services/systemApi';
 
 export const useIssueList = (user) => {
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterCategory, setFilterCategory] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
+    const [filterZone, setFilterZone] = useState('All');
+    const [filterWard, setFilterWard] = useState('All');
+    
     const [issues, setIssues] = useState([]);
+    const [zones, setZones] = useState([]);
+    const [wards, setWards] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState([]);
 
     const isAuthority = user?.role === 'authority';
     const isStaff = user?.role === 'staff';
 
+    // Fetch initial issues
     useEffect(() => {
         if (!user) return;
         const params = {};
         if (isAuthority) params.ward_id = user.ward_id;
         if (isStaff) params.assigned_staff_id = user.id;
 
-        api.get('/reports', { params })
+        reportsApi.getAll(params)
             .then(data => {
                 setIssues(data.map(i => ({
                     id: i.id,
@@ -41,9 +48,15 @@ export const useIssueList = (user) => {
             });
     }, [user?.id, user?.role, user?.ward_id]);
 
+    // Fetch Zones and Wards for filters
+    useEffect(() => {
+        systemApi.getZones().then(setZones).catch(console.error);
+        systemApi.getWards().then(setWards).catch(console.error);
+    }, []);
+
     const handleUpdateStatus = async (id, newStatus) => {
         try {
-            await api.patch(`/reports/${id}`, { status: newStatus });
+            await reportsApi.update(id, { status: newStatus });
             setIssues(issues.map(issue =>
                 issue.id === id ? { ...issue, status: newStatus } : issue
             ));
@@ -54,7 +67,7 @@ export const useIssueList = (user) => {
 
     const handleBulkAction = async (newStatus) => {
         try {
-            const res = await api.patch('/reports/bulk-update', {
+            const res = await reportsApi.bulkUpdate({
                 ids: selectedIds,
                 status: newStatus
             });
@@ -71,7 +84,7 @@ export const useIssueList = (user) => {
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this report?')) return;
         try {
-            await api.delete(`/reports/${id}`);
+            await reportsApi.delete(id);
             setIssues(issues.filter(issue => issue.id !== id));
         } catch (err) {
             alert('Delete failed: ' + err.message);
@@ -89,7 +102,18 @@ export const useIssueList = (user) => {
         const matchesCategory = filterCategory === 'All' || issue.category === filterCategory;
         const matchesSearch = issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
             issue.category.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchesStatus && matchesCategory && matchesSearch;
+
+        let matchesZone = true;
+        let matchesWard = true;
+
+        if (filterWard !== 'All') {
+            matchesWard = issue.ward_id === filterWard;
+        } else if (filterZone !== 'All') {
+            const wardIdsInZone = wards.filter(w => w.zone_id === filterZone).map(w => w.id);
+            matchesZone = wardIdsInZone.includes(issue.ward_id);
+        }
+
+        return matchesStatus && matchesCategory && matchesSearch && matchesZone && matchesWard;
     });
 
     const categories = ['All', ...new Set(issues.map(i => i.category))];
@@ -101,6 +125,12 @@ export const useIssueList = (user) => {
         setFilterCategory,
         searchTerm,
         setSearchTerm,
+        filterZone,
+        setFilterZone,
+        filterWard,
+        setFilterWard,
+        zones,
+        wards,
         issues,
         loading,
         selectedIds,
