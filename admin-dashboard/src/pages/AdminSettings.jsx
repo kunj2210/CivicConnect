@@ -20,7 +20,15 @@ const AdminSettings = () => {
         activeSection,
         setActiveSection,
         handleSave,
-        handleWipeData
+        handleWipeData,
+        otpSent,
+        setOtpSent,
+        otpCode,
+        setOtpCode,
+        isVerifying,
+        verificationError,
+        handleSendPhoneOtp,
+        handleVerifyPhoneOtp
     } = useAdminSettings();
 
     const activeInfo = SETTINGS_SECTIONS.find(s => s.id === activeSection);
@@ -76,6 +84,14 @@ const AdminSettings = () => {
                             wiping={wiping}
                             onWipe={handleWipeData}
                             darkMode={darkMode}
+                            otpSent={otpSent}
+                            setOtpSent={setOtpSent}
+                            otpCode={otpCode}
+                            setOtpCode={setOtpCode}
+                            isVerifying={isVerifying}
+                            verificationError={verificationError}
+                            handleSendPhoneOtp={handleSendPhoneOtp}
+                            handleVerifyPhoneOtp={handleVerifyPhoneOtp}
                         />
                     </div>
                     {activeSection !== 'danger' && (

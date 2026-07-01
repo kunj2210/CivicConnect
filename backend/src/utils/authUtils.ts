@@ -54,12 +54,13 @@ export const syncUserFromDatabase = async (supabaseUser: any) => {
         try {
             let rawRole = (supabaseUser.user_metadata?.role || 'citizen').toLowerCase().replace(' ', '_');
             
-            let mappedRole = 'citizen';
+            let mappedRole = 'viewer'; // Default to viewer for unverified phone accounts
             if (['admin', 'super_admin'].includes(rawRole)) mappedRole = 'admin';
             else if (rawRole === 'staff') mappedRole = 'field_officer';
             else if (rawRole === 'authority') mappedRole = 'dept_head';
             else if (rawRole === 'hq_staff') mappedRole = 'hq_staff';
             else if (rawRole === 'viewer') mappedRole = 'viewer';
+            else if (rawRole === 'citizen' && supabaseUser.phone) mappedRole = 'citizen';
             
             dbUser = await User.create({
                 id: supId, 
@@ -91,6 +92,22 @@ export const syncUserFromDatabase = async (supabaseUser: any) => {
         } catch (createErr: any) {
             fs.appendFileSync('jit_sync.log', `[${new Date().toISOString()}] FAILURE: id=${supId}, email=${supabaseUser.email}, err=${createErr.message}\n`);
             console.error(`[AuthUtils] JIT CRITICAL FAILURE: ${createErr.message}`);
+        }
+    }
+
+    // Sync phone and email to database if they changed in Supabase
+    if (dbUser) {
+        let needsSave = false;
+        if (supabaseUser.phone && dbUser.phone !== supabaseUser.phone) {
+            dbUser.phone = supabaseUser.phone;
+            needsSave = true;
+        }
+        if (supabaseUser.email && dbUser.email !== supabaseUser.email) {
+            dbUser.email = supabaseUser.email;
+            needsSave = true;
+        }
+        if (needsSave) {
+            await dbUser.save();
         }
     }
 

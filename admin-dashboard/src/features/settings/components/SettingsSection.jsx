@@ -1,5 +1,6 @@
 import React from 'react';
-import { Lock, AlertTriangle, Trash2 } from 'lucide-react';
+import { Lock, AlertTriangle, Trash2, CheckCircle2, Phone, Loader2 } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext';
 
 const SettingsSection = ({
     activeSection,
@@ -12,8 +13,18 @@ const SettingsSection = ({
     setWipeConfirm,
     wiping,
     onWipe,
-    darkMode
+    darkMode,
+    otpSent,
+    setOtpSent,
+    otpCode,
+    setOtpCode,
+    isVerifying,
+    verificationError,
+    handleSendPhoneOtp,
+    handleVerifyPhoneOtp
 }) => {
+    const { user } = useAuth();
+
     switch (activeSection) {
         case 'profile':
             return (
@@ -37,6 +48,83 @@ const SettingsSection = ({
                                 className={`w-full p-4 rounded-xl border-none ring-1 ring-gray-200 dark:ring-white/10 opacity-60 ${darkMode ? 'bg-gray-700/50 text-white' : 'bg-gray-50 text-gray-900'}`}
                             />
                         </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 dark:border-white/10 pt-6 mt-6">
+                        <h3 className={`text-base font-black mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Phone Verification</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                            <div>
+                                <label className="block text-xs font-black uppercase text-gray-500 mb-2">Phone Number</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Phone className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="tel"
+                                        value={profile.phone || ''}
+                                        onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                                        disabled={otpSent}
+                                        placeholder="+91 XXXXX XXXXX"
+                                        className={`w-full pl-11 pr-4 py-4 rounded-xl border-none ring-1 ring-gray-200 dark:ring-white/10 outline-none focus:ring-2 focus:ring-blue-500 ${darkMode ? 'bg-gray-700/50 text-white' : 'bg-gray-50 text-gray-900'}`}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-4">
+                                {profile.phone && profile.phone === user?.phone ? (
+                                    <div className="flex items-center gap-2 px-4 py-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-500 text-sm font-bold w-full justify-center">
+                                        <CheckCircle2 size={18} />
+                                        <span>Verified Status</span>
+                                    </div>
+                                ) : (
+                                    !otpSent && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSendPhoneOtp(profile.phone)}
+                                            disabled={!profile.phone}
+                                            className="w-full py-4 px-6 text-sm font-black uppercase tracking-widest rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-all active:scale-95 disabled:opacity-50"
+                                        >
+                                            Send Verification OTP
+                                        </button>
+                                    )
+                                )}
+                            </div>
+                        </div>
+
+                        {otpSent && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 items-end p-6 rounded-2xl bg-blue-500/5 border border-blue-500/10 animate-fade-in">
+                                <div>
+                                    <label className="block text-xs font-black uppercase text-gray-500 mb-2">Enter 6-Digit OTP</label>
+                                    <input
+                                        type="text"
+                                        value={otpCode}
+                                        onChange={(e) => setOtpCode(e.target.value)}
+                                        placeholder="Enter code"
+                                        className={`w-full p-4 rounded-xl border-none ring-1 ring-gray-200 dark:ring-white/10 outline-none focus:ring-2 focus:ring-blue-500 ${darkMode ? 'bg-gray-700/50 text-white' : 'bg-gray-50 text-gray-900'}`}
+                                    />
+                                </div>
+                                <div className="flex gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleVerifyPhoneOtp(profile.phone, otpCode)}
+                                        disabled={isVerifying || !otpCode}
+                                        className="flex-1 py-4 px-6 text-sm font-black uppercase tracking-widest rounded-xl text-white bg-green-600 hover:bg-green-700 shadow-md transition-all active:scale-95 flex items-center justify-center disabled:opacity-50"
+                                    >
+                                        {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirm Code'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setOtpSent(false)}
+                                        className={`px-6 py-4 rounded-xl text-sm font-bold border ${darkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {verificationError && (
+                            <p className="text-red-500 text-xs mt-2 font-medium">{verificationError}</p>
+                        )}
                     </div>
                 </div>
             );
