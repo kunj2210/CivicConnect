@@ -5,6 +5,7 @@ import '../services/location_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../widgets/report_detail_widgets.dart';
+import '../../../shared/utils/verification_helper.dart';
 
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -53,6 +54,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Future<void> _handleUpvote() async {
+    if (!VerificationHelper.checkVerification(context, action: 'upvote reports')) {
+      return;
+    }
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
@@ -81,6 +85,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Future<void> _handleConfirmResolution(int rating) async {
+    if (!VerificationHelper.checkVerification(context, action: 'confirm resolutions')) {
+      return;
+    }
     if (!mounted) return;
     setState(() => _isConfirming = true);
 

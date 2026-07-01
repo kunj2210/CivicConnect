@@ -24,12 +24,80 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final UserService _userService = UserService();
   final AuthService _authService = AuthService();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _otpController = TextEditingController();
+  bool _otpSent = false;
+  bool _isVerifying = false;
   Map<String, dynamic>? _stats;
 
   @override
   void initState() {
     super.initState();
     _loadStats();
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendPhoneVerification() async {
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a phone number')),
+      );
+      return;
+    }
+
+    setState(() => _isVerifying = true);
+    try {
+      await _authService.updatePhone(phone);
+      if (!mounted) return;
+      setState(() {
+        _isVerifying = false;
+        _otpSent = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Verification code sent!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isVerifying = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send verification code: $e')),
+      );
+    }
+  }
+
+  Future<void> _confirmPhoneOtp() async {
+    final phone = _phoneController.text.trim();
+    final otp = _otpController.text.trim();
+    if (otp.isEmpty) return;
+
+    setState(() => _isVerifying = true);
+    try {
+      await _authService.verifyPhoneChange(phone, otp);
+      if (!mounted) return;
+      setState(() {
+        _isVerifying = false;
+        _otpSent = false;
+        _phoneController.clear();
+        _otpController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phone number verified successfully!')),
+      );
+      _loadStats(); // Reload stats and refresh screen
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isVerifying = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Invalid code: $e')),
+      );
+    }
   }
 
   Future<void> _loadStats() async {
@@ -114,7 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                user?.userMetadata?['full_name'] ?? 'Citizen User',
+                user?.userMetadata?['full_name'] ?? ((user?.phone != null && user!.phone!.isNotEmpty) ? 'Citizen User' : 'Viewer User'),
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               Text(
@@ -140,6 +208,118 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 32),
+
+              if (user?.phone == null || user!.phone!.isEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Verification Required',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Submit your phone number below to receive an SMS OTP and verify your citizen account status.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (!_otpSent) ...[
+                          TextField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone Number',
+                              hintText: '+91 XXXXX XXXXX',
+                              prefixIcon: Icon(Icons.phone_outlined),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _isVerifying ? null : _sendPhoneVerification,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 50),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: _isVerifying
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : const Text('Verify Phone Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ] else ...[
+                          TextField(
+                            controller: _otpController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Verification Code',
+                              hintText: 'Enter 6-digit OTP',
+                              prefixIcon: Icon(Icons.lock_outline),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: _isVerifying ? null : _confirmPhoneOtp,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    minimumSize: const Size(double.infinity, 50),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  child: _isVerifying
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                      : const Text('Confirm OTP', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                              const SizedBox(width: 12),
+                              OutlinedButton(
+                                onPressed: () => setState(() => _otpSent = false),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(80, 50),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               
               // Options Sections
               const _SectionTitle(title: 'Account Settings'),
