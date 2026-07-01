@@ -94,8 +94,10 @@ export const connectPostgres = async (): Promise<void> => {
             await sequelize.query('ALTER TABLE "audit_logs" DROP CONSTRAINT IF EXISTS "audit_logs_actor_id_fkey";');
         } catch (_) {}
 
-        await sequelize.sync({ alter: true });
-        console.log('Database tables in sync (Alter mode)');
+        const isProduction = process.env.NODE_ENV === 'production';
+        const forceAlter = process.env.FORCE_DB_ALTER === 'true';
+        await sequelize.sync({ alter: !isProduction || forceAlter });
+        console.log(`Database tables synced (alter: ${!isProduction || forceAlter})`);
 
         await migrateEnumRoles();
         await runMigrations();
