@@ -17,7 +17,7 @@ router.get('/kpi', requirePermission('report:view_all'), getAuthorityKPIs);
 router.get('/', getReports);
 router.patch('/bulk-update', requirePermission('report:bulk_update'), bulkUpdateReports);
 router.get('/nearby', requirePermission('report:view_area'), getNearbyReports);
-router.get('/stats', requirePermission('report:view_all'), getReportStats);
+router.get('/stats', getReportStats);
 router.get('/ask', requirePermission('report:view_all'), askCivicAI);
 router.get('/retraining-queue/export', requirePermission('ai:manage'), exportRetrainingData);
 router.get('/retraining-queue', requirePermission('ai:manage'), getRetrainingQueue);
