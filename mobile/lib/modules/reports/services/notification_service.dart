@@ -98,16 +98,24 @@ class NotificationService {
   void _setupRealtimeSubscription(String userId) {
     if (_notificationChannel != null) return;
 
-    _notificationChannel = _client.channel('notifications:$userId');
-    _notificationChannel!.onBroadcast(
-      event: 'new_notification',
+    _notificationChannel = _client.channel('notifications-db-changes');
+    _notificationChannel!.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'notifications',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'user_id',
+        value: userId,
+      ),
       callback: (payload) {
+        final record = payload.newRecord;
         _showLocalNotification(
-          payload['title'] ?? 'CivicConnect Update', 
-          payload['body'] ?? '',
-          data: payload['data'],
+          record['title'] ?? 'CivicConnect Update', 
+          record['body'] ?? '',
+          data: record['data'],
         );
-      }
+      },
     ).subscribe();
   }
 
