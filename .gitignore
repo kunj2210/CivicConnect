@@ -52,4 +52,13 @@ __pycache__/
 **/__pycache__/
 *.pyc
 
+# Local credentials and service-account keys
+*.pem
+*.p12
+*.key
 civicconnect-7c316-firebase-adminsdk-fbsvc-ef6ad24d2e.json
+
+# Local data and generated media
+backend/uploads/
+*.sqlite
+*.sqlite3

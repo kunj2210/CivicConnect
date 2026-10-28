@@ -27,6 +27,34 @@ The architecture is highly modular, separating concerns into four core areas:
 3.  **Mobile App**: Flutter (Dart) with **High-Parity Light/Dark Theme** support
 4.  **AI Service**: Python + FastAPI + Groq (Llama 3.1) + MobileNetV2
 
+## 🧭 Repository Structure
+
+CivicConnect is a production-style monorepo. Each deployable surface owns its
+runtime configuration, dependencies, README, and targeted checks:
+
+```text
+CivicConnect/
+├── backend/             # Node.js + Express + TypeScript API
+├── admin-dashboard/     # React + Vite administration web app
+├── ai_service/          # Python image-classification service
+├── mobile/              # Flutter citizen mobile application
+├── supabase/            # Supabase configuration and edge functions
+├── scripts/             # Cross-service and scheduled utilities
+├── AI-Related-Files/    # Versioned model assets and supporting material
+├── docs/                # Canonical architecture and API documentation
+├── .github/             # CI, scheduled jobs, and dependency automation
+└── package.json         # Root development and validation commands
+```
+
+See the [documentation hub](./docs/README.md) and
+[full structure reference](./docs/FOLDER_STRUCTURE.md) before moving files.
+
+The repository structure and documentation categories take inspiration from
+production-oriented projects such as Smart-Farming. CivicConnect documentation
+is written independently for civic reporting, authorities, citizens, AI
+verification, spatial workflows, and this repository's actual technology stack;
+no Smart-Farming domain documents are copied.
+
 ---
 
 ## 📋 Prerequisites
@@ -65,6 +93,11 @@ You must create `.env` files for each component by copying the `.env.example` te
 cp .env.example .env
 # Edit .env with your Supabase credentials, Groq API Key, and Machine IP
 ```
+
+Never commit `.env` files, service-account keys, generated caches, uploads, or
+build output. The model binaries in `AI-Related-Files/` are intentionally
+versioned for the current deployment; move them to object storage or Git LFS
+before the repository grows further.
 
 ### Admin Dashboard (`/admin-dashboard/.env`)
 ```bash

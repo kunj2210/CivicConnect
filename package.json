@@ -17,7 +17,12 @@
     "seed:ulb-boundaries": "npm --prefix backend run seed:ulb-boundaries",
     "fix:security": "npm --prefix backend run fix:security",
     "build:backend": "npm --prefix backend run build",
-    "build:dashboard": "npm --prefix admin-dashboard run build"
+    "build:dashboard": "npm --prefix admin-dashboard run build",
+    "check:backend": "npm --prefix backend run build",
+    "check:dashboard": "npm --prefix admin-dashboard run build",
+    "check:ai": "python -m compileall -q ai_service",
+    "check:mobile": "cd mobile && flutter analyze --no-fatal-warnings --no-fatal-infos",
+    "check": "npm run check:backend && npm run check:dashboard && npm run check:ai && npm run check:mobile"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",

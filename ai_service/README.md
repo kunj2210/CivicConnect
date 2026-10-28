@@ -4,7 +4,7 @@ This microservice handles image classification for automated report verification
 
 ## Setup Instructions
 
-1. **Prerequisites**: Python 3.9+ installed.
+1. **Prerequisites**: Python 3.10+ installed.
 2. **Create Virtual Environment**:
    ```bash
    python -m venv venv
@@ -19,6 +19,13 @@ This microservice handles image classification for automated report verification
    python main.py
    ```
    The service will run on `http://localhost:8000`.
+
+## Repository conventions
+
+Model files are supplied from `AI-Related-Files/` and local environment values
+remain in an untracked `.env`. Python caches and virtual environments are
+ignored by the repository. Run `python -m compileall -q .` as the lightweight
+service validation used by CI.
 
 ## Testing the API
 You can test the classification endpoint using `curl`:

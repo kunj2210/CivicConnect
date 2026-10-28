@@ -1,12 +1,25 @@
-# civic_connect_mobile
+# CivicConnect Mobile
 
-A new Flutter project.
+Flutter client for citizens to submit and track civic reports.
 
-## Getting Started
+## Local development
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+Set the API endpoint using the local environment configuration described in
+the [root README](../README.md). Do not commit `mobile/.env`.
+
+## Validation
+
+```bash
+flutter analyze
+flutter test
+```
+
+For Flutter-specific learning resources:
 
 - [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
 - [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
