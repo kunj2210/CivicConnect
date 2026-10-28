@@ -6,7 +6,7 @@ import { AuditService } from '../../services/auditService.js';
 import { findWardId } from '../../utils/spatialUtils.js';
 import { AIService } from '../../services/aiService.js';
 import type { AuthRequest } from './report.utils.js';
-import { getS3KeyFromUrl } from './report.utils.js';
+import { getStorageKeyFromUrl } from './report.utils.js';
 
 export const createReport = async (req: AuthRequest, res: Response) => {
     console.log('--- Incoming Async AI-Enhanced Issue Request ---');
@@ -45,14 +45,14 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        // 3. Resolve S3 Keys and URLs
+        // 3. Resolve Supabase Storage paths and signed URLs.
         let imageKey = bodyImageKey || '';
         let imageUrl = '';
         const bucketName = StorageService.getBucketName();
 
         if (imageFile) {
             imageUrl = await StorageService.uploadFile(imageFile, 'issues') || '';
-            imageKey = getS3KeyFromUrl(imageUrl, bucketName);
+            imageKey = getStorageKeyFromUrl(imageUrl, bucketName);
         } else if (imageKey) {
             imageUrl = await StorageService.getPresignedUrl(imageKey);
         }
@@ -61,7 +61,7 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         let audioUrl = '';
         if (audioFile) {
             audioUrl = await StorageService.uploadFile(audioFile, 'audio') || '';
-            audioKey = getS3KeyFromUrl(audioUrl, bucketName);
+            audioKey = getStorageKeyFromUrl(audioUrl, bucketName);
         } else if (audioKey) {
             audioUrl = await StorageService.getPresignedUrl(audioKey);
         }

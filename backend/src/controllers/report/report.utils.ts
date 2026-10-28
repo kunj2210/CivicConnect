@@ -18,7 +18,7 @@ export function obfuscateLocation(lon: number, lat: number) {
     return [lon + offsetLon, lat + offsetLat];
 }
 
-export function getS3KeyFromUrl(url: string, bucketName: string): string {
+export function getStorageKeyFromUrl(url: string, bucketName: string): string {
     if (!url) return '';
     const cleanUrl = url.split('?')[0] || '';
     if (cleanUrl.includes(bucketName)) {

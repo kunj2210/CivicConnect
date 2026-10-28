@@ -66,8 +66,7 @@ const envFiles = [
         name: 'Backend',
         path: path.join(__dirname, '..', 'backend', '.env'),
         rules: [
-            { regex: /BASE_URL=http:\/\/[0-9.]+(:\d+)/g, replace: `BASE_URL=http://${newIP}$1` },
-            { regex: /AWS_ENDPOINT=[0-9.]+/g, replace: `AWS_ENDPOINT=${newIP}` }
+            { regex: /BASE_URL=http:\/\/[0-9.]+(:\d+)/g, replace: `BASE_URL=http://${newIP}$1` }
         ]
     },
     {

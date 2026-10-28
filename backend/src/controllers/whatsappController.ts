@@ -22,7 +22,7 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
         // 2. Process Media if exists
         let imageUrl = null;
         if (MediaUrl0) {
-            // In a real scenario, we'd download from Twilio and upload to MinIO
+            // In a real scenario, we'd download from Twilio and upload to Supabase Storage
             // For mock/demo, we'll assume the URL is usable or just log it
             console.log(`[WhatsApp] Received Media: ${MediaUrl0}`);
             imageUrl = MediaUrl0; 

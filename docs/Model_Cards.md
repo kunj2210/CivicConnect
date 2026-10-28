@@ -1,6 +1,6 @@
 # CivicConnect Model Card
 
-## CivicConnect image classifier
+## CivicConnect hosted multimodal classifier
 
 ### Intended use
 
@@ -11,16 +11,29 @@ priority.
 
 ### Inputs and outputs
 
-- Input: an image accepted by the AI service upload validation.
-- Output: predicted class and confidence, with optional top alternatives.
-- Consumer: backend AI integration and processing-job workflow.
+- `/classify`: an image accepted by the AI service upload validation.
+- `/transcribe`: an audio complaint and an optional language hint.
+- `/classify_text`: a complaint description or transcript.
+- Output: a top-3 civic class ranking for classification endpoints, or
+  transcript text for audio.
+- Consumer: backend AI integration, WhatsApp processing, and the
+  processing-job workflow.
+
+The hosted Space uses a PyTorch MobileNetV2 image model, Whisper for audio,
+and zero-shot DeBERTa for text. The application preserves these 14 classes:
+`construction_waste`, `damaged_sidewalk`, `damaged_sign`, `dead_animal`,
+`flooding_waterlogging`, `garbage_overflow_west_container`, `good_road`,
+`illegal_construction`, `illegal_parking`, `open_manhole`,
+`pothole_road_crack`, `powerline_damage`, `streetlight_damage`, and
+`traffic_light`.
 
 ### Limitations
 
 Performance may vary with lighting, blur, occlusion, image quality, unusual
-objects, and categories that were not represented in training data. A
-confidence score is not proof of correctness. Low-confidence, contradictory,
-or unavailable predictions must retain a human-review or fallback path.
+objects, language, accent, transcript quality, cold starts, and categories
+that were not represented in training data. A confidence score is not proof
+of correctness. Low-confidence, contradictory, malformed, or unavailable
+predictions must retain a human-review or retry path.
 
 ### Safety and privacy
 

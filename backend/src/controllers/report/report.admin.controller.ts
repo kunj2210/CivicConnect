@@ -124,7 +124,7 @@ export const deleteReport = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Issue not found' });
         }
 
-        // 2. Perform S3 Storage Cleanup
+        // 2. Perform Supabase Storage cleanup
         const bucketName = StorageService.getBucketName();
         const mediaUrls = [
             ...(issue.s3_image_urls || []),
@@ -139,11 +139,11 @@ export const deleteReport = async (req: AuthRequest, res: Response) => {
                 const urlParts = url.split(`${bucketName}/`);
                 if (urlParts.length > 1) {
                     const objectKey = urlParts[1] as string;
-                    console.log(`[CLEANUP] Purging S3 object: ${objectKey}`);
+                    console.log(`[CLEANUP] Purging storage object: ${objectKey}`);
                     await StorageService.deleteFile(objectKey);
                 }
             } catch (storageErr) {
-                console.error(`[CLEANUP] Non-fatal: Failed to delete media [${url}] from S3:`, storageErr);
+                console.error(`[CLEANUP] Non-fatal: Failed to delete media [${url}] from storage:`, storageErr);
             }
         }
 

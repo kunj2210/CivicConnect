@@ -12,7 +12,7 @@ assignment, repair, confirmation, and audit.
 Citizen Mobile App ─┐
                     ├─ HTTPS/JSON ─> Node.js API ─┬─ PostgreSQL/PostGIS
 Admin Dashboard ────┘                             ├─ Supabase Auth/Storage
-                                                  ├─ S3-compatible media
+                                                  ├─ Supabase Storage media
                                                   ├─ AI Service
                                                   └─ notifications/jobs
 
@@ -49,7 +49,7 @@ workflows. The API endpoint is supplied through environment configuration.
 
 ### AI service and processing
 
-`ai_service/main.py` exposes image classification. The backend uses the result
+`ai_service/app.py` exposes the multimodal Hugging Face Space. The backend uses the result
 as an input to verification and priority logic; AI output is not a replacement
 for civic authority decisions. `scripts/batch_processor/` handles scheduled
 processing of pending jobs using hosted model and storage integrations.
@@ -57,9 +57,10 @@ processing of pending jobs using hosted model and storage integrations.
 ### Data and storage
 
 PostgreSQL stores transactional data and spatial boundaries. Supabase provides
-authentication and project services. S3-compatible storage holds uploaded
-media. Secrets are injected at runtime and are never part of client bundles or
-the repository.
+authentication, project services, and Storage for uploaded media. The backend
+uses the service-role client to create short-lived signed URLs and to upload,
+read, and delete private objects. Secrets are injected at runtime and are never
+part of client bundles or the repository.
 
 ## Report lifecycle
 

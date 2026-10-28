@@ -1,129 +1,127 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const endpoint = process.env.AWS_ENDPOINT || 's3.amazonaws.com';
-const isS3Standard = endpoint === 's3.amazonaws.com' || endpoint === 's3.us-east-1.amazonaws.com';
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE || '';
+const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'civic-connect-data';
 
-const clientConfig: any = {
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY || '',
-        secretAccessKey: process.env.AWS_SECRET_KEY || '',
-    },
-};
-
-if (!isS3Standard) {
-    clientConfig.endpoint = endpoint.startsWith('http') ? endpoint : `https://${endpoint}`;
-    clientConfig.forcePathStyle = true;
+if (!supabaseUrl || !serviceRoleKey) {
+    console.error('CRITICAL: Supabase Storage requires SUPABASE_URL and SUPABASE_SERVICE_ROLE');
 }
 
-clientConfig.region = process.env.AWS_REGION || 'us-east-1';
+const supabaseStorage = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+    },
+});
 
-const s3Client = new S3Client(clientConfig);
+function objectPathFromValue(value: string): string {
+    const cleanValue = value.split('?')[0] || '';
+    const marker = `/storage/v1/object/`;
+    const markerIndex = cleanValue.indexOf(marker);
+
+    if (markerIndex === -1) {
+        return cleanValue.replace(/^\/+/, '');
+    }
+
+    const objectValue = cleanValue.slice(markerIndex + marker.length);
+    const parts = objectValue.split('/');
+    const bucketIndex = parts.indexOf(bucketName);
+
+    return bucketIndex >= 0
+        ? parts.slice(bucketIndex + 1).join('/')
+        : cleanValue.replace(/^\/+/, '');
+}
 
 export class StorageService {
-    private static bucketName = process.env.AWS_BUCKET || 'civic-connect-uploads';
-
     static async uploadFile(file: any, folder: string = 'reports'): Promise<string | null> {
         try {
-            const fileExt = file.originalname.split('.').pop();
-            const fileName = `${folder}/${uuidv4()}.${fileExt}`;
+            const extension = file.originalname?.split('.').pop() || 'bin';
+            const objectPath = `${folder}/${uuidv4()}.${extension}`;
+            const { error } = await supabaseStorage.storage
+                .from(bucketName)
+                .upload(objectPath, file.buffer, {
+                    contentType: file.mimetype,
+                    upsert: false,
+                });
 
-            // Upload to S3
-            const command = new PutObjectCommand({
-                Bucket: this.bucketName,
-                Key: fileName,
-                Body: file.buffer,
-                ContentType: file.mimetype,
-            });
+            if (error) {
+                throw error;
+            }
 
-            await s3Client.send(command);
-
-            // Construct Presigned URL (Valid for 24 hours)
-            const presignedUrl = await this.getPresignedUrl(fileName, 24 * 60 * 60);
-
-            return presignedUrl;
+            return await this.getPresignedUrl(objectPath, 24 * 60 * 60);
         } catch (error) {
-            console.error('S3 Storage Service Upload Error:', error);
+            console.error('Supabase Storage upload error:', error);
             return null;
         }
     }
 
-    static async getPresignedUrl(urlOrKey: string, expiresInSeconds: number = 60 * 60): Promise<string> {
+    static async getPresignedUrl(value: string, expiresInSeconds: number = 60 * 60): Promise<string> {
+        if (!value) {
+            return '';
+        }
+
+        if (value.startsWith('http://') || value.startsWith('https://')) {
+            const objectPath = objectPathFromValue(value);
+            if (!objectPath || objectPath === value) {
+                return value;
+            }
+            value = objectPath;
+        }
+
         try {
-            if (!urlOrKey) return '';
+            const { data, error } = await supabaseStorage.storage
+                .from(bucketName)
+                .createSignedUrl(objectPathFromValue(value), expiresInSeconds);
 
-            // If it's an external HTTP/HTTPS URL, return it as-is
-            if (urlOrKey.startsWith('http://') || urlOrKey.startsWith('https://')) {
-                if (!urlOrKey.includes(this.bucketName)) {
-                    return urlOrKey;
-                }
+            if (error) {
+                throw error;
             }
-
-            // If it's already a presigned URL (contains X-Amz-Signature or similar), return it
-            if (urlOrKey.includes('X-Amz-Signature') || urlOrKey.includes('X-Amz-Algorithm')) return urlOrKey;
-
-            // Extract the key from the full URL if necessary
-            let objectKey: string = urlOrKey.split('?')[0] || '';
-            if (objectKey.includes(this.bucketName)) {
-                if (objectKey.includes(`/${this.bucketName}/`)) {
-                    const parts = objectKey.split(`/${this.bucketName}/`);
-                    if (parts.length > 1 && parts[1]) {
-                        objectKey = parts[1];
-                    }
-                } else {
-                    const bucketIndex = objectKey.indexOf(this.bucketName);
-                    const firstSlashAfterBucket = objectKey.indexOf('/', bucketIndex);
-                    if (firstSlashAfterBucket !== -1) {
-                        objectKey = objectKey.substring(firstSlashAfterBucket + 1);
-                    }
-                }
-            }
-
-            const command = new GetObjectCommand({
-                Bucket: this.bucketName,
-                Key: objectKey,
-            });
-
-            // Generate a fresh presigned URL valid for 1 hour
-            return await getSignedUrl(s3Client, command, { expiresIn: expiresInSeconds });
+            return data.signedUrl;
         } catch (error) {
-            console.error('S3 Storage Service Presigned GET URL Error:', error);
-            return urlOrKey; // Fallback to original
+            console.error('Supabase Storage signed URL error:', error);
+            return value;
         }
     }
 
-    static async deleteFile(path: string): Promise<boolean> {
+    static async deleteFile(value: string): Promise<boolean> {
         try {
-            const command = new DeleteObjectCommand({
-                Bucket: this.bucketName,
-                Key: path,
-            });
-            await s3Client.send(command);
+            const objectPath = objectPathFromValue(value);
+            const { error } = await supabaseStorage.storage
+                .from(bucketName)
+                .remove([objectPath]);
+
+            if (error) {
+                throw error;
+            }
             return true;
         } catch (error) {
-            console.error('S3 Storage Service Delete Error:', error);
+            console.error('Supabase Storage delete error:', error);
             return false;
         }
     }
 
     static getBucketName(): string {
-        return this.bucketName;
+        return bucketName;
     }
 
-    static async getPresignedPutUrl(fileName: string): Promise<string> {
-        try {
-            const command = new PutObjectCommand({
-                Bucket: this.bucketName,
-                Key: fileName,
-            });
-            return await getSignedUrl(s3Client, command, { expiresIn: 60 * 60 });
-        } catch (error) {
-            console.error('S3 Storage Service Presigned PUT URL Error:', error);
+    static async getPresignedPutUrl(objectPath: string): Promise<{ signedUrl: string; token: string }> {
+        const { data, error } = await supabaseStorage.storage
+            .from(bucketName)
+            .createSignedUploadUrl(objectPath);
+
+        if (error) {
+            console.error('Supabase Storage signed upload URL error:', error);
             throw error;
         }
+
+        return {
+            signedUrl: data.signedUrl,
+            token: data.token,
+        };
     }
 }

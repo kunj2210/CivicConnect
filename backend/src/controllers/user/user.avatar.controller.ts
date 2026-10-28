@@ -15,29 +15,13 @@ export const updateUserAvatar = async (req: AuthRequest, res: Response): Promise
             return res.status(400).json({ error: 'No image file provided' });
         }
 
-        // Upload the file to S3 using the StorageService (which maps to AWS S3)
+        // Upload the file to Supabase Storage.
         const presignedUrl = await StorageService.uploadFile(req.file, 'avatars');
         if (!presignedUrl) {
-            return res.status(500).json({ error: 'Failed to upload image to S3' });
+            return res.status(500).json({ error: 'Failed to upload image to storage' });
         }
 
-        // Extract clean S3 key from the presigned URL to store in Postgres
-        let s3Key = presignedUrl.split('?')[0] || '';
-        const bucketName = StorageService.getBucketName();
-        if (s3Key.includes(bucketName)) {
-            if (s3Key.includes(`/${bucketName}/`)) {
-                const parts = s3Key.split(`/${bucketName}/`);
-                if (parts.length > 1 && parts[1]) {
-                    s3Key = parts[1];
-                }
-            } else {
-                const bucketIndex = s3Key.indexOf(bucketName);
-                const firstSlashAfterBucket = s3Key.indexOf('/', bucketIndex);
-                if (firstSlashAfterBucket !== -1) {
-                    s3Key = s3Key.substring(firstSlashAfterBucket + 1);
-                }
-            }
-        }
+        const s3Key = presignedUrl;
 
         // 1. Update avatar_url in PostgreSQL
         const user = await User.findByPk(userId);
@@ -47,7 +31,6 @@ export const updateUserAvatar = async (req: AuthRequest, res: Response): Promise
         user.avatar_url = s3Key;
         await user.save();
 
-        // Generate a fresh presigned URL valid for 24 hours
         const freshPresignedUrl = await StorageService.getPresignedUrl(s3Key);
 
         // 2. Update avatar_url in Supabase Auth user metadata

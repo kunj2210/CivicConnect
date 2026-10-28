@@ -10,10 +10,9 @@ commit real values.
 | Runtime | `PORT`, `BASE_URL` | Listener and public callback/base URL |
 | Database | `PG_CONNECTION_STRING` | PostgreSQL/Supabase connection |
 | Supabase | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE` | Auth and project integration |
-| Object storage | `AWS_ENDPOINT`, `AWS_PORT`, `AWS_USE_SSL`, `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `AWS_BUCKET` | S3-compatible media storage |
+| Object storage | `SUPABASE_STORAGE_BUCKET` | Supabase Storage bucket for report, repair, and avatar media |
 | Priority | `PRIORITY_WEIGHT_*` | Explainable report priority weighting |
-| Language model | `OPEN_SOURCE_LLM_KEY`, `OPEN_SOURCE_LLM_URL`, `LLM_MODEL` | Optional textual analysis integration |
-| Classifier | `USE_HF_CLASSIFIER`, `HF_SPACE_ID`, `HF_TOKEN` | Optional hosted image classifier |
+| Classifier | `HF_SPACE_ID`, `HF_TOKEN`, `HF_SPACE_ATTEMPTS`, `HF_SPACE_RETRY_DELAY_MS` | Private hosted image, audio, and text classifier |
 
 ## Client configuration
 
@@ -26,9 +25,9 @@ Only public client values may use a `VITE_` or mobile compile-time prefix.
 ## Batch processor
 
 The scheduled processor uses GitHub Actions secrets including
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, storage credentials, `HF_TOKEN`, and
-the language-model key. Configure these in the repository/organization secret
-store, not in workflow YAML.
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, and `HF_TOKEN`, plus the non-secret
+`SUPABASE_STORAGE_BUCKET` and `HF_SPACE_ID` values. Configure secrets in the
+repository/organization secret store, not in workflow YAML.
 
 ## Configuration change procedure
 
@@ -37,3 +36,19 @@ store, not in workflow YAML.
 3. Update this document and the service README.
 4. Add a safe test/default for local or CI execution.
 5. Rotate values if a secret was exposed during the change.
+
+## Edge Function secrets
+
+The `classify-report` function needs the project URL and service-role
+authorization. Supabase supplies project URL and service-role values to hosted
+functions automatically; configure the external provider secrets explicitly
+with the Supabase dashboard or CLI:
+
+```bash
+supabase secrets set \
+  HF_SPACE_ID=Maharsh8805/CivicConnect-Classifier \
+  HF_TOKEN=<rotated-hugging-face-token>
+```
+
+Never put these values in `supabase/config.toml`, source files, workflow YAML,
+or committed environment files.

@@ -11,7 +11,7 @@ CivicConnect/
 ├── .github/                 # CI, scheduled jobs, and Dependabot
 ├── AI-Related-Files/        # Versioned model binaries and AI assets
 ├── admin-dashboard/         # React + Vite administration web app
-├── ai_service/              # Python FastAPI image-classification service
+├── ai_service/              # Hugging Face multimodal classifier Space
 ├── backend/                 # Node.js + Express + TypeScript API
 ├── mobile/                  # Flutter citizen application
 ├── supabase/                # Supabase configuration and edge functions
@@ -40,10 +40,9 @@ inside the dashboard so it can be built and deployed independently.
 
 ### `ai_service/`
 
-The Python service exposes image classification for report verification.
-`main.py` is the entry point, `model_utils.py` contains model loading helpers,
-and `requirements.txt` describes the runtime environment. Model binaries remain
-in `AI-Related-Files/` for the current deployment.
+The Space exposes image classification, voice transcription, and text
+classification through `app.py`. Model binaries remain in
+`AI-Related-Files/` for the current deployment.
 
 ### `mobile/`
 

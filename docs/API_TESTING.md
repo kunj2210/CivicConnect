@@ -808,7 +808,7 @@ GET {{BASE_URL}}/audit-logs?resource=issue&limit=20
 
 ## 📁 File Upload APIs — `/api/uploads`
 
-### 1. Get Presigned S3 Upload URL
+### 1. Get Supabase Storage Signed Upload URL
 ```
 POST {{BASE_URL}}/uploads/signed-url
 ```
@@ -824,12 +824,15 @@ POST {{BASE_URL}}/uploads/signed-url
 **Expected Response (200):**
 ```json
 {
-  "upload_url": "https://s3.amazonaws.com/...",
+  "upload_url": "https://nbalbqnhheguoreyafnu.supabase.co/storage/v1/upload/...",
+  "upload_token": "<short-lived-token>",
   "s3_key": "raw/2026/06/26/images/<uuid>.jpg"
 }
 ```
 
-> Use `upload_url` to `PUT` the file directly from the client to S3.
+> Use the returned Supabase Storage signed upload URL/token with the Supabase
+> Storage `uploadToSignedUrl(path, token, file)` flow. The `s3_key` field is a
+> legacy response name and now contains a Supabase Storage object path.
 
 ---
 

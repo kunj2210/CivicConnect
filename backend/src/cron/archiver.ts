@@ -38,8 +38,7 @@ export const runArchivalProcess = async () => {
                 issue.reporter_id = '00000000-0000-0000-0000-000000000000'; // System Anonymized ID
                 issue.reporter_ids = []; 
                 
-                // 3. Media Archival (Logic for AWS S3)
-                // In a production S3 setup, we'd use S3 Lifecycle Configuration rules.
+                // 3. Media archival is managed by Supabase Storage retention settings.
                 // Here we'll simulate by updating metadata or moving to an archive prefix.
                 
                 await issue.save();
@@ -59,13 +58,4 @@ export const runArchivalProcess = async () => {
     } catch (error) {
         console.error('[Archiver] Fatal error in archival process:', error);
     }
-};
-
-/**
- * Setup S3 lifecycle rules (Simulated via script)
- * In actual AWS S3, this would use PutBucketLifecycleConfigurationCommand
- */
-export const setupS3Lifecycle = async () => {
-    console.log('[S3] Setting up lifecycle policies for storage optimization...');
-    // Implementation would use S3 client to set bucket lifecycle
 };

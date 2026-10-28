@@ -1,0 +1,50 @@
+name: Deploy classifier Space
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ai_service/**"
+      - "AI-Related-Files/CivicConnect_Production_Model.pth"
+      - ".github/workflows/deploy-classifier-space.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: classifier-space-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Push ai_service to Hugging Face Space
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Validate Space files
+        run: python -m py_compile ai_service/app.py
+
+      - name: Prepare Space repository
+        run: |
+          rm -rf space-deploy
+          mkdir space-deploy
+          cp ai_service/app.py ai_service/README.md ai_service/requirements.txt ai_service/packages.txt space-deploy/
+          cp AI-Related-Files/CivicConnect_Production_Model.pth space-deploy/
+
+      - name: Deploy to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_SPACE_WRITE_TOKEN }}
+        run: |
+          test -n "$HF_TOKEN"
+          cd space-deploy
+          git init
+          git config user.name "CivicConnect CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add app.py README.md requirements.txt packages.txt CivicConnect_Production_Model.pth
+          git commit -m "deploy: update CivicConnect classifier"
+          git branch -M main
+          git push --force "https://Maharsh8805:${HF_TOKEN}@huggingface.co/spaces/Maharsh8805/CivicConnect-Classifier" main

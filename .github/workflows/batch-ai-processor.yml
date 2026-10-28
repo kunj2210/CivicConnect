@@ -28,9 +28,7 @@ jobs:
         if: ${{ env.SUPABASE_URL != '' }}
         env:
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SUPABASE_STORAGE_BUCKET: civic-connect-data
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_MODEL_ID: manthan2876/CivicConnect-Classifier
-          OPEN_SOURCE_LLM_KEY: ${{ secrets.OPEN_SOURCE_LLM_KEY }}
+          HF_SPACE_ID: Maharsh8805/CivicConnect-Classifier
         run: python scripts/batch_processor/process_jobs.py

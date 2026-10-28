@@ -1,10 +1,10 @@
 import axios from 'axios';
-import OpenAI, { toFile } from 'openai';
 import dotenv from 'dotenv';
 import { Client, handle_file } from '@gradio/client';
 import { File as NodeFile, Blob as NodeBlob } from 'buffer';
+import { normalizePredictions } from './classifierContract.js';
+import type { ClassificationPrediction } from './classifierContract.js';
 
-// Polyfill global File & Blob for compatibility in environments without them (e.g. Node <20)
 if (typeof globalThis.File === 'undefined' && NodeFile) {
     (globalThis as any).File = NodeFile;
 }
@@ -15,213 +15,121 @@ if (typeof globalThis.Blob === 'undefined' && NodeBlob) {
 dotenv.config();
 
 let hfClient: any = null;
+const MAX_SPACE_ATTEMPTS = Number(process.env.HF_SPACE_ATTEMPTS || 3);
+const SPACE_RETRY_DELAY_MS = Number(process.env.HF_SPACE_RETRY_DELAY_MS || 1500);
 
 async function getGradioClient() {
     if (!hfClient) {
-        const spaceId = process.env.HF_SPACE_ID || 'manthan2876/CivicConnect-Classifier';
+        const spaceId = process.env.HF_SPACE_ID || 'Maharsh8805/CivicConnect-Classifier';
         const hfToken = process.env.HF_TOKEN;
+        if (!hfToken) throw new Error('HF_TOKEN is required for the private classifier Space');
         console.log(`[AI SERVICE] Connecting to Hugging Face Space: ${spaceId}...`);
-        hfClient = await Client.connect(spaceId, hfToken ? { token: hfToken } as any : {});
+        hfClient = await Client.connect(spaceId, { token: hfToken } as any);
         console.log('[AI SERVICE] Connected to Hugging Face Space successfully.');
     }
     return hfClient;
 }
 
-const MODALITY_WEIGHTS = {
-    IMAGE: 0.50,
-    AUDIO: 0.30,
-    TEXT: 0.20
-};
-
-// Open Source focus: Defaulting to Groq (Llama 3) which is OpenAI-compatible
-const openai = new OpenAI({
-    apiKey: process.env.OPEN_SOURCE_LLM_KEY || '',
-    baseURL: process.env.OPEN_SOURCE_LLM_URL || 'https://api.groq.com/openai/v1'
-});
-
-export class AIService {
-    /**
-     * Standardizes and translates multiple text inputs into a ranked JSON array using an Open Source LLM (via Groq/Ollama).
-     */
-    static async standardizeContent(userInput: string, audioTranscription: string): Promise<any[]> {
-        const systemMsg = `You are a civic infrastructure expert for "Civic Connect".
-Your task is to classify citizen reports into the top 3 most likely categories.
-
-PRIMARY CLASSIFICATION CLASSES (Choose ONLY from this list):
-- construction_waste
-- damaged_sidewalk
-- damaged_sign
-- dead_animal
-- flooding_waterlogging
-- garbage_overflow_west_container
-- good_road
-- illegal_construction
-- illegal_parking
-- open_manhole
-- pothole_road_crack
-- powerline_damage
-- streetlight_damage
-- traffic_light
-
-MAPPING GUIDES:
-- "Trash", "garbage", "waste", "rubbish", "piled up", "dump" -> "garbage_overflow_west_container" or "construction_waste"
-- "Portal", "Bottle", "pothole", "cracked road", "bump" -> "pothole_road_crack"
-- "Leak", "Pipe", "water logging", "overflowing water" -> "flooding_waterlogging" or "open_manhole"
-- "Darkness", "Bulb", "lamp", "street light out" -> "streetlight_damage"
-
-Return a JSON object containing "predictions", which is a list of the top 3 categories and confidence scores (must sum to 1.0).
-Format strictly as: {"predictions": [{"category": "class_name", "confidence": 0.XX}, ...]}`;
-
-        const userMsg = `Analyze these citizen inputs:
-1. User Description: "${userInput}"
-2. Voice Transcription: "${audioTranscription}"`;
-
+async function withSpaceRetry<T>(operation: () => Promise<T>): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_SPACE_ATTEMPTS; attempt += 1) {
         try {
-            const response = await openai.chat.completions.create({
-                model: process.env.LLM_MODEL || 'llama-3.1-8b-instant',
-                messages: [
-                    { role: 'system', content: systemMsg },
-                    { role: 'user', content: userMsg }
-                ],
-                response_format: { type: 'json_object' },
-                temperature: 0
-            });
-
-            const rawJson = response.choices?.[0]?.message?.content || '{}';
-            const parsed = JSON.parse(rawJson);
-            
-            // Extract array from standard possible keys, prioritizing 'predictions'
-            return parsed.predictions || parsed.results || parsed.categories || (Array.isArray(parsed) ? parsed : [parsed]);
+            return await operation();
         } catch (error) {
-            console.error('LLM Standardization failed:', error);
-            return [{ category: 'Other', confidence: 1.0 }];
+            lastError = error;
+            if (attempt < MAX_SPACE_ATTEMPTS) {
+                await new Promise((resolve) => setTimeout(resolve, SPACE_RETRY_DELAY_MS * attempt));
+            }
         }
     }
+    throw lastError instanceof Error ? lastError : new Error('Classifier Space request failed');
+}
 
-    /**
-     * Executes the Advanced Weighted Fusion Logic across all modalities.
-     */
+const MODALITY_WEIGHTS = { IMAGE: 0.50, AUDIO: 0.30, TEXT: 0.20 };
+
+export class AIService {
+    static async classifyText(text: string): Promise<ClassificationPrediction[]> {
+        const cleanText = text.trim();
+        if (!cleanText) return [];
+        return withSpaceRetry(async () => {
+            const result = await (await getGradioClient()).predict('/classify_text', {
+                text: cleanText.slice(0, 2000),
+            });
+            return normalizePredictions(result);
+        });
+    }
+
+    static async standardizeContent(userInput: string, audioTranscription: string): Promise<ClassificationPrediction[]> {
+        const inputs = [userInput.trim(), audioTranscription.trim()].filter(Boolean);
+        if (inputs.length === 0) return [];
+        return this.classifyText(inputs.join('\n'));
+    }
+
     static calculateAdvancedFusion(imageTop3: any[], audioTop3: any[], textTop3: any[]): any {
         const scoreMap: Record<string, number> = {};
         let totalWeightUsed = 0;
-
         const processModality = (top3Array: any[], weight: number) => {
-            if (!top3Array || !Array.isArray(top3Array) || top3Array.length === 0) return;
+            if (!Array.isArray(top3Array) || top3Array.length === 0) return;
             totalWeightUsed += weight;
-            top3Array.forEach(p => {
-                const rawClass = p.category || p.class || p.label || 'Other';
-                if (!scoreMap[rawClass]) scoreMap[rawClass] = 0;
-                scoreMap[rawClass] += ((p.confidence || 0) * weight);
+            top3Array.forEach((prediction) => {
+                const rawClass = prediction.category || prediction.class || prediction.label;
+                if (!rawClass) return;
+                scoreMap[rawClass] = (scoreMap[rawClass] || 0) + ((prediction.confidence || 0) * weight);
             });
         };
-
         processModality(imageTop3, MODALITY_WEIGHTS.IMAGE);
         processModality(audioTop3, MODALITY_WEIGHTS.AUDIO);
         processModality(textTop3, MODALITY_WEIGHTS.TEXT);
 
         const sorted = Object.entries(scoreMap)
-            .map(([category, score]) => ({ 
-                category, 
-                score, 
-                // Normalize score based on available modalities
-                normalizedScore: totalWeightUsed > 0 ? (score / totalWeightUsed) : 0 
+            .map(([category, score]) => ({
+                category,
+                score,
+                normalizedScore: totalWeightUsed > 0 ? score / totalWeightUsed : 0,
             }))
             .sort((a, b) => b.score - a.score);
-
         const winner = sorted[0] || { category: 'Other', score: 0, normalizedScore: 0 };
         const runnerUp = sorted[1] || { category: 'Other', score: 0, normalizedScore: 0 };
         const marginOfVictory = winner.normalizedScore - runnerUp.normalizedScore;
-
         return {
             finalCategory: winner.category,
-            fusionScore: winner.normalizedScore, // Return normalized score for UI (0.0 to 1.0)
+            fusionScore: winner.normalizedScore,
             marginOfVictory,
-            needsHumanReview: marginOfVictory < 0.15 && winner.normalizedScore < 0.7
+            needsHumanReview: marginOfVictory < 0.15 && winner.normalizedScore < 0.7,
         };
     }
 
-    /**
-     * Transcribes audio using Groq's Whisper-large-v3 (Open Source).
-     */
     static async transcribeAudio(audioBuffer: Buffer, fileName: string): Promise<string> {
-        try {
-            // Convert Buffer to a File object for the OpenAI client using toFile helper
-            const file = await toFile(audioBuffer, fileName, { type: 'audio/mpeg' });
-
-            const transcription = await openai.audio.transcriptions.create({
-                file: file,
-                model: 'whisper-large-v3',
+        return withSpaceRetry(async () => {
+            const client = await getGradioClient();
+            const file = new File([new Uint8Array(audioBuffer)], fileName, { type: 'audio/mpeg' });
+            const result: any = await client.predict('/transcribe', {
+                audio: handle_file(file),
+                language: 'auto',
             });
-
-            return transcription.text;
-        } catch (error) {
-            console.error('Audio Transcription failed:', error);
-            return '';
-        }
+            const transcript = result?.data?.[0] ?? result?.[0] ?? result;
+            if (typeof transcript !== 'string') throw new Error('Classifier returned an invalid transcript');
+            return transcript.trim();
+        });
     }
 
-    /**
-     * Call the Python AI Microservice or Hugging Face Space to classify the image (returns Top-3).
-     */
-    static async classifyImage(imageBuffer: Buffer, fileName: string): Promise<any[]> {
-        const useHF = process.env.USE_HF_CLASSIFIER !== 'false';
-        if (useHF) {
-            try {
-                const client = await getGradioClient();
-                const blob = new Blob([new Uint8Array(imageBuffer)], { type: 'image/jpeg' });
-                const file = new File([blob], fileName, { type: 'image/jpeg' });
-
-                console.log(`[AI SERVICE] Classifying image via Hugging Face Space...`);
-                const result = await client.predict('/classify', {
-                    image: handle_file(file)
-                });
-                
-                if (result && result.data && Array.isArray(result.data) && result.data.length > 0) {
-                    const labelData = result.data[0];
-                    if (labelData && Array.isArray(labelData.confidences)) {
-                        return labelData.confidences.map((item: any) => ({
-                            class: item.label,
-                            confidence: item.confidence
-                        }));
-                    }
-                }
-                console.warn('[AI SERVICE] HF Space result in unexpected format. Falling back to local microservice.');
-            } catch (error) {
-                console.error('[AI SERVICE] HF Space classification failed. Falling back to local microservice. Error:', error);
-            }
-        }
-
-        // Fallback: local Python AI Microservice
-        const FormData = (await import('form-data')).default;
-        const formData = new FormData();
-        formData.append('file', imageBuffer, { filename: fileName });
-
-        try {
-            const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8005';
-            const response = await axios.post(`${aiUrl}/classify`, formData, {
-                headers: formData.getHeaders(),
-            });
-            // Extract top_3 from the python response object
-            return response.data?.top_3 || (Array.isArray(response.data) ? response.data : [response.data]);
-        } catch (error) {
-            console.error('AI Classification failed:', error);
-            return [];
-        }
+    static async classifyImage(imageBuffer: Buffer, fileName: string): Promise<ClassificationPrediction[]> {
+        return withSpaceRetry(async () => {
+            const client = await getGradioClient();
+            const file = new File([new Uint8Array(imageBuffer)], fileName, { type: 'image/jpeg' });
+            const result = await client.predict('/classify', { image: handle_file(file) });
+            return normalizePredictions(result);
+        });
     }
 
-    /**
-     * Performs a multimodal analysis using an image URL, audio buffer, and description text.
-     */
     static async analyzeMultimodal(imageUrl: string | null, audioBuffer: Buffer | null, text: string): Promise<any> {
-        let imageTop3: any[] = [];
+        let imageTop3: ClassificationPrediction[] = [];
         if (imageUrl) {
             try {
-                console.log(`[AI SERVICE] Fetching remote image for classification: ${imageUrl}`);
                 const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-                const buffer = Buffer.from(response.data);
-                imageTop3 = await this.classifyImage(buffer, 'whatsapp_image.jpg');
-            } catch (err) {
-                console.error('[AI SERVICE] WhatsApp image fetch or classification failed:', err);
+                imageTop3 = await this.classifyImage(Buffer.from(response.data), 'whatsapp_image.jpg');
+            } catch (error) {
+                console.error('[AI SERVICE] Image fetch/classification failed:', error);
             }
         }
 
@@ -229,39 +137,41 @@ Format strictly as: {"predictions": [{"category": "class_name", "confidence": 0.
         if (audioBuffer) {
             try {
                 audioText = await this.transcribeAudio(audioBuffer, 'whatsapp_audio.mp3');
-            } catch (err) {
-                console.error('[AI SERVICE] WhatsApp audio transcription failed:', err);
+            } catch (error) {
+                console.error('[AI SERVICE] Audio transcription failed:', error);
             }
         }
 
-        const textTop3 = await this.standardizeContent(text, audioText);
-        const fusionResult = this.calculateAdvancedFusion(imageTop3, [], textTop3);
+        let textTop3: ClassificationPrediction[] = [];
+        let audioTop3: ClassificationPrediction[] = [];
+        try {
+            if (text.trim()) textTop3 = await this.classifyText(text);
+            if (audioText) audioTop3 = await this.classifyText(audioText);
+        } catch (error) {
+            console.error('[AI SERVICE] Text classification failed:', error);
+        }
 
-        return fusionResult;
+        return this.calculateAdvancedFusion(imageTop3, audioTop3, textTop3);
     }
 
-    /**
-     * Maps AI predicted labels or generic names to official application categories.
-     */
     static getAppCategory(rawLabel: string | null | undefined): string {
         if (!rawLabel || typeof rawLabel !== 'string') return 'Other';
         const mapping: { [key: string]: string } = {
-            'garbage_overflow_west_container': 'Waste Management',
-            'construction_waste': 'Waste Management',
-            'pothole_road_crack': 'Road/Potholes',
-            'damaged_sidewalk': 'Road/Potholes',
-            'damaged_sign': 'Road/Potholes',
-            'streetlight_damage': 'Street Light',
-            'traffic_light': 'Street Light',
-            'powerline_damage': 'Street Light',
-            'flooding_waterlogging': 'Water Leakage',
-            'open_manhole': 'Water Leakage',
-            'dead_animal': 'Waste Management', // Mapped based on user preference
-            'illegal_construction': 'Other',
-            'illegal_parking': 'Other',
-            'good_road': 'Other'
+            garbage_overflow_west_container: 'Waste Management',
+            construction_waste: 'Waste Management',
+            pothole_road_crack: 'Road/Potholes',
+            damaged_sidewalk: 'Road/Potholes',
+            damaged_sign: 'Road/Potholes',
+            streetlight_damage: 'Street Light',
+            traffic_light: 'Street Light',
+            powerline_damage: 'Street Light',
+            flooding_waterlogging: 'Water Leakage',
+            open_manhole: 'Water Leakage',
+            dead_animal: 'Waste Management',
+            illegal_construction: 'Other',
+            illegal_parking: 'Other',
+            good_road: 'Other',
         };
-
         const normalized = rawLabel.toLowerCase().replace(/ /g, '_');
         return mapping[normalized] || mapping[rawLabel] || rawLabel;
     }
