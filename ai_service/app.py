@@ -7,6 +7,7 @@ import logging
 import os
 
 import gradio as gr
+import spaces
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -81,6 +82,7 @@ def get_pipeline(cache, task, model_name, dtype):
     return cache[model_name]
 
 
+@spaces.GPU(duration=60)
 def transcribe(audio, language="auto"):
     if not audio:
         return ""
@@ -92,6 +94,7 @@ def transcribe(audio, language="auto"):
     return (pipe(audio, generate_kwargs=kwargs).get("text") or "").strip()
 
 
+@spaces.GPU(duration=30)
 def classify_text(text):
     text = (text or "").strip()
     if not text:

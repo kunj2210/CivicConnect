@@ -3,6 +3,7 @@ torchvision
 pillow>=10.2.0
 numpy
 gradio
+spaces
 transformers>=4.45
 accelerate
 sentencepiece
