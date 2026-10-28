@@ -5,6 +5,7 @@ classification through the Gradio API endpoints consumed by CivicConnect.
 """
 import logging
 import os
+import asyncio
 
 import gradio as gr
 import spaces
@@ -13,6 +14,20 @@ import torch.nn as nn
 from PIL import Image
 from torchvision import models, transforms
 from transformers import pipeline
+
+# Gradio/ZeroGPU can close a short-lived Python 3.10 loop before its
+# destructor runs, causing a harmless duplicate self-pipe close warning.
+_base_event_loop_del = asyncio.BaseEventLoop.__del__
+
+
+def _safe_event_loop_del(event_loop):
+    try:
+        _base_event_loop_del(event_loop)
+    except (OSError, ValueError):
+        pass
+
+
+asyncio.BaseEventLoop.__del__ = _safe_event_loop_del
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("civicconnect-space")
