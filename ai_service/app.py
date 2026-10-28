@@ -5,8 +5,6 @@ classification through the Gradio API endpoints consumed by CivicConnect.
 """
 import logging
 import os
-import asyncio
-from contextlib import suppress
 
 import gradio as gr
 import spaces
@@ -15,21 +13,6 @@ import torch.nn as nn
 from PIL import Image
 from torchvision import models, transforms
 from transformers import pipeline
-
-# ZeroGPU creates short-lived event loops for its worker calls. Python 3.10
-# can report a duplicate self-pipe close while those loops are collected.
-class _SafeSelectorEventLoop(asyncio.SelectorEventLoop):
-    def __del__(self):
-        with suppress(ValueError, OSError):
-            super().__del__()
-
-
-class _SafeEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
-    def new_event_loop(self):
-        return _SafeSelectorEventLoop(self)
-
-
-asyncio.set_event_loop_policy(_SafeEventLoopPolicy())
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("civicconnect-space")
