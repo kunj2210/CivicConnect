@@ -127,4 +127,6 @@ with gr.Blocks(title="CivicConnect Classifier") as demo:
         text_output = gr.Label(num_top_classes=3)
         gr.Button("Classify").click(classify_text, text_input, text_output, api_name="classify_text")
 
-demo.queue(max_size=20).launch()
+# Disable Gradio SSR's Node proxy. Hugging Face restarts the Space through
+# Python, and the proxy can emit invalid-event-loop warnings during shutdown.
+demo.queue(max_size=20).launch(ssr_mode=False)
