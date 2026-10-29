@@ -14,22 +14,13 @@ if (typeof globalThis.Blob === 'undefined' && NodeBlob) {
 
 dotenv.config();
 
-export const ALLOWED_MEDIA_HOSTS = [
-    'api.twilio.com',
-    'media.twiliocdn.com',
-    'res.cloudinary.com',
-    'images.unsplash.com',
-    'storage.googleapis.com',
-    's3.amazonaws.com',
-];
+export const SAFE_MEDIA_URL_REGEX = /^https:\/\/([a-zA-Z0-9-]+\.)*(twilio\.com|twiliocdn\.com|cloudinary\.com|unsplash\.com|googleapis\.com|amazonaws\.com)(\/.*)?$/;
 
 export function isSafeExternalUrl(urlStr: string): boolean {
+    if (typeof urlStr !== 'string') return false;
     try {
-        const parsed = new URL(urlStr);
-        if (parsed.protocol !== 'https:') {
-            return false;
-        }
-        return ALLOWED_MEDIA_HOSTS.includes(parsed.hostname.toLowerCase());
+        new URL(urlStr);
+        return SAFE_MEDIA_URL_REGEX.test(urlStr);
     } catch {
         return false;
     }
@@ -145,20 +136,14 @@ export class AIService {
 
     static async analyzeMultimodal(imageUrl: string | null, audioBuffer: Buffer | null, text: string): Promise<any> {
         let imageTop3: ClassificationPrediction[] = [];
-        if (imageUrl && typeof imageUrl === 'string') {
+        if (imageUrl && typeof imageUrl === 'string' && SAFE_MEDIA_URL_REGEX.test(imageUrl)) {
             try {
-                const parsedUrl = new URL(imageUrl);
-                const hostname = parsedUrl.hostname.toLowerCase();
-                if (parsedUrl.protocol === 'https:' && ALLOWED_MEDIA_HOSTS.includes(hostname)) {
-                    const response = await axios.get(parsedUrl.href, {
-                        responseType: 'arraybuffer',
-                        timeout: 8000,
-                        maxContentLength: 10 * 1024 * 1024,
-                    });
-                    imageTop3 = await this.classifyImage(Buffer.from(response.data), 'whatsapp_image.jpg');
-                } else {
-                    console.warn('[AI SERVICE] Disallowed or non-whitelisted image URL:', imageUrl);
-                }
+                const response = await axios.get(imageUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 8000,
+                    maxContentLength: 10 * 1024 * 1024,
+                });
+                imageTop3 = await this.classifyImage(Buffer.from(response.data), 'whatsapp_image.jpg');
             } catch (error) {
                 console.error('[AI SERVICE] Image fetch/classification failed:', error);
             }
