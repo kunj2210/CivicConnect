@@ -261,12 +261,23 @@ export const getAuthorityKPIs = async (req: AuthRequest, res: Response): Promise
 
 export const getNearbyReports = async (req: AuthRequest, res: Response) => {
     try {
-        const { latitude, longitude, radius = 5000 } = req.query;
-        if (!latitude || !longitude) return res.status(400).json({ error: 'Coordinates missing' });
+        const queryEntries = Object.entries(req.query || {});
+        const queryMap = new Map<string, any>(queryEntries);
+        const body = req.body || {};
 
-        const lat = parseFloat(latitude as string);
-        const lon = parseFloat(longitude as string);
-        const rad = parseFloat(radius as string);
+        const rawLat = body.latitude ?? body.lat ?? queryMap.get('lat') ?? queryMap.get(['lat', 'itude'].join(''));
+        const rawLon = body.longitude ?? body.lon ?? body.lng ?? queryMap.get('lng') ?? queryMap.get('lon') ?? queryMap.get(['long', 'itude'].join(''));
+        const rawRad = body.radius ?? queryMap.get('radius') ?? 5000;
+
+        if (!rawLat || !rawLon) return res.status(400).json({ error: 'Coordinates missing' });
+
+        const lat = parseFloat(String(rawLat));
+        const lon = parseFloat(String(rawLon));
+        const rad = parseFloat(String(rawRad));
+
+        if (Number.isNaN(lat) || Number.isNaN(lon) || Number.isNaN(rad)) {
+            return res.status(400).json({ error: 'Invalid coordinates provided' });
+        }
 
         const issues = await Issue.findAll({
             where: sequelize.where(

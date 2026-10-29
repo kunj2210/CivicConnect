@@ -14,6 +14,33 @@ if (typeof globalThis.Blob === 'undefined' && NodeBlob) {
 
 dotenv.config();
 
+export function isSafeExternalUrl(urlStr: string): boolean {
+    try {
+        const parsed = new URL(urlStr);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return false;
+        }
+        const hostname = parsed.hostname.toLowerCase();
+        if (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname === '0.0.0.0' ||
+            hostname === '::1' ||
+            hostname === '169.254.169.254' ||
+            hostname.startsWith('10.') ||
+            hostname.startsWith('192.168.') ||
+            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
+            hostname.endsWith('.internal') ||
+            hostname.endsWith('.local')
+        ) {
+            return false;
+        }
+        return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname);
+    } catch {
+        return false;
+    }
+}
+
 let hfClient: any = null;
 const MAX_SPACE_ATTEMPTS = Number(process.env.HF_SPACE_ATTEMPTS || 3);
 const SPACE_RETRY_DELAY_MS = Number(process.env.HF_SPACE_RETRY_DELAY_MS || 1500);
@@ -124,10 +151,27 @@ export class AIService {
 
     static async analyzeMultimodal(imageUrl: string | null, audioBuffer: Buffer | null, text: string): Promise<any> {
         let imageTop3: ClassificationPrediction[] = [];
-        if (imageUrl) {
+        if (imageUrl && isSafeExternalUrl(imageUrl)) {
             try {
-                const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-                imageTop3 = await this.classifyImage(Buffer.from(response.data), 'whatsapp_image.jpg');
+                const parsedUrl = new URL(imageUrl);
+                const safeProtocols = ['https:', 'http:'];
+                const isBlockedHost =
+                    parsedUrl.hostname === 'localhost' ||
+                    parsedUrl.hostname === '127.0.0.1' ||
+                    parsedUrl.hostname === '169.254.169.254' ||
+                    parsedUrl.hostname.startsWith('10.') ||
+                    parsedUrl.hostname.startsWith('192.168.') ||
+                    parsedUrl.hostname.endsWith('.internal') ||
+                    parsedUrl.hostname.endsWith('.local');
+
+                if (safeProtocols.includes(parsedUrl.protocol) && !isBlockedHost) {
+                    const response = await axios.get(parsedUrl.href, {
+                        responseType: 'arraybuffer',
+                        timeout: 8000,
+                        maxContentLength: 10 * 1024 * 1024,
+                    });
+                    imageTop3 = await this.classifyImage(Buffer.from(response.data), 'whatsapp_image.jpg');
+                }
             } catch (error) {
                 console.error('[AI SERVICE] Image fetch/classification failed:', error);
             }

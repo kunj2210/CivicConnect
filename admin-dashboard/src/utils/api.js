@@ -14,12 +14,12 @@ async function performFetch(url, options) {
     } catch (err) {
         // If the primary request failed and it wasn't already local, try local
         if (!url.includes(LOCAL_API_URL)) {
-            console.warn(`[API Fallback] Primary URL ${url} failed. Retrying with local API...`, err);
+            console.warn('[API Fallback] Primary URL request failed. Retrying with local API...', url, err);
             const localUrl = url.replace(PRIMARY_API_URL, LOCAL_API_URL);
             try {
                 return await fetch(localUrl, options);
             } catch (localErr) {
-                console.error(`[API Fallback] Local API also failed:`, localErr);
+                console.error('[API Fallback] Local API also failed:', localErr);
                 throw err; // Throw original error
             }
         }
