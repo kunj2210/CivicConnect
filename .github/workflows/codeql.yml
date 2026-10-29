@@ -27,7 +27,7 @@ jobs:
       matrix:
         include:
           - language: javascript-typescript
-            build-mode: manual
+            build-mode: none
           - language: python
             build-mode: none
 
