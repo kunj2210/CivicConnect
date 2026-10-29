@@ -99,9 +99,19 @@ const IssueActions = ({
                             </label>
                         ) : (
                             <div className="relative group">
-                                <img src={resPreview} alt="Preview" className="w-full h-32 object-cover rounded-xl border border-indigo-500/20 shadow-sm" />
+                                <img
+                                    src={typeof resPreview === 'string' && resPreview.startsWith('blob:') ? resPreview : ''}
+                                    alt="Preview"
+                                    className="w-full h-32 object-cover rounded-xl border border-indigo-500/20 shadow-sm"
+                                />
                                 <button
-                                    onClick={() => { setResImage(null); setResPreview(null); }}
+                                    onClick={() => {
+                                        if (typeof resPreview === 'string' && resPreview.startsWith('blob:')) {
+                                            URL.revokeObjectURL(resPreview);
+                                        }
+                                        setResImage(null);
+                                        setResPreview(null);
+                                    }}
                                     className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full shadow-lg hover:scale-110 transition-transform"
                                 >
                                     <X size={12} />
