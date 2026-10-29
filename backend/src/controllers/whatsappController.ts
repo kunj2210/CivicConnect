@@ -31,7 +31,7 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
         // 3. AI Analysis
         const description = Body || 'WhatsApp Report';
         const aiResult = await AIService.analyzeMultimodal(
-            imageUrl, 
+            null,
             null, // No audio for now
             description
         );

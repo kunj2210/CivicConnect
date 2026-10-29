@@ -1,4 +1,3 @@
-import axios from 'axios';
 import dotenv from 'dotenv';
 import { Client, handle_file } from '@gradio/client';
 import { File as NodeFile, Blob as NodeBlob } from 'buffer';
@@ -143,43 +142,13 @@ export class AIService {
         });
     }
 
-    static async analyzeMultimodal(imageUrl: string | null, audioBuffer: Buffer | null, text: string): Promise<any> {
+    static async analyzeMultimodal(imageInput: string | Buffer | null, audioBuffer: Buffer | null, text: string): Promise<any> {
         let imageTop3: ClassificationPrediction[] = [];
-        let targetUrl: string | null = null;
-        if (imageUrl && typeof imageUrl === 'string') {
+        if (Buffer.isBuffer(imageInput)) {
             try {
-                const parsed = new URL(imageUrl);
-                if (parsed.protocol === 'https:' && !parsed.pathname.includes('..')) {
-                    const host = parsed.hostname.toLowerCase();
-                    if (host === 'api.twilio.com') {
-                        targetUrl = `https://api.twilio.com${parsed.pathname}${parsed.search}`;
-                    } else if (host === 'media.twiliocdn.com') {
-                        targetUrl = `https://media.twiliocdn.com${parsed.pathname}${parsed.search}`;
-                    } else if (host === 'res.cloudinary.com') {
-                        targetUrl = `https://res.cloudinary.com${parsed.pathname}${parsed.search}`;
-                    } else if (host === 'images.unsplash.com') {
-                        targetUrl = `https://images.unsplash.com${parsed.pathname}${parsed.search}`;
-                    } else if (host === 'storage.googleapis.com') {
-                        targetUrl = `https://storage.googleapis.com${parsed.pathname}${parsed.search}`;
-                    } else if (host === 's3.amazonaws.com') {
-                        targetUrl = `https://s3.amazonaws.com${parsed.pathname}${parsed.search}`;
-                    }
-                }
-            } catch {
-                targetUrl = null;
-            }
-        }
-
-        if (targetUrl) {
-            try {
-                const response = await axios.get(targetUrl, {
-                    responseType: 'arraybuffer',
-                    timeout: 8000,
-                    maxContentLength: 10 * 1024 * 1024,
-                });
-                imageTop3 = await this.classifyImage(Buffer.from(response.data), 'whatsapp_image.jpg');
+                imageTop3 = await this.classifyImage(imageInput, 'image_input.jpg');
             } catch (error) {
-                console.error('[AI SERVICE] Image fetch/classification failed:', error);
+                console.error('[AI SERVICE] Image classification failed:', error);
             }
         }
 
