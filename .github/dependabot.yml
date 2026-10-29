@@ -4,19 +4,40 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      root-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: npm
     directory: /backend
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      backend-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: npm
     directory: /admin-dashboard
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      dashboard-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: pip
     directory: /ai_service
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      classifier-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
