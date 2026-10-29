@@ -1,8 +1,10 @@
-fastapi>=0.109.0
-uvicorn>=0.27.0
 torch
 torchvision
-pillow>=10.2.0
+pillow>=13.0.0
 numpy
-python-multipart>=0.0.6
-requests
+gradio
+spaces
+transformers>=5.20.2
+accelerate
+sentencepiece
+protobuf

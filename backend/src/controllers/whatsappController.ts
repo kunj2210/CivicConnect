@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { User } from '../models/User.js';
 import { Issue } from '../models/Issue.js';
-import { AIService } from '../services/aiService.js';
+import { AIService, isSafeExternalUrl } from '../services/aiService.js';
 import { TriageService } from '../services/triageService.js';
 import { PriorityService } from '../services/priorityService.js';
 
@@ -20,18 +20,18 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
         }
 
         // 2. Process Media if exists
-        let imageUrl = null;
-        if (MediaUrl0) {
-            // In a real scenario, we'd download from Twilio and upload to MinIO
+        let imageUrl: string | null = null;
+        if (MediaUrl0 && typeof MediaUrl0 === 'string' && isSafeExternalUrl(MediaUrl0)) {
+            // In a real scenario, we'd download from Twilio and upload to Supabase Storage
             // For mock/demo, we'll assume the URL is usable or just log it
             console.log(`[WhatsApp] Received Media: ${MediaUrl0}`);
-            imageUrl = MediaUrl0; 
+            imageUrl = MediaUrl0;
         }
 
         // 3. AI Analysis
         const description = Body || 'WhatsApp Report';
         const aiResult = await AIService.analyzeMultimodal(
-            imageUrl, 
+            null,
             null, // No audio for now
             description
         );
@@ -63,7 +63,7 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
             description: description,
             priority_score: priorityScore,
             status: 'Pending',
-            minio_pre_key: imageUrl,
+            s3_pre_key: imageUrl,
             fusion_final_category: aiResult.finalCategory,
             fusion_confidence_score: aiResult.fusionScore,
             assigned_department_id: assignedDeptId,

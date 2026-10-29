@@ -1,8 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
@@ -70,7 +69,7 @@
   }
 
   .glass-card:hover {
-    @apply border-opacity-20 translate-y-[-2px];
+    @apply -translate-y-0.5;
     border-color: var(--primary-neon);
     background-color: var(--primary-glow);
   }

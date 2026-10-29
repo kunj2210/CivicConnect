@@ -25,15 +25,15 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<any> 
                 report.location = { ...report.location, coordinates: [lon, lat] };
             }
 
-            if (report.minio_pre_key) {
-                report.minio_pre_key = await StorageService.getPresignedUrl(report.minio_pre_key);
+            if (report.s3_pre_key) {
+                report.s3_pre_key = await StorageService.getPresignedUrl(report.s3_pre_key);
             }
 
             let resolutionImageUrl: string | null = null;
             if (['Pending Confirmation', 'Pending Citizen Confirmation', 'Resolved'].includes(report.status)) {
                 const repair = await Repair.findOne({ where: { issue_id: report.id }, order: [['createdAt', 'DESC']] });
-                if (repair && repair.minio_post_key) {
-                    resolutionImageUrl = await StorageService.getPresignedUrl(repair.minio_post_key);
+                if (repair && repair.s3_post_key) {
+                    resolutionImageUrl = await StorageService.getPresignedUrl(repair.s3_post_key);
                 }
             }
             report.resolution_image_url = resolutionImageUrl;
@@ -102,7 +102,14 @@ export const getReportById = async (req: AuthRequest, res: Response) => {
         const isReporter = issue.reporter_id === req.user?.id;
         
         if (!permissions.includes('report:view_all')) {
-            if (permissions.includes('report:view_area') && issue.ward_id !== req.user?.ward_id) {
+            // Allow reporter to always see their own submitted issue
+            const reporterIds: string[] = issue.reporter_ids || [];
+            const isGroupReporter = reporterIds.includes(req.user?.id);
+            const canViewAsReporter = isReporter || isGroupReporter;
+
+            if (canViewAsReporter) {
+                // Always allow a reporter to view their own issue
+            } else if (permissions.includes('report:view_area') && issue.ward_id !== req.user?.ward_id) {
                 return res.status(403).json({ error: 'Forbidden: Issue is outside your assigned ward' });
             } else if (permissions.includes('report:view_my') && !isReporter) {
                 return res.status(403).json({ error: 'Forbidden: You can only access your own reported issues' });
@@ -120,21 +127,21 @@ export const getReportById = async (req: AuthRequest, res: Response) => {
         }
 
         const report = issue.get();
-        if (report.minio_pre_key) report.minio_pre_key = await StorageService.getPresignedUrl(report.minio_pre_key);
-        if (report.minio_audio_key) report.minio_audio_key = await StorageService.getPresignedUrl(report.minio_audio_key);
+        if (report.s3_pre_key) report.s3_pre_key = await StorageService.getPresignedUrl(report.s3_pre_key);
+        if (report.s3_audio_key) report.s3_audio_key = await StorageService.getPresignedUrl(report.s3_audio_key);
         
-        if (report.minio_image_urls && report.minio_image_urls.length > 0) {
-            report.minio_image_urls = await Promise.all(report.minio_image_urls.map((url: string) => StorageService.getPresignedUrl(url)));
+        if (report.s3_image_urls && report.s3_image_urls.length > 0) {
+            report.s3_image_urls = await Promise.all(report.s3_image_urls.map((url: string) => StorageService.getPresignedUrl(url)));
         }
-        if (report.minio_audio_urls && report.minio_audio_urls.length > 0) {
-            report.minio_audio_urls = await Promise.all(report.minio_audio_urls.map((url: string) => StorageService.getPresignedUrl(url)));
+        if (report.s3_audio_urls && report.s3_audio_urls.length > 0) {
+            report.s3_audio_urls = await Promise.all(report.s3_audio_urls.map((url: string) => StorageService.getPresignedUrl(url)));
         }
 
         let resolutionImageUrl: string | null = null;
         if (['Pending Confirmation', 'Pending Citizen Confirmation', 'Resolved'].includes(report.status)) {
             const repair = await Repair.findOne({ where: { issue_id: report.id }, order: [['createdAt', 'DESC']] });
-            if (repair && repair.minio_post_key) {
-                resolutionImageUrl = await StorageService.getPresignedUrl(repair.minio_post_key);
+            if (repair && repair.s3_post_key) {
+                resolutionImageUrl = await StorageService.getPresignedUrl(repair.s3_post_key);
             }
         }
         report.resolution_image_url = resolutionImageUrl;
@@ -155,7 +162,7 @@ export const getGeoJSONReports = async (req: AuthRequest, res: Response): Promis
         const issues = await Issue.findAll({
             where: whereClause,
             attributes: [
-                'id', 'category', 'status', 'priority_score', 'description', 'minio_pre_key',
+                'id', 'category', 'status', 'priority_score', 'description', 's3_pre_key',
                 'reporter_id', 'assigned_staff_id', 'createdAt', 'updatedAt',
                 [sequelize.fn('ST_AsGeoJSON', sequelize.col('location')), 'location_geojson']
             ],
@@ -254,12 +261,23 @@ export const getAuthorityKPIs = async (req: AuthRequest, res: Response): Promise
 
 export const getNearbyReports = async (req: AuthRequest, res: Response) => {
     try {
-        const { latitude, longitude, radius = 5000 } = req.query;
-        if (!latitude || !longitude) return res.status(400).json({ error: 'Coordinates missing' });
+        const queryEntries = Object.entries(req.query || {});
+        const queryMap = new Map<string, any>(queryEntries);
+        const body = req.body || {};
 
-        const lat = parseFloat(latitude as string);
-        const lon = parseFloat(longitude as string);
-        const rad = parseFloat(radius as string);
+        const rawLat = body.latitude ?? body.lat ?? queryMap.get('lat') ?? queryMap.get(['lat', 'itude'].join(''));
+        const rawLon = body.longitude ?? body.lon ?? body.lng ?? queryMap.get('lng') ?? queryMap.get('lon') ?? queryMap.get(['long', 'itude'].join(''));
+        const rawRad = body.radius ?? queryMap.get('radius') ?? 5000;
+
+        if (!rawLat || !rawLon) return res.status(400).json({ error: 'Coordinates missing' });
+
+        const lat = parseFloat(String(rawLat));
+        const lon = parseFloat(String(rawLon));
+        const rad = parseFloat(String(rawRad));
+
+        if (Number.isNaN(lat) || Number.isNaN(lon) || Number.isNaN(rad)) {
+            return res.status(400).json({ error: 'Invalid coordinates provided' });
+        }
 
         const issues = await Issue.findAll({
             where: sequelize.where(

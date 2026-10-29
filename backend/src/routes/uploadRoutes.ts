@@ -23,10 +23,11 @@ router.post('/signed-url', async (req: any, res: any) => {
         const subfolder = fileType === 'audio' ? 'audio' : 'images';
         const s3Key = `raw/${year}/${month}/${day}/${subfolder}/${uuidv4()}.${ext}`;
 
-        const uploadUrl = await StorageService.getPresignedPutUrl(s3Key);
+        const upload = await StorageService.getPresignedPutUrl(s3Key);
 
         return res.status(200).json({
-            upload_url: uploadUrl,
+            upload_url: upload.signedUrl,
+            upload_token: upload.token,
             s3_key: s3Key
         });
     } catch (error: any) {

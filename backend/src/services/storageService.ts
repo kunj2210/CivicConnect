@@ -1,88 +1,127 @@
-import * as Minio from 'minio';
+import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const minioClient = new Minio.Client({
-    endPoint: process.env.AWS_ENDPOINT || 'localhost',
-    port: parseInt(process.env.AWS_PORT || '9000'),
-    useSSL: process.env.AWS_USE_SSL === 'true',
-    accessKey: process.env.AWS_ACCESS_KEY || '',
-    secretKey: process.env.AWS_SECRET_KEY || '',
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE || '';
+const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'civic-connect-data';
+
+if (!supabaseUrl || !serviceRoleKey) {
+    console.error('CRITICAL: Supabase Storage requires SUPABASE_URL and SUPABASE_SERVICE_ROLE');
+}
+
+const supabaseStorage = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+    },
 });
 
-export class StorageService {
-    private static bucketName = process.env.AWS_BUCKET || 'civic-connect-uploads';
+function objectPathFromValue(value: string): string {
+    const cleanValue = value.split('?')[0] || '';
+    const marker = `/storage/v1/object/`;
+    const markerIndex = cleanValue.indexOf(marker);
 
+    if (markerIndex === -1) {
+        return cleanValue.replace(/^\/+/, '');
+    }
+
+    const objectValue = cleanValue.slice(markerIndex + marker.length);
+    const parts = objectValue.split('/');
+    const bucketIndex = parts.indexOf(bucketName);
+
+    return bucketIndex >= 0
+        ? parts.slice(bucketIndex + 1).join('/')
+        : cleanValue.replace(/^\/+/, '');
+}
+
+export class StorageService {
     static async uploadFile(file: any, folder: string = 'reports'): Promise<string | null> {
         try {
-            const fileExt = file.originalname.split('.').pop();
-            const fileName = `${folder}/${uuidv4()}.${fileExt}`;
+            const extension = file.originalname?.split('.').pop() || 'bin';
+            const objectPath = `${folder}/${uuidv4()}.${extension}`;
+            const { error } = await supabaseStorage.storage
+                .from(bucketName)
+                .upload(objectPath, file.buffer, {
+                    contentType: file.mimetype,
+                    upsert: false,
+                });
 
-            // Upload to MinIO
-            await minioClient.putObject(
-                this.bucketName,
-                fileName,
-                file.buffer,
-                file.size,
-                { 'Content-Type': file.mimetype }
-            );
+            if (error) {
+                throw error;
+            }
 
-            // Construct Presigned URL (Valid for 24 hours)
-            const presignedUrl = await minioClient.presignedGetObject(this.bucketName, fileName, 24 * 60 * 60);
-
-            return presignedUrl;
+            return await this.getPresignedUrl(objectPath, 24 * 60 * 60);
         } catch (error) {
-            console.error('MinIO Storage Service Error:', error);
+            console.error('Supabase Storage upload error:', error);
             return null;
         }
     }
 
-    static async getPresignedUrl(urlOrKey: string): Promise<string> {
-        try {
-            if (!urlOrKey) return '';
+    static async getPresignedUrl(value: string, expiresInSeconds: number = 60 * 60): Promise<string> {
+        if (!value) {
+            return '';
+        }
 
-            // If it's already a presigned URL (contains X-Amz-Signature), return it
-            if (urlOrKey.includes('X-Amz-Signature')) return urlOrKey;
-
-            // Extract the key from the full URL if necessary
-            let objectKey = urlOrKey;
-            if (urlOrKey.includes(this.bucketName)) {
-                const parts = urlOrKey.split(`${this.bucketName}/`);
-                if (parts.length > 1 && parts[1]) {
-                    objectKey = parts[1];
-                }
+        if (value.startsWith('http://') || value.startsWith('https://')) {
+            const objectPath = objectPathFromValue(value);
+            if (!objectPath || objectPath === value) {
+                return value;
             }
+            value = objectPath;
+        }
 
-            // Generate a fresh presigned URL valid for 1 hour
-            return await minioClient.presignedGetObject(this.bucketName, objectKey, 60 * 60);
+        try {
+            const { data, error } = await supabaseStorage.storage
+                .from(bucketName)
+                .createSignedUrl(objectPathFromValue(value), expiresInSeconds);
+
+            if (error) {
+                throw error;
+            }
+            return data.signedUrl;
         } catch (error) {
-            console.error('Error generating presigned URL:', error);
-            return urlOrKey; // Fallback to original
+            console.error('Supabase Storage signed URL error:', error);
+            return value;
         }
     }
 
-    static async deleteFile(path: string): Promise<boolean> {
+    static async deleteFile(value: string): Promise<boolean> {
         try {
-            await minioClient.removeObject(this.bucketName, path);
+            const objectPath = objectPathFromValue(value);
+            const { error } = await supabaseStorage.storage
+                .from(bucketName)
+                .remove([objectPath]);
+
+            if (error) {
+                throw error;
+            }
             return true;
         } catch (error) {
-            console.error('MinIO Storage Service Delete Error:', error);
+            console.error('Supabase Storage delete error:', error);
             return false;
         }
     }
 
     static getBucketName(): string {
-        return this.bucketName;
+        return bucketName;
     }
 
-    static async getPresignedPutUrl(fileName: string): Promise<string> {
-        try {
-            return await minioClient.presignedPutObject(this.bucketName, fileName, 60 * 60);
-        } catch (error) {
-            console.error('MinIO Storage Service Presigned PUT URL Error:', error);
+    static async getPresignedPutUrl(objectPath: string): Promise<{ signedUrl: string; token: string }> {
+        const { data, error } = await supabaseStorage.storage
+            .from(bucketName)
+            .createSignedUploadUrl(objectPath);
+
+        if (error) {
+            console.error('Supabase Storage signed upload URL error:', error);
             throw error;
         }
+
+        return {
+            signedUrl: data.signedUrl,
+            token: data.token,
+        };
     }
 }

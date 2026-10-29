@@ -31,11 +31,41 @@ const AdminJurisdictions = () => {
         handleMapClick,
         handleUndo,
         handleClear,
-        handleCreateJurisdiction
+        handleCreateJurisdiction,
+        fetchingOSM,
+        handleImportFromOSM,
+        handleMarkerDrag,
+        handleMarkerDelete,
+        selectedCountry,
+        setSelectedCountry,
+        editingItem,
+        handleStartEdit,
+        handleCancelEdit,
+        handleDeleteJurisdiction,
+        previewItem,
+        handleTogglePreview,
+        toast
     } = useAdminJurisdictions();
 
     return (
         <div className="space-y-8 animate-fade-in-up">
+            {toast && (
+                <div className="fixed bottom-6 right-6 z-[9999] animate-fade-in-up">
+                    <div className={`px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border text-sm font-bold backdrop-blur-md ${
+                        toast.type === 'error' 
+                            ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' 
+                            : toast.type === 'info' 
+                            ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' 
+                            : 'bg-green-500/10 border-green-500/20 text-green-400'
+                    }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                            toast.type === 'error' ? 'bg-rose-500' : toast.type === 'info' ? 'bg-blue-400' : 'bg-green-400'
+                        }`} />
+                        <span>{toast.message}</span>
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className={`text-4xl font-extrabold tracking-tight ${darkMode ? 'text-white' : 'text-gray-900'}`}>Jurisdictions & Boundaries</h1>
@@ -46,19 +76,19 @@ const AdminJurisdictions = () => {
             {/* Navigation Tabs */}
             <div className="flex border-b border-gray-200 dark:border-white/10">
                 <button
-                    onClick={() => { setActiveTab('wards'); handleClear(); }}
+                    onClick={() => { setActiveTab('wards'); handleCancelEdit(); }}
                     className={`pb-4 px-6 font-bold text-sm border-b-2 transition-all ${activeTab === 'wards' ? 'border-violet-600 text-violet-500' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
                     Wards (Sub-Zones)
                 </button>
                 <button
-                    onClick={() => { setActiveTab('zones'); handleClear(); }}
+                    onClick={() => { setActiveTab('zones'); handleCancelEdit(); }}
                     className={`pb-4 px-6 font-bold text-sm border-b-2 transition-all ${activeTab === 'zones' ? 'border-violet-600 text-violet-500' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
                     Zones (SMC Administrative Zones)
                 </button>
                 <button
-                    onClick={() => { setActiveTab('ulbs'); handleClear(); }}
+                    onClick={() => { setActiveTab('ulbs'); handleCancelEdit(); }}
                     className={`pb-4 px-6 font-bold text-sm border-b-2 transition-all ${activeTab === 'ulbs' ? 'border-violet-600 text-violet-500' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
                     ULB Cities (Urban Local Bodies)
@@ -88,6 +118,16 @@ const AdminJurisdictions = () => {
                     ulbs={ulbs}
                     wards={wards}
                     darkMode={darkMode}
+                    fetchingOSM={fetchingOSM}
+                    onImportFromOSM={handleImportFromOSM}
+                    selectedCountry={selectedCountry}
+                    setSelectedCountry={setSelectedCountry}
+                    editingItem={editingItem}
+                    onStartEdit={handleStartEdit}
+                    onCancelEdit={handleCancelEdit}
+                    onDelete={handleDeleteJurisdiction}
+                    previewItem={previewItem}
+                    onTogglePreview={handleTogglePreview}
                 />
 
                 {/* Right Panel: Interactive Drawing Map */}
@@ -100,6 +140,12 @@ const AdminJurisdictions = () => {
                     activeTab={activeTab}
                     selectedZone={selectedZone}
                     zones={zones}
+                    selectedUlb={selectedUlb}
+                    ulbs={ulbs}
+                    onMarkerDrag={handleMarkerDrag}
+                    onMarkerDelete={handleMarkerDelete}
+                    previewItem={previewItem}
+                    editingItem={editingItem}
                 />
             </div>
         </div>

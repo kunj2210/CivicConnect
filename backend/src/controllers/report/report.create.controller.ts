@@ -6,7 +6,7 @@ import { AuditService } from '../../services/auditService.js';
 import { findWardId } from '../../utils/spatialUtils.js';
 import { AIService } from '../../services/aiService.js';
 import type { AuthRequest } from './report.utils.js';
-import { getS3KeyFromUrl } from './report.utils.js';
+import { getStorageKeyFromUrl } from './report.utils.js';
 
 export const createReport = async (req: AuthRequest, res: Response) => {
     console.log('--- Incoming Async AI-Enhanced Issue Request ---');
@@ -45,14 +45,14 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        // 3. Resolve S3 Keys and URLs
+        // 3. Resolve Supabase Storage paths and signed URLs.
         let imageKey = bodyImageKey || '';
         let imageUrl = '';
         const bucketName = StorageService.getBucketName();
 
         if (imageFile) {
             imageUrl = await StorageService.uploadFile(imageFile, 'issues') || '';
-            imageKey = getS3KeyFromUrl(imageUrl, bucketName);
+            imageKey = getStorageKeyFromUrl(imageUrl, bucketName);
         } else if (imageKey) {
             imageUrl = await StorageService.getPresignedUrl(imageKey);
         }
@@ -61,7 +61,7 @@ export const createReport = async (req: AuthRequest, res: Response) => {
         let audioUrl = '';
         if (audioFile) {
             audioUrl = await StorageService.uploadFile(audioFile, 'audio') || '';
-            audioKey = getS3KeyFromUrl(audioUrl, bucketName);
+            audioKey = getStorageKeyFromUrl(audioUrl, bucketName);
         } else if (audioKey) {
             audioUrl = await StorageService.getPresignedUrl(audioKey);
         }
@@ -79,11 +79,11 @@ export const createReport = async (req: AuthRequest, res: Response) => {
             description: description || '',
             priority_score: 0, // Will be computed by Edge function
             status: 'Pending',
-            minio_pre_key: imageUrl || null,
-            minio_audio_key: audioUrl || null,
+            s3_pre_key: imageUrl || null,
+            s3_audio_key: audioUrl || null,
             reporter_ids: [user.id],
-            minio_image_urls: imageUrl ? [imageUrl] : [],
-            minio_audio_urls: audioUrl ? [audioUrl] : [],
+            s3_image_urls: imageUrl ? [imageUrl] : [],
+            s3_audio_urls: audioUrl ? [audioUrl] : [],
             ai_image_top3: [],
             ai_audio_top3: [],
             ai_text_top3: [],

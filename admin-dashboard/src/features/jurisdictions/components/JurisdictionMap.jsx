@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapContainer, TileLayer, Polygon, Marker, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Marker, useMapEvents, useMap, Tooltip } from 'react-leaflet';
 import { HelpCircle } from 'lucide-react';
 import L from 'leaflet';
 
@@ -30,6 +30,33 @@ const ZoneCentering = ({ zonePositions }) => {
     return null;
 };
 
+const UlbCentering = ({ ulbPositions }) => {
+    const map = useMap();
+    React.useEffect(() => {
+        if (ulbPositions && ulbPositions.length > 0) {
+            // Find center
+            let totalLat = 0;
+            let totalLng = 0;
+            ulbPositions.forEach(p => {
+                totalLat += p[0];
+                totalLng += p[1];
+            });
+            map.setView([totalLat / ulbPositions.length, totalLng / ulbPositions.length], map.getZoom());
+        }
+    }, [ulbPositions, map]);
+    return null;
+};
+
+const PreviewCentering = ({ positions }) => {
+    const map = useMap();
+    React.useEffect(() => {
+        if (positions && positions.length > 0) {
+            map.fitBounds(positions, { padding: [50, 50] });
+        }
+    }, [positions, map]);
+    return null;
+};
+
 const MapClickHandler = ({ onMapClick }) => {
     useMapEvents({
         click(e) {
@@ -47,59 +74,129 @@ const JurisdictionMap = ({
     onCloseHelp,
     activeTab,
     selectedZone,
-    zones = []
+    zones = [],
+    selectedUlb,
+    ulbs = [],
+    onMarkerDrag,
+    onMarkerDelete,
+    previewItem,
+    editingItem
 }) => {
     // Extract selected zone positions to render dashed border
     const activeZone = zones.find(z => z.id === selectedZone);
     const getZonePositions = () => {
-        if (!activeZone || !activeZone.boundary || !activeZone.boundary.coordinates) return null;
+        if (!activeZone || !activeZone.boundary || !activeZone.boundary.coordinates || !activeZone.boundary.coordinates[0]) return null;
         const coords = activeZone.boundary.coordinates[0];
         return coords.map(c => [c[1], c[0]]); // Swapping [lng, lat] to [lat, lng] for Leaflet
     };
 
     const zonePositions = getZonePositions();
 
+    // Helper: extract lat/lng positions from a GeoJSON geom object
+    const extractPositionsFromGeom = (geom) => {
+        if (!geom || !geom.coordinates) return null;
+        if (geom.type === 'MultiPolygon') {
+            if (!geom.coordinates[0] || !geom.coordinates[0][0] || geom.coordinates[0][0].length === 0) return null;
+            return geom.coordinates[0][0].map((c) => [c[1], c[0]]);
+        } else if (geom.type === 'Polygon') {
+            if (!geom.coordinates[0] || geom.coordinates[0].length === 0) return null;
+            return geom.coordinates[0].map((c) => [c[1], c[0]]);
+        }
+        return null;
+    };
+
+    // Extract selected city (ULB) positions to render dashed border (used for zones/wards)
+    const activeUlb = ulbs.find(u => u.id.toString() === selectedUlb?.toString());
+    const ulbPositions = (activeTab !== 'ulbs') ? extractPositionsFromGeom(activeUlb?.geom) : null;
+
+    // When editing a ULB directly, show its existing saved boundary as a cyan guide
+    const editingUlb = (editingItem && editingItem.type === 'ulbs')
+        ? ulbs.find(u => u.id === editingItem.id)
+        : null;
+    const editingUlbPositions = extractPositionsFromGeom(editingUlb?.geom);
+
     return (
-        <div className="lg:col-span-2 relative h-[600px] rounded-3xl overflow-hidden shadow-xl border border-gray-200 dark:border-white/5">
+        <div className="lg:col-span-2 relative h-[650px] rounded-3xl overflow-hidden shadow-2xl border border-white/5 bg-gray-900/10">
+            {/* Help/Instruction Modal overlay */}
             {showHelp && (
-                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] p-4 w-[90%] md:w-[60%] rounded-2xl shadow-2xl backdrop-blur-md bg-violet-900/90 text-white flex items-start gap-4 border border-violet-500/30 animate-fade-in-up">
-                    <HelpCircle className="shrink-0 mt-0.5 text-violet-300" />
-                    <div>
-                        <h4 className="font-bold text-sm text-violet-100">Interactive Map Boundaries Drawing</h4>
-                        <p className="text-[11px] text-violet-200/90 mt-1">
-                            Click anywhere on the map to define the boundary vertices of your {
-                                activeTab === 'wards' ? 'Ward' : 
-                                activeTab === 'zones' ? 'Zone' : 
-                                'City (ULB)'
-                            }.
-                            The polygon will draw automatically as you place markers. Connect at least 3 points, then click **Save Jurisdiction** to submit.
-                        </p>
+                <div className="absolute top-4 left-4 z-[1000] p-5 rounded-2xl shadow-xl max-w-sm backdrop-blur-md bg-gray-900/80 border border-white/10 text-white animate-fade-in-up">
+                    <div className="flex justify-between items-start gap-4 mb-2">
+                        <div className="flex items-center gap-2">
+                            <HelpCircle className="text-violet-400" size={18} />
+                            <h4 className="font-extrabold text-sm">Boundary Editor Guide</h4>
+                        </div>
+                        <button onClick={onCloseHelp} className="text-gray-400 hover:text-white font-bold text-xs uppercase">Dismiss</button>
                     </div>
-                    <button
-                        onClick={onCloseHelp}
-                        className="text-violet-300 hover:text-white font-bold text-xs"
-                    >
-                        Dismiss
-                    </button>
+                    <ul className="text-xs space-y-1.5 text-gray-300 list-disc list-inside">
+                        <li>Left-click anywhere on the map to add boundary points.</li>
+                        <li>Click on the line between points to insert a vertex.</li>
+                        <li>Drag markers to adjust boundary points.</li>
+                        <li>Double-click any marker to delete that point.</li>
+                        <li>Existing boundaries can be clicked to preview on map.</li>
+                    </ul>
                 </div>
             )}
 
-            <MapContainer center={mapCenter} zoom={13} className="h-full w-full z-10">
+            <MapContainer
+                center={mapCenter}
+                zoom={13}
+                style={{ height: '100%', width: '100%' }}
+                className="z-10"
+            >
                 <ChangeView center={mapCenter} />
-                <ZoneCentering zonePositions={zonePositions} />
+                {zonePositions && <ZoneCentering zonePositions={zonePositions} />}
+                {ulbPositions && <UlbCentering ulbPositions={ulbPositions} />}
+                <MapClickHandler onMapClick={onMapClick} />
+
                 <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                    url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
                 />
 
-                <MapClickHandler onMapClick={onMapClick} />
+                {/* Render Selected Parent City/ULB Boundary (for zones/wards editing) */}
+                {ulbPositions && (
+                    <Polygon
+                        positions={ulbPositions}
+                        interactive={false}
+                        pathOptions={{
+                            color: '#10B981', // Emerald green
+                            fillColor: '#10B981',
+                            fillOpacity: 0.02,
+                            weight: 2.5,
+                            dashArray: '8, 8'
+                        }}
+                    />
+                )}
+
+                {/* Render existing ULB boundary when editing a city directly */}
+                {editingUlbPositions && (
+                    <>
+                        <Polygon
+                            positions={editingUlbPositions}
+                            interactive={false}
+                            pathOptions={{
+                                color: '#06B6D4', // Cyan
+                                fillColor: '#06B6D4',
+                                fillOpacity: 0.05,
+                                weight: 2.5,
+                                dashArray: '10, 6'
+                            }}
+                        >
+                            <Tooltip sticky direction="center" permanent={false}>
+                                <div className="text-[10px] font-bold px-1">Current saved boundary</div>
+                            </Tooltip>
+                        </Polygon>
+                        <UlbCentering ulbPositions={editingUlbPositions} />
+                    </>
+                )}
 
                 {/* Render Selected Parent Zone Boundary */}
                 {zonePositions && (
                     <Polygon
                         positions={zonePositions}
+                        interactive={false}
                         pathOptions={{
-                            color: '#F43F5E',
+                            color: '#F43F5E', // Rose/pink
                             fillColor: '#F43F5E',
                             fillOpacity: 0.04,
                             weight: 2,
@@ -108,10 +205,33 @@ const JurisdictionMap = ({
                     />
                 )}
 
+                {/* Render Selected Preview Boundary */}
+                {previewItem && previewItem.coordinates && (
+                    <>
+                        <Polygon
+                            positions={previewItem.coordinates}
+                            pathOptions={{
+                                color: '#F59E0B', // Amber color for preview
+                                fillColor: '#F59E0B',
+                                fillOpacity: 0.2,
+                                weight: 3
+                            }}
+                        >
+                            <Tooltip sticky permanent={false} direction="center">
+                                <div className="text-xs font-bold px-1 py-0.5">
+                                    {previewItem.name} ({previewItem.type === 'ulbs' ? 'City' : previewItem.type === 'zones' ? 'Zone' : 'Ward'})
+                                </div>
+                            </Tooltip>
+                        </Polygon>
+                        <PreviewCentering positions={previewItem.coordinates} />
+                    </>
+                )}
+
                 {/* Render Currently Drawing Boundary */}
                 {drawnPoints.length >= 2 && (
                     <Polygon
                         positions={drawnPoints}
+                        interactive={false}
                         pathOptions={{
                             color: '#8B5CF6',
                             fillColor: '#8B5CF6',
@@ -126,9 +246,18 @@ const JurisdictionMap = ({
                     <Marker
                         key={index}
                         position={point}
+                        draggable={true}
+                        eventHandlers={{
+                            dragend: (e) => {
+                                onMarkerDrag(index, e.target.getLatLng());
+                            },
+                            dblclick: () => {
+                                onMarkerDelete(index);
+                            }
+                        }}
                         icon={L.divIcon({
                             html: `
-                                <div class="relative flex items-center justify-center">
+                                <div class="relative flex items-center justify-center animate-fade-in">
                                     <div class="absolute w-6 h-6 bg-violet-500/30 rounded-full animate-ping"></div>
                                     <div class="w-3.5 h-3.5 bg-violet-600 border-2 border-white rounded-full shadow-md flex items-center justify-center text-[8px] font-black text-white">
                                         ${index + 1}
@@ -139,7 +268,14 @@ const JurisdictionMap = ({
                             iconSize: [24, 24],
                             iconAnchor: [12, 12]
                         })}
-                    />
+                    >
+                        <Tooltip direction="top" offset={[0, -10]} opacity={0.9}>
+                            <div className="text-[10px] font-bold p-1">
+                                Vertex #{index + 1}
+                                <div className="text-[8px] text-gray-400 font-normal mt-0.5">Drag to move • Double-click to delete</div>
+                            </div>
+                        </Tooltip>
+                    </Marker>
                 ))}
             </MapContainer>
         </div>

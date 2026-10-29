@@ -38,8 +38,7 @@ export const runArchivalProcess = async () => {
                 issue.reporter_id = '00000000-0000-0000-0000-000000000000'; // System Anonymized ID
                 issue.reporter_ids = []; 
                 
-                // 3. Media Archival (Logic for MinIO)
-                // In a production MinIO setup, we'd use 'mc ilm' rules.
+                // 3. Media archival is managed by Supabase Storage retention settings.
                 // Here we'll simulate by updating metadata or moving to an archive prefix.
                 
                 await issue.save();
@@ -59,14 +58,4 @@ export const runArchivalProcess = async () => {
     } catch (error) {
         console.error('[Archiver] Fatal error in archival process:', error);
     }
-};
-
-/**
- * Setup MinIO lifecycle rules (Simulated via script)
- * In actual MinIO, this would be: 
- * mc ilm add myminio/media --expiry-days 365 --target archived-bucket
- */
-export const setupMinioLifecycle = async () => {
-    console.log('[MinIO] Setting up lifecycle policies for storage optimization...');
-    // Implementation would use MinIO client to set bucket lifecycle
 };

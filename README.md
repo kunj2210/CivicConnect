@@ -11,7 +11,7 @@
 - **AI Fusion Engine**: Multimodal AI fusion (Computer Vision + LLM) for automated data-driven priority scoring.
 - **Neon Onyx Dashboard**: High-fidelity glassmorphic interface featuring **Bento Grids**, theme-aware **Bar Charts**, and pulse-glow indicators.
 - **Animated Mobile Experience**: Premium shimmering logo transitions and pulsing splash sequences powered by `flutter_animate`.
-- **Automated Storage Integrity**: Intelligent **MinIO Media Purging** that synchronizes physical storage deletion with database record removal.
+- **Automated Storage Integrity**: Private Supabase Storage media with signed access and synchronized deletion.
 - **Spatial Intelligence**: Automated nightly deduplication jobs using **PostGIS** to cluster and resolve redundant reports.
 - **Gamification**: Green Credits and XP-based leaderboard for citizen engagement.
 - **Real-time Notifications**: Custom broadcast channels for live updates on issues.
@@ -22,10 +22,39 @@
 
 The architecture is highly modular, separating concerns into four core areas:
 
-1.  **Backend**: Node.js + Express + TypeScript + **Sequelize (PostgreSQL)** + **MinIO S3 Storage**
+1.  **Backend**: Node.js + Express + TypeScript + **Sequelize (PostgreSQL)** + **Supabase Storage**
 2.  **Admin Dashboard**: React + Vite + Vanilla CSS (Glassmorphism) + Lucide Icons
 3.  **Mobile App**: Flutter (Dart) with **High-Parity Light/Dark Theme** support
-4.  **AI Service**: Python + FastAPI + Groq (Llama 3.1) + MobileNetV2
+4.  **AI Service**: Python + Hugging Face Gradio Space + MobileNetV2, Whisper,
+    and zero-shot text classification
+
+## 🧭 Repository Structure
+
+CivicConnect is a production-style monorepo. Each deployable surface owns its
+runtime configuration, dependencies, README, and targeted checks:
+
+```text
+CivicConnect/
+├── backend/             # Node.js + Express + TypeScript API
+├── admin-dashboard/     # React + Vite administration web app
+├── ai_service/          # Python image-classification service
+├── mobile/              # Flutter citizen mobile application
+├── supabase/            # Supabase configuration and edge functions
+├── scripts/             # Cross-service and scheduled utilities
+├── AI-Related-Files/    # Versioned model assets and supporting material
+├── docs/                # Canonical architecture and API documentation
+├── .github/             # CI, scheduled jobs, and dependency automation
+└── package.json         # Root development and validation commands
+```
+
+See the [documentation hub](./docs/README.md) and
+[full structure reference](./docs/FOLDER_STRUCTURE.md) before moving files.
+
+The repository structure and documentation categories take inspiration from
+production-oriented projects such as Smart-Farming. CivicConnect documentation
+is written independently for civic reporting, authorities, citizens, AI
+verification, spatial workflows, and this repository's actual technology stack;
+no Smart-Farming domain documents are copied.
 
 ---
 
@@ -36,7 +65,6 @@ Ensure the following are installed:
 3. **Flutter SDK** (Android Studio / VS Code)
 4. **Python 3.10+** (for AI services)
 5. **PostgreSQL** (Port 5432) or access to the **Supabase Cloud** project
-6. **Docker Desktop** (for MinIO Object Storage)
 
 ---
 
@@ -53,7 +81,6 @@ For the mobile app to communicate with the backend, you must use your machine's 
 1. **Find your IP**: Open Terminal/PowerShell and type `ipconfig`. Look for "IPv4 Address" (e.g., `192.168.1.5`).
 2. **Set Backend BASE_URL**: In `backend/.env`, set `BASE_URL=http://192.168.1.5:5000`.
 3. **Set Mobile API_BASE_URL**: In `mobile/.env`, set `API_BASE_URL=http://192.168.1.5:5000/api`.
-4. **Set AWS_ENDPOINT**: In `backend/.env`, set `AWS_ENDPOINT=192.168.1.5`.
 
 ---
 
@@ -63,8 +90,13 @@ You must create `.env` files for each component by copying the `.env.example` te
 ### Backend (`/backend/.env`)
 ```bash
 cp .env.example .env
-# Edit .env with your Supabase credentials, Groq API Key, and Machine IP
+# Edit .env with your Supabase credentials, Hugging Face Space token, and Machine IP
 ```
+
+Never commit `.env` files, service-account keys, generated caches, uploads, or
+build output. The model binaries in `AI-Related-Files/` are intentionally
+versioned for the current deployment; move them to object storage or Git LFS
+before the repository grows further.
 
 ### Admin Dashboard (`/admin-dashboard/.env`)
 ```bash
@@ -93,26 +125,20 @@ For seed the database:
 npm run seed:users
 ```
 
-### ✅ AI Microservice (Python)
+### ✅ AI Classifier Space (Python)
 ```bash
 cd ai_service
 python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
-python main.py
+python app.py
 ```
 
-### ✅ MinIO Object Storage (Docker Desktop)
-1. Open **Docker Desktop**.
-2. Run the MinIO container:
-```powershell
-docker run -p 9000:9000 -p 9001:9001 `
-  --name minio `
-  -e "MINIO_ROOT_USER=admin" `
-  -e "MINIO_ROOT_PASSWORD=M@nthan1528" `
-  -v D:\minio_data:/data `
-  minio/minio server /data --console-address ":9001"
-```
+### ✅ Supabase Storage
+Create the private `civic-connect-data` bucket by applying
+[`supabase/migrations/20261028170000_storage.sql`](./supabase/migrations/20261028170000_storage.sql).
+The backend uploads files and creates short-lived signed URLs using the
+Supabase service-role key. No MinIO or AWS storage configuration is required.
 
 ### ✅ Admin Dashboard (React)
 ```bash

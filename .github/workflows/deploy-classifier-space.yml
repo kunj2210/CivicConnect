@@ -1,0 +1,54 @@
+name: Deploy classifier Space
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ai_service/**"
+      - "AI-Related-Files/CivicConnect_Production_Model.pth"
+      - ".github/workflows/deploy-classifier-space.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: classifier-space-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Push ai_service to Hugging Face Space
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Validate Space files
+        run: python -m py_compile ai_service/app.py
+
+      - name: Prepare Space repository
+        run: |
+          rm -rf space-deploy
+          mkdir space-deploy
+          cp ai_service/app.py ai_service/README.md ai_service/requirements.txt ai_service/packages.txt space-deploy/
+          cp AI-Related-Files/CivicConnect_Production_Model.pth space-deploy/
+
+      - name: Deploy to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_SPACE_WRITE_TOKEN }}
+        run: |
+          test -n "$HF_TOKEN"
+          python -m pip install --upgrade huggingface_hub
+          HF_TOKEN="$HF_TOKEN" python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          HfApi(token=os.environ["HF_TOKEN"]).upload_folder(
+              repo_id="Maharsh8805/CivicConnect-Classifier",
+              repo_type="space",
+              folder_path="space-deploy",
+              commit_message="deploy: update CivicConnect classifier",
+          )
+          PY

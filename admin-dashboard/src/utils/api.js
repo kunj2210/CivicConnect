@@ -14,17 +14,31 @@ async function performFetch(url, options) {
     } catch (err) {
         // If the primary request failed and it wasn't already local, try local
         if (!url.includes(LOCAL_API_URL)) {
-            console.warn(`[API Fallback] Primary URL ${url} failed. Retrying with local API...`, err);
+            console.warn('[API Fallback] Primary URL request failed. Retrying with local API...', url, err);
             const localUrl = url.replace(PRIMARY_API_URL, LOCAL_API_URL);
             try {
                 return await fetch(localUrl, options);
             } catch (localErr) {
-                console.error(`[API Fallback] Local API also failed:`, localErr);
+                console.error('[API Fallback] Local API also failed:', localErr);
                 throw err; // Throw original error
             }
         }
         throw err;
     }
+}
+
+async function handleResponse(response) {
+    if (!response.ok) {
+        let errMsg = response.statusText;
+        try {
+            const data = await response.json();
+            if (data && (data.message || data.error)) {
+                errMsg = data.message || data.error;
+            }
+        } catch (_) {}
+        throw new Error(errMsg);
+    }
+    return response.json();
 }
 
 export const api = {
@@ -39,8 +53,7 @@ export const api = {
         };
 
         const response = await performFetch(`${PRIMARY_API_URL}${endpoint}`, { headers });
-        if (!response.ok) throw new Error(response.statusText);
-        return response.json();
+        return handleResponse(response);
     },
 
     async post(endpoint, body) {
@@ -58,10 +71,8 @@ export const api = {
             headers,
             body: isFormData ? body : JSON.stringify(body)
         });
-        if (!response.ok) throw new Error(response.statusText);
-        return response.json();
+        return handleResponse(response);
     },
-
 
     async patch(endpoint, body) {
         const { data: { session } } = await supabase.auth.getSession();
@@ -75,8 +86,7 @@ export const api = {
             headers,
             body: JSON.stringify(body)
         });
-        if (!response.ok) throw new Error(response.statusText);
-        return response.json();
+        return handleResponse(response);
     },
 
     async delete(endpoint) {
@@ -90,7 +100,6 @@ export const api = {
             method: 'DELETE',
             headers
         });
-        if (!response.ok) throw new Error(response.statusText);
-        return response.json();
+        return handleResponse(response);
     }
 };
