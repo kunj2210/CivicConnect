@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { getMessaging, type Messaging } from 'firebase-admin/messaging';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,9 +17,9 @@ if (serviceAccountPath) {
             ? serviceAccountPath 
             : path.join(__dirname, '../../', serviceAccountPath);
             
-        if (!admin.apps.length) {
-            admin.initializeApp({
-                credential: admin.credential.cert(absolutePath),
+        if (!getApps().length) {
+            initializeApp({
+                credential: cert(absolutePath),
             });
             console.log('[Firebase] Admin SDK initialized successfully');
         }
@@ -33,11 +34,11 @@ if (serviceAccountPath) {
  * Returns the Firebase Messaging instance if initialized.
  * @throws Error if Firebase is not initialized.
  */
-export const fcm = (): admin.messaging.Messaging => {
-    if (admin.apps.length === 0) {
+export const fcm = (): Messaging => {
+    if (getApps().length === 0) {
         throw new Error('Firebase Admin SDK not initialized. Check your FIREBASE_SERVICE_ACCOUNT_PATH.');
     }
-    return admin.messaging();
+    return getMessaging();
 };
 
-export default admin;
+export default { fcm };
