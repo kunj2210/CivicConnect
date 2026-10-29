@@ -79,10 +79,13 @@ const AuthorityIssueDetails = () => {
     };
 
     const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setResImage(file);
-            setResPreview(URL.createObjectURL(file));
+        const file = e.target.files?.[0];
+        if (file && file.type && file.type.startsWith('image/')) {
+            const objectUrl = URL.createObjectURL(file);
+            if (objectUrl && objectUrl.startsWith('blob:')) {
+                setResImage(file);
+                setResPreview(objectUrl);
+            }
         }
     };
 

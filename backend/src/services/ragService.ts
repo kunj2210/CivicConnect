@@ -81,23 +81,25 @@ export class RAGService {
                 `- [Issue ${c.id.slice(0,8)}] Category: ${c.category}, Status: ${c.status}, Priority: ${c.priority_score}, Description: ${c.description}`
             ).join('\n');
 
-            const prompt = `
-                You are the Chief AI Analytics Officer for the Smart City Command Center.
-                A city official has asked: "${query}"
-                
-                Below is the real-time context from the civic issues database (retrieved via Groq-enhanced keyword search):
-                ${contextStr}
-                
-                Tasks:
-                1. Provide a concise executive summary answering the query.
-                2. Identify trends or clusters if any.
-                3. Cite specific issue IDs using bracketed notation like [Issue abc12345].
-                4. Keep the tone professional, objective, and action-oriented.
-            `;
+            const systemPrompt = `You are the Chief AI Analytics Officer for the Smart City Command Center.
+Your task is to analyze the user's civic issue query based strictly on the provided real-time database context.
+Tasks:
+1. Provide a concise executive summary answering the query.
+2. Identify trends or clusters if any.
+3. Cite specific issue IDs using bracketed notation like [Issue abc12345].
+4. Keep the tone professional, objective, and action-oriented.`;
+
+            const userContent = `A city official has asked: "${query}"
+
+Below is the real-time context from the civic issues database:
+${contextStr}`;
 
             const response = await groq.chat.completions.create({
                 model: process.env.LLM_MODEL || 'llama-3.1-8b-instant',
-                messages: [{ role: 'system', content: prompt }],
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userContent },
+                ],
             });
 
             return response.choices?.[0]?.message?.content || "Failed to generate summary.";
