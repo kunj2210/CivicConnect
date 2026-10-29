@@ -14,13 +14,22 @@ if (typeof globalThis.Blob === 'undefined' && NodeBlob) {
 
 dotenv.config();
 
-export const SAFE_MEDIA_URL_REGEX = /^https:\/\/([a-zA-Z0-9-]+\.)*(twilio\.com|twiliocdn\.com|cloudinary\.com|unsplash\.com|googleapis\.com|amazonaws\.com)(\/.*)?$/;
-
 export function isSafeExternalUrl(urlStr: string): boolean {
     if (typeof urlStr !== 'string') return false;
     try {
-        new URL(urlStr);
-        return SAFE_MEDIA_URL_REGEX.test(urlStr);
+        const parsed = new URL(urlStr);
+        if (parsed.protocol !== 'https:' || parsed.pathname.includes('..')) {
+            return false;
+        }
+        const host = parsed.hostname.toLowerCase();
+        return [
+            'api.twilio.com',
+            'media.twiliocdn.com',
+            'res.cloudinary.com',
+            'images.unsplash.com',
+            'storage.googleapis.com',
+            's3.amazonaws.com'
+        ].includes(host);
     } catch {
         return false;
     }
@@ -136,9 +145,34 @@ export class AIService {
 
     static async analyzeMultimodal(imageUrl: string | null, audioBuffer: Buffer | null, text: string): Promise<any> {
         let imageTop3: ClassificationPrediction[] = [];
-        if (imageUrl && typeof imageUrl === 'string' && SAFE_MEDIA_URL_REGEX.test(imageUrl)) {
+        let targetUrl: string | null = null;
+        if (imageUrl && typeof imageUrl === 'string') {
             try {
-                const response = await axios.get(imageUrl, {
+                const parsed = new URL(imageUrl);
+                if (parsed.protocol === 'https:' && !parsed.pathname.includes('..')) {
+                    const host = parsed.hostname.toLowerCase();
+                    if (host === 'api.twilio.com') {
+                        targetUrl = `https://api.twilio.com${parsed.pathname}${parsed.search}`;
+                    } else if (host === 'media.twiliocdn.com') {
+                        targetUrl = `https://media.twiliocdn.com${parsed.pathname}${parsed.search}`;
+                    } else if (host === 'res.cloudinary.com') {
+                        targetUrl = `https://res.cloudinary.com${parsed.pathname}${parsed.search}`;
+                    } else if (host === 'images.unsplash.com') {
+                        targetUrl = `https://images.unsplash.com${parsed.pathname}${parsed.search}`;
+                    } else if (host === 'storage.googleapis.com') {
+                        targetUrl = `https://storage.googleapis.com${parsed.pathname}${parsed.search}`;
+                    } else if (host === 's3.amazonaws.com') {
+                        targetUrl = `https://s3.amazonaws.com${parsed.pathname}${parsed.search}`;
+                    }
+                }
+            } catch {
+                targetUrl = null;
+            }
+        }
+
+        if (targetUrl) {
+            try {
+                const response = await axios.get(targetUrl, {
                     responseType: 'arraybuffer',
                     timeout: 8000,
                     maxContentLength: 10 * 1024 * 1024,
